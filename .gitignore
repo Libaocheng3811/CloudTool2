@@ -1,0 +1,7 @@
+# 忽略构建文件夹
+build/
+cmake-build-*/
+
+# 忽略IDE相关文件
+.idea/
+.vscode/
