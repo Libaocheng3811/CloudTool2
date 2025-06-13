@@ -8,6 +8,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QHeaderView>
 #include <QSpinBox>
 #include <QDropEvent>
 #include <QMimeData>
@@ -22,6 +23,18 @@ namespace ct
         m_thread(this),
         m_tree_menu(nullptr)
     {
+        QHeaderView* header = this->header();
+        header->setStyleSheet(R"(
+            QHeaderView::section {
+                background-color: #dddddd;
+                color: black;
+                padding: 5px;
+                border-radius: 3px;
+                border: 1px solid #cccccc;
+                font-weight: bold;
+                text-align: center;
+            }
+        )");
         // register meat type
         // qRegisterMetaType 函数用于注册一个自定义类型，以便它可以被用于 Qt 的元对象系统
         qRegisterMetaType<Cloud::Ptr>("Cloud::Ptr &");

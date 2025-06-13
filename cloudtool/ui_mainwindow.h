@@ -442,11 +442,29 @@ public:
         cloudtree->setHeaderItem(__qtreewidgetitem);
         cloudtree->setObjectName("cloudtree");
         cloudtree->setColumnCount(1);
+        cloudtree->header()->setVisible(true);
 
         verticalLayout_2->addWidget(cloudtree);
 
         progress_bar = new QProgressBar(DataTree);
         progress_bar->setObjectName("progress_bar");
+        progress_bar->setMaximumSize(QSize(16777215, 10));
+        progress_bar->setStyleSheet(QString::fromUtf8("QProgressBar {\n"
+"    border: 2px solid #aaa;\n"
+"    border-radius: 4px;\n"
+"    background-color: #f0f0f0;\n"
+"    text-align: center;\n"
+"    height: 10px;  /* \345\217\257\351\200\211\357\274\232\350\256\276\345\256\232\345\233\272\345\256\232\351\253\230\345\272\246 */\n"
+"}\n"
+"\n"
+"QProgressBar::chunk {\n"
+"    border-radius: 4px;\n"
+"    background-color: qlineargradient(\n"
+"        x1: 0, y1: 0, x2: 1, y2: 0,\n"
+"        stop: 0 #4caf50,  /* \346\267\261\347\273\277\350\211\262 */\n"
+"        stop: 1 #8bc34a   /* \346\265\205\347\273\277\350\211\262 */\n"
+"    );\n"
+"}"));
         progress_bar->setMaximum(0);
         progress_bar->setValue(-1);
         progress_bar->setTextVisible(false);
@@ -509,6 +527,53 @@ public:
         __qtablewidgetitem8->setIcon(icon10);
         cloudtable->setItem(6, 0, __qtablewidgetitem8);
         cloudtable->setObjectName("cloudtable");
+        cloudtable->setStyleSheet(QString::fromUtf8("/* \345\236\202\347\233\264\346\273\232\345\212\250\346\235\241 */\n"
+"QScrollBar:vertical {\n"
+"    background: transparent;\n"
+"    width: 8px;                     /* \350\256\276\347\275\256\346\273\232\345\212\250\346\235\241\345\256\275\345\272\246 */\n"
+"    margin: 0px;\n"
+"}\n"
+"\n"
+"QScrollBar::handle:vertical {\n"
+"    background: #a6a6a6;\n"
+"    border-radius: 4px;             /* \345\234\206\350\247\222\346\273\221\345\235\227 */\n"
+"    min-height: 20px;\n"
+"}\n"
+"\n"
+"QScrollBar::handle:vertical:hover {\n"
+"    background: #888888;\n"
+"}\n"
+"\n"
+"QScrollBar::add-line:vertical,\n"
+"QScrollBar::sub-line:vertical {\n"
+"    height: 0px;\n"
+"}\n"
+"\n"
+"/* \346\260\264\345\271\263\346\273\232\345\212\250\346\235\241 */\n"
+"QScrollBar:horizontal {\n"
+"    background: transparent;\n"
+"    height: 8px;                    /* \350\256\276\347\275\256\346\273\232\345\212\250\346\235\241\351\253\230\345\272\246 */\n"
+"    margin: 0px;\n"
+"}\n"
+"\n"
+"QScrollBar::handle:horizontal {\n"
+"    background: #a6a6a6"
+                        ";\n"
+"    border-radius: 4px;\n"
+"    min-width: 20px;\n"
+"}\n"
+"\n"
+"QScrollBar::handle:horizontal:hover {\n"
+"    background: #888888;\n"
+"}\n"
+"\n"
+"QScrollBar::add-line:horizontal,\n"
+"QScrollBar::sub-line:horizontal {\n"
+"    width: 0px;\n"
+"}\n"
+""));
+        cloudtable->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        cloudtable->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         cloudtable->setEditTriggers(QAbstractItemView::NoEditTriggers);
         cloudtable->setShowGrid(false);
         cloudtable->setGridStyle(Qt::CustomDashLine);
@@ -654,7 +719,7 @@ public:
 
     void retranslateUi(QMainWindow *MainWindow)
     {
-        MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "MainWindow", nullptr));
+        MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "\350\276\271\345\235\241\351\232\220\346\202\243\346\231\272\350\203\275\350\257\206\345\210\253\350\275\257\344\273\266", nullptr));
         actionOpen->setText(QCoreApplication::translate("MainWindow", "Open", nullptr));
 #if QT_CONFIG(shortcut)
         actionOpen->setShortcut(QCoreApplication::translate("MainWindow", "Ctrl+O", nullptr));

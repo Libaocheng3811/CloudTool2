@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>mainWindow</class>
- <widget class="QMainWindow" name="mainWindow">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -214,6 +214,9 @@
        <property name="columnCount">
         <number>1</number>
        </property>
+       <attribute name="headerVisible">
+        <bool>true</bool>
+       </attribute>
        <column>
         <property name="text">
          <string>PointCloud File</string>
@@ -226,6 +229,30 @@
      </item>
      <item>
       <widget class="QProgressBar" name="progress_bar">
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>10</height>
+        </size>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QProgressBar {
+    border: 2px solid #aaa;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    text-align: center;
+    height: 10px;  /* 可选：设定固定高度 */
+}
+
+QProgressBar::chunk {
+    border-radius: 4px;
+    background-color: qlineargradient(
+        x1: 0, y1: 0, x2: 1, y2: 0,
+        stop: 0 #4caf50,  /* 深绿色 */
+        stop: 1 #8bc34a   /* 浅绿色 */
+    );
+}</string>
+       </property>
        <property name="maximum">
         <number>0</number>
        </property>
@@ -266,6 +293,58 @@
     <layout class="QVBoxLayout" name="verticalLayout_3">
      <item>
       <widget class="QTableWidget" name="cloudtable">
+       <property name="styleSheet">
+        <string notr="true">/* 垂直滚动条 */
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;                     /* 设置滚动条宽度 */
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: #a6a6a6;
+    border-radius: 4px;             /* 圆角滑块 */
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #888888;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* 水平滚动条 */
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;                    /* 设置滚动条高度 */
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #a6a6a6;
+    border-radius: 4px;
+    min-width: 20px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: #888888;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+</string>
+       </property>
+       <property name="verticalScrollBarPolicy">
+        <enum>Qt::ScrollBarAsNeeded</enum>
+       </property>
+       <property name="horizontalScrollBarPolicy">
+        <enum>Qt::ScrollBarAsNeeded</enum>
+       </property>
        <property name="editTriggers">
         <set>QAbstractItemView::NoEditTriggers</set>
        </property>
