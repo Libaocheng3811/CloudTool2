@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
+
 project(CloudTool2)
 
-# 确保项目的 CMakeLists.txt 文件在不同版本的 CMake 中都能以相同的方式处理 find_package 命令的私有依赖项
 if (POLICY CMP0074)
     cmake_policy(SET CMP0074 NEW)
 endif ()
@@ -11,23 +11,18 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 
-# 设置了 C++ 语言的标准版本
-# 指定必须使用 C++17 标准或更高版本。如果编译器不支持 C++17，CMake 将报错而不是降级到旧的标准。
-# 禁用了编译器的扩展功能
-set(CMAKE_CXX_STANDARD 17)
+
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# 是否定义了 CMAKE_BUILD_TYPE 变量,若未定义，则设置为release
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
     set(CMAKE_BUILD_TYPE Release)
 endif ()
 
-# 设置调试构建的后缀为 "d"
 set(CMAKE_DEBUG_POSTFIX "d")
 
-# 根据不同编译器环境设置不同的编译器标志
-# 对于msvc编译器
+
 if (MSVC)
     # 设置 默认C++ 编译器标志
     set(CMAKE_CXX_FLAGS_DEFAULT "/DWIN32 /D_WINDOWS /W3 /GR /EHsc")
@@ -38,7 +33,6 @@ if (MSVC)
         # 将 MSVC_MP 变量设置为 CPU 核心数，用于启用多处理器编译
         set(MSVC_MP ${CPUCores})
 
-        # 为旧版和新版本 CMake 设置多处理器编译标志
         if (CMAKE_VERSION VERSION_LESS 3.11.0)
             if (MSVC_MP EQUAL 0)
                 string(APPEND CMAKE_CXX_FLAGS " /MP")
@@ -63,8 +57,6 @@ elseif (CMAKE_COMPILER_IS_GNUCXX)
     endif ()
 endif ()
 
-#OpenMP (optional)
-# 在项目中启用 OpenMP 支持，它允许程序利用多核处理器进行并行计算
 option(WITH_OPENMP "Build with parallelization using OpenMP" TRUE)
 
 if (WITH_OPENMP)
@@ -77,9 +69,6 @@ if (OpenMP_FOUND)
     string(APPEND CMAKE_CXX_FLAGS " ${OpemMP_CXX_FLAGS}")
     string(APPEND CMAKE_EXE_LINKER_FLAGS " ${OpenMP_EXE_LINKER_FLAGS}")
 
-    # 根据cmake版本打印信息
-    # CMake 版本小于 3.7，只打印 "Found OpenMP"
-    # CMake 版本大于等于 3.7，打印 "Found OpenMP, spec date${OpenMP_CXX_SPEC_DATE}"
     if (${CMAKE_VERSION} VERSION_LESS 3.7)
         message(STATUS "Found OpenMP")
     else ()
@@ -91,12 +80,19 @@ endif ()
 
 # qt
 # QT 是你为找到的 Qt 包指定的别名
+set(CMAKE_PREFIX_PATH
+    "D:/LibCommunity/Qt5.15/5.15.2/msvc2019_64"
+)
+
 find_package(QT NAMES Qt5 COMPONENTS Core Widgets OpenGL Gui REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
 
 if (QT_FOUND)
-    # 打印信息的${Qt5_VERSION}说明QT只是你指定的别名，实际文件查找中还是Qt5
     message(STATUS "Found QT version: ${Qt5_VERSION}.")
+    message(STATUS "Qt5_DIR = ${Qt5_DIR}")
+    message(STATUS "Qt5Widgets_DIR = ${Qt5Widgets_DIR}")
+    message(STATUS "Qt5Core_DIR = ${Qt5Core_DIR}")
+
 else ()
     message(STATUS "Qt5 is not found.")
 endif ()
@@ -104,14 +100,10 @@ endif ()
 # vtk
 find_package(VTK REQUIRED)
 if (VTK_FOUND)
-    # VTK_USE_FILE 是一个由 VTK 的 CMake 配置文件设置的变量
-    # 包含VTK_USE_FILE这个文件时，会设置一系列变量，
-    # 包括VTK_INCLUDE_DIRS(VTK头文件的路径)、VTK_LIBRARIES(需要链接的 VTK 库)、VTK_DEFINITIONS(编译 VTK 时可能需要的定义)
-    # include命令用于包含一个 CMake 脚本文件,不仅可以用来添加头文件搜索路径，还可以用来执行其他 CMake 命令，比如设置变量、定义宏、添加编译器标志
     include(${VTK_USE_FILE})
     message(STATUS "Found VTK version: ${VTK_VERSION}.")
 else ()
-    message(STATUS "VTK is not found.")
+    message(STATUS "VTK is not found.") 
 endif ()
 
 # pcl
@@ -126,6 +118,13 @@ if (PCL_FOUND)
 else ()
     message(STATUS "PCL is not found.")
 endif ()
+
+# 2. 配置编译选项：仅编译静态库，不编译工具
+set(LASZIP_BUILD_STATIC ON CACHE BOOL "Build static laszip" FORCE)
+set(LASLIB_BUILD_STATIC ON CACHE BOOL "Build static laslib" FORCE)
+set(BUILD_TOOLS OFF CACHE BOOL "Build tools" FORCE) 
+
+add_subdirectory(3rdparty/LASTools)
 
 # camera sdk
 # 1. Azure Kinect
@@ -148,9 +147,6 @@ endif()
 
 message(STATUS "Build Type: " ${CMAKE_BUILD_TYPE})
 
-# PROJECT_SOURCE_DIR 是一个内置变量，它指定了项目的源代码目录
-# 使用 `project()` 命令定义项目时，CMake 会自动设置 `PROJECT_SOURCE_DIR` 和与之对应的 `PROJECT_BINARY_DIR` 变量。
-# `PROJECT_BINARY_DIR` 指向构建目录
 include_directories(${PROJECT_SOURCE_DIR})
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)

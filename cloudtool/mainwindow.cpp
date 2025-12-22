@@ -19,6 +19,7 @@
 #include <QFile>
 #include <QDateTime>
 #include <QFileDialog>
+#include <QComboBox>
 
 #define  PARENT_ICON_PATH   ":/res/icon/document-open.svg"
 #define  CHILD_ICON_PATH    ":/res/icon/view-calendar.svg"
@@ -38,9 +39,6 @@ MainWindow::MainWindow(QWidget *parent) :
     size.push_back(300);
     size.push_back(320);
     size.push_back(140);
-    // orientation：这是一个 Qt::Orientation 枚举值，指定了停靠窗口的布局方向
-    // resizeDocks 函数是 QMainWindow 类的一个成员函数，调整停靠窗口（QDockWidget）的相对大小，size存储的是每个Dock的大小比重。
-    // orientation：这是一个 Qt::Orientation 枚举值，指定停靠窗口的布局方向
     resizeDocks(docks, size, Qt::Orientation::Vertical);
 
     // connect pointer
@@ -48,7 +46,6 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->cloudtree->setConsole(ui->console);
     ui->cloudtree->setPropertiesTable(ui->cloudtable);
     ui->cloudtree->setProgressBar(ui->progress_bar);
-    // setParentIcon是QTreeWidget和QTreeView的成员函数，用于设置树形控件中所有父节点的图标。
     ui->cloudtree->setParentIcon(QIcon(PARENT_ICON_PATH));
     ui->cloudtree->setChildIcon(QIcon(CHILD_ICON_PATH));
 
@@ -94,6 +91,7 @@ MainWindow::MainWindow(QWidget *parent) :
       if (ct::getDock<Registration>("Registration"))
           ct::getDock<Registration>("Registration")->setDescriptor(ct::getDock<Descriptor>("Descriptor"));
     } );
+
 }
 
 MainWindow::~MainWindow() {
@@ -104,6 +102,5 @@ void MainWindow::moveEvent(QMoveEvent *event)
 {
     QPoint pos = ui->cloudview->mapToGlobal(QPoint(0, 0));
     emit ui->cloudview->posChanged(pos);
-    // 调用基类QMainWindow 的 moveEvent 方法，确保基类的默认行为得到执行，比如更新窗口的状态等。
     return QMainWindow::moveEvent(event);
 }

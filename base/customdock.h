@@ -34,8 +34,6 @@ namespace ct
 
         virtual void deinit() {}
 
-        // EIGEN_MAKE_ALIGNED_OPERATOR_NEW 是一个宏，它在 Eigen 库中用于确保动态大小的对象（如矩阵或数组）在内存中是正确对齐的
-        // EIGEN_MAKE_ALIGNED_OPERATOR_NEW 宏的作用是告诉 Eigen 在创建对象时，不仅要分配足够的内存，还要确保这块内存是按照特定对齐要求对齐的
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     protected:
@@ -54,8 +52,6 @@ namespace ct
         CloudTree* m_cloudtree;
         Console* m_console;
     };
-    // static 关键字用于声明静态变量。静态变量在程序的整个生命周期内都存在，并且只初始化一次
-    // 它是一个映射，用于存储已注册的 CustomDock 对象。键是窗口的标签（QString），值是指向 CustomDock 对象的指针。
     static std::map<QString, CustomDock*> registed_docks;
     static std::set<QString> left_label;
     static std::set<QString> right_label;

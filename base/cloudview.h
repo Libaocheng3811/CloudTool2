@@ -29,8 +29,6 @@ namespace ct {
     class CT_EXPORT CloudView : public QVTKOpenGLNativeWidget{
         Q_OBJECT
     public:
-        // 构造函数前的 explicit 关键字用于防止某些类型的隐式转换和复制构造函数的生成
-        // 默认构造函数，explicit声明防止了编译器对某些类型的隐式类型转换.
         explicit CloudView(QWidget* parent = nullptr);
 
         ////////////////////////////////////////////////////////
@@ -234,8 +232,6 @@ namespace ct {
          */
          void resetCamera()
         {
-             // 调用PCLVisualizer类的resetCamera成员函数，它将视图器中的相机重置到默认的视角和位置。
-             // 调用getRenderWindow函数来获取当前视图器的渲染窗口，并调用其Render成员函数，强制渲染窗口立即更新显示内容
              m_viewer->resetCamera();
              m_viewer->getRenderWindow()->Render();
         }
@@ -303,10 +299,6 @@ namespace ct {
          */
         void setTopView()
         {
-            // setCameraPosition: 这个函数是 PCLVisualizer 类的方法，用于设置相机的位置和方向
-            // 第一个参数表示相机的位置坐标，第二个表示相机的目标位置，也就是相机观察的方向；第三个表示相机的“上方向”向量，定义相机的顶部方向，这通常用于确定相机的倾斜角度。
-            // 上方向的主要作用是确定相机的姿态和旋转的参考，避免不必要的旋转或视图混乱。
-            // 一个小技巧，可以用脑袋来理解这个过程，脑袋的位置是相机位置，视线朝向目标位置，头顶方向就是上方向
             m_viewer->setCameraPosition(0, 0, 0, 0, -1, 0, 0, 0, -1);
             m_viewer->getRenderWindow()->Render();
         }
@@ -362,9 +354,6 @@ namespace ct {
          * @brief 任何从QObject派生的类都可以重新实现event()函数，（一个类接收到事件后，首先会由函数event处理）
          * QWidget就是重写了event()函数，并针对典型事件定义了专门的事件处理函数
          */
-        // 事件处理函数-----时间处理函数都是从Qt的基础类（例如 QWidget 或 QMainWindow）继承而来的。这些基础类提供了默认的事件处理机制。
-        // 这里定义的事件处理函数，当对应的事件类型发生时，会执行对应的事件处理函数，比如你移动了鼠标，就发生了MouseMove事件（这是一个事件类型，不是事件类）
-        // 然后就会对应执行mouseMoveEvent()这个事件处理函数
     protected:
         void mousePressEvent(QMouseEvent* event) override;
         void mouseReleaseEvent(QMouseEvent* event);
@@ -381,24 +370,11 @@ namespace ct {
         void mouseMoved(const PointXY& pt);
 
     private:
-        // 在 Qt 中，Q_DISABLE_COPY 宏用于阻止一个类的对象被复制。这个宏通过删除复制构造函数和赋值操作符来实现，使得类的对象不能被复制。
         Q_DISABLE_COPY(CloudView);
-        // 是否在视图器中显示点云ID
         bool m_show_id;
-        // 表示视图器中显示的信息的等级，也就是优先级
         int m_info_level;
-        // 存储最后一次显示点云的ID
         QString m_last_id;
-
-        // 创建了一个名为 m_viewer 的智能指针，该指针是 pcl::visualization::PCLVisualizer 类型, Ptr 是 PCLVisualizer 类的一个内部类模板
-        // pcl是一个命名空间（namespace）,visualization也是一个命名空间，它是 pcl 命名空间下的子命名空间。它包含了PCL中与三维可视化相关的类和函数
-        // PCLVisualizer是一个类名，属于 pcl::visualization 命名空间。PCLVisualizer 类是PCL库中用于创建和管理三维可视化窗口的类
         pcl::visualization::PCLVisualizer::Ptr m_viewer;
-
-        // vtkSmartPointer是一个VTK库中定义的智能指针模板类。它用于自动管理VTK对象的内存
-        // vtkRenderer 是VTK中的一个类，用于定义一个3D渲染场景
-        // vtkGenericOpenGLRenderWindow 是 VTK 库中的一个类，它提供了一个框架，用于实现一个使用自己的 OpenGL 上下文和 drawable 的渲染窗口
-        // vtkOrientationMarkerWidget 是 VTK 中用于创建和操作一个方向标记小部件的类
         vtkSmartPointer<vtkRenderer> m_render;
         vtkSmartPointer<vtkGenericOpenGLRenderWindow> m_renderwindow;
         vtkSmartPointer<vtkOrientationMarkerWidget> m_axes;

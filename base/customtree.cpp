@@ -79,8 +79,6 @@ namespace ct
         {
             QTreeWidgetItem* parent = new QTreeWidgetItem(this);
             QTreeWidgetItem* child = new QTreeWidgetItem(parent);
-            // QTreeWidgetItem类的对象代表树形控件中的一个项目，可以包含多列数据。
-            // 设置某个QTreeWidgetItem对象的文本时，需要指定列号，这是因为一个树形项目可以有多列，每一列都可以独立地设置文本、图标、工具提示等属性。
             parent->setText(0, parent_id);
             parent->setIcon(0, m_parent_icon);
             parent->setCheckState(0, Qt::Checked);

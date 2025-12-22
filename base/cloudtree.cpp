@@ -23,18 +23,6 @@ namespace ct
         m_thread(this),
         m_tree_menu(nullptr)
     {
-        QHeaderView* header = this->header();
-        header->setStyleSheet(R"(
-            QHeaderView::section {
-                background-color: #dddddd;
-                color: black;
-                padding: 5px;
-                border-radius: 3px;
-                border: 1px solid #cccccc;
-                font-weight: bold;
-                text-align: center;
-            }
-        )");
         // register meat type
         // qRegisterMetaType 函数用于注册一个自定义类型，以便它可以被用于 Qt 的元对象系统
         qRegisterMetaType<Cloud::Ptr>("Cloud::Ptr &");
@@ -184,7 +172,6 @@ namespace ct
     void CloudTree::removeCloud(const ct::Index &index)
     {
         Cloud::Ptr cloud = getCloud(index);
-        // 发射信号由谁接受呢？
         emit removedCloudId(cloud->id());
         // 移除点云，法线和包围盒
         m_cloudview->removePointCloud(cloud->id());
@@ -194,9 +181,6 @@ namespace ct
         removeItem(index);
         // 如果索引行只有一个点云对象，则移除整行
         if (m_cloud_vec[index.row].size() == 1)
-            // erase() 函数通过提供迭代器的方式，从 m_cloud_vec 中删除对应的行
-            // 这里不可以写成m_cloud_vec.erase(index.row);错误
-            // 因为erase 函数需要一个迭代器，指向要被删除的元素。
             m_cloud_vec.erase(m_cloud_vec.begin() + index.row);
         // 否则，移除指定列的点云对象，
         else
@@ -212,12 +196,8 @@ namespace ct
                 emit removedCloudId(j->id());
         m_cloudview->removeAllPointClouds();
         m_cloudview->removeAllShapes();
-        // clear()清空 CloudTree 对象的所有树节点。这通常意味着清除了所有的树节点显示。
         this->clear();
-        // 清空存储点云的向量，释放内存
         this->m_cloud_vec.clear();
-        // 创建一个临时的空向量，通过交换的方式高效地清空 m_cloud_vec 的内容，并确保它占用的内存被正确释放。
-        // swap 是 std::vector 提供的成员函数，它的作用是交换两个向量的内容。
         std::vector<std::vector<Cloud::Ptr>>().swap(m_cloud_vec);
         printI("remove all clouds done.");
     }
@@ -226,15 +206,9 @@ namespace ct
     {
         Cloud::Ptr cloud = getCloud(index);
         QString filter = "ply(*.ply);;pcd(*.pcd)";
-        // QFileDialog::getSaveFileName 显示一个文件保存对话框，允许用户选择保存位置和文件名。
-        // 对话框的标题为 “Save cloud file”，默认文件名为当前点云的 ID，使用前面定义的 filter 进行文件类型过滤。
         QString filepath = QFileDialog::getSaveFileName(this, tr("Save cloud file"), cloud->id(), filter);
         if (filepath.isEmpty())
             return;
-        // 显示格式选择对话框
-        // QMessageBox::NoIcon：指定消息框没有图标。"Saved format"：消息框的标题。
-        // tr("Save in binary or ascii format?")：消息框的内容. QMessageBox::NoButton：没有默认的按钮，意味着没有一个按钮会自动被选择。
-        // this：指向当前的窗口对象，表示这个消息框是该窗口的子窗口。
         QMessageBox message_box(QMessageBox::NoIcon, "Saved format", tr("Save in binary or ascii format?"),
                                 QMessageBox::NoButton, this);
         // 添加按钮，向消息框中添加一个 “Ascii” 按钮。按钮类型为 QMessageBox::ActionRole
@@ -267,8 +241,6 @@ namespace ct
         Cloud::Ptr merge_cloud(new Cloud);
         for (auto& i : clouds)
             *merge_cloud += *i;
-        // 设置点云id，
-        // front()它用于访问向量的第一个元素，并返回对第一个元素的引用
         merge_cloud->setId(MERGE_ADD_FLAG + clouds.front()->id());
         merge_cloud->setInfo(clouds.front()->info());
         merge_cloud->update();
@@ -350,7 +322,6 @@ namespace ct
         {
             printI(QString("Load the file [path:%1] done, take time %2 ms.").arg(cloud->info().absoluteFilePath()).arg(time));
             m_path = cloud->info().path();
-            // 这里只给了一个参数，是因为在appendCloud声明中，第二个参数有默认值，所以在调用时可以省略，编译器会自动使用默认值
             appendCloud(cloud);
         }
         if (m_progress_bar != nullptr)
@@ -395,20 +366,12 @@ namespace ct
 
     void CloudTree::itemSelectionChangedEvent()
     {
-        // update box
-        // 获取所有节点的索引和被选中节点的索引
         std::vector<Index> all = getAllIndexes();
         std::vector<Index> indexes = getSelectedIndexes();
         for (auto& i : all)
         {
-            // std::vector<Index>::const_iterator是声明一个迭代器，用于遍历std::vector<Index>类型的容器，
-            // 还有比如，std::vector<int>::iterator it = vec.begin(); 这声明的就是可修改的迭代器
-            // const_iterator表示一个常量迭代器，意味着它只能读取元素，不能修改元素。
-            // it是存储std::find结果的迭代器变量。如果没有找到，it将等于indexes.end()。
             std::vector<Index>::const_iterator it = std::find(indexes.begin(), indexes.end(), i);
             Cloud::Ptr cloud = getCloud(i);
-            // 如果找到了对应索引，添加对应的点云包围盒；如果没有找到，就移除包围盒
-            // ????不理解
             if (it != indexes.end())
                 m_cloudview->addBox(cloud);
             else
@@ -423,8 +386,6 @@ namespace ct
         if (indexes.size() == 0)
         {
             id = type = size = resolution = "";
-            // 当你调用removeCellWidget(4, 1)时，它会移除第5行第2列单元格中的小部件,
-            // 如果该单元格没有小部件，或者小部件不是通过setCellWidget方法添加的，则此函数不会有任何效果。
             m_table->removeCellWidget(4, 1); // point size
             m_table->removeCellWidget(5, 1); //opacity
             m_table->removeCellWidget(6, 1); //normals
@@ -437,8 +398,6 @@ namespace ct
             Cloud::Ptr update_cloud = getCloud(indexes.front());
             id = update_cloud->id();
             type = update_cloud->type();
-            // QString::number()是Qt中QString类的静态函数，它用于将数值转换为QString类型的字符串。
-            // 这个函数可以接受不同类型的数值参数，包括int、float、double等，并将其转换为对应的字符串表示。
             resolution = QString::number(update_cloud->resolution());
             size = QString::number(update_cloud->size());
             m_cloudview->showCloudId(update_cloud->id());
@@ -448,13 +407,6 @@ namespace ct
             QSpinBox *point_size = new QSpinBox;
             point_size->setRange(1, 99);
             point_size->setValue(update_cloud->pointSize());
-
-            // &QSpinBox::valueChanged是QSpinBox的一个信号，当值改变时发出该信号，
-            // static_cast 是 C++ 中的一种类型转换方式，用于将一个类型转换为另一个兼容类型。QSpinBox::* 是一个指向 QSpinBox 类的成员的指针
-            // &QSpinBox::valueChanged表示指向 QSpinBox 类的 valueChanged 信号的指针
-            // 将 QSpinBox 的 valueChanged 信号（实际上是一个类成员）转换为一个函数指针，该指针指向一个返回类型为 void 并接受一个 int 参数的成员函数。
-            // 这个int参数就是要传递给匿名函数的，对应匿名函数中的(int value)
-            // 在 Qt 中，可以使用 lambda 表达式作为槽函数，而信号的接收者通常是上下文（如类的成员变量）中隐含的
             connect(point_size, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), [=](int value)
                     {
                         // 更新点的大小
@@ -512,9 +464,6 @@ namespace ct
             m_table->setCellWidget(5, 1, opacity);
             m_table->setCellWidget(6, 1, normals);
         }
-        // 在表格的特定位置插入一个新的QTableWidgetItem对象
-        // 设置单元格时，是从数据区域开始计数的，不计算表头，比如索引(0,1),对应的是数据区域的第一行第二列的单元格
-        // QTableWidgetItem 类有一个构造函数，可以接受一个 QString 参数，该参数将被用作单元格中显示的文本。id就作为显示的文本
         m_table->setItem(0, 1, new QTableWidgetItem(id));
         m_table->setItem(1, 1, new QTableWidgetItem(type));
         m_table->setItem(2, 1, new QTableWidgetItem(size));

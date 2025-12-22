@@ -211,6 +211,33 @@
      </property>
      <item>
       <widget class="ct::CloudTree" name="cloudtree">
+       <property name="styleSheet">
+        <string notr="true">QTreeWidget{
+	border: 2px solid lightgray;
+	outline: 0px; 
+	border-radius: 8px;
+	background: white;
+}
+
+QTreeWidget::item {
+    padding: 5px;
+}
+
+QHeaderView::section {
+    background-color: #e0e0e0;
+    color: #222;
+    padding: 2px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border: none;                   /* 去掉边框 */
+}
+
+QHeaderView {
+    border: none;
+    background: transparent;
+}
+</string>
+       </property>
        <property name="columnCount">
         <number>1</number>
        </property>
@@ -220,6 +247,12 @@
        <column>
         <property name="text">
          <string>PointCloud File</string>
+        </property>
+        <property name="font">
+         <font>
+          <weight>75</weight>
+          <bold>true</bold>
+         </font>
         </property>
         <property name="textAlignment">
          <set>AlignCenter</set>
@@ -294,7 +327,13 @@ QProgressBar::chunk {
      <item>
       <widget class="QTableWidget" name="cloudtable">
        <property name="styleSheet">
-        <string notr="true">/* 垂直滚动条 */
+        <string notr="true">QTableWidget{
+	border: 2px solid lightgray;
+	outline: 0px; 
+	border-radius: 8px;
+	background: white;
+}
+/* 垂直滚动条 */
 QScrollBar:vertical {
     background: transparent;
     width: 8px;                     /* 设置滚动条宽度 */
@@ -355,7 +394,7 @@ QScrollBar::sub-line:horizontal {
         <enum>Qt::CustomDashLine</enum>
        </property>
        <property name="rowCount">
-        <number>7</number>
+        <number>8</number>
        </property>
        <attribute name="horizontalHeaderVisible">
         <bool>true</bool>
@@ -363,6 +402,7 @@ QScrollBar::sub-line:horizontal {
        <attribute name="verticalHeaderVisible">
         <bool>false</bool>
        </attribute>
+       <row/>
        <row/>
        <row/>
        <row/>
@@ -444,6 +484,15 @@ QScrollBar::sub-line:horizontal {
         <property name="icon">
          <iconset resource="resources/res.qrc">
           <normaloff>:/res/icon/normal.svg</normaloff>:/res/icon/normal.svg</iconset>
+        </property>
+       </item>
+       <item row="7" column="0">
+        <property name="text">
+         <string>Color</string>
+        </property>
+        <property name="icon">
+         <iconset resource="resources/res.qrc">
+          <normaloff>:/res/icon/color-management.svg</normaloff>:/res/icon/color-management.svg</iconset>
         </property>
        </item>
       </widget>

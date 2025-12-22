@@ -1,7 +1,49 @@
-# 忽略构建文件夹
+# 忽略构建文件夹及编译输出
 build/
 cmake-build-*/
+bin/
+lib/
+*.exe
+*.dll
+*.lib
+*.so
+*.dylib
+*.a
+*.obj
+*.o
+*.pdb
+*.idb
+*.ilk
+*.exp
+
+# 忽略cmake临时文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
 
 # 忽略IDE相关文件
 .idea/
 .vscode/
+.vs/
+*.suo
+*.user
+*.user.*
+*.sln
+*.dsw
+*.vcxproj
+*.vcxproj.filters
+*.ncb
+*.sdf
+*.pro.user
+
+# 忽略Qt相关文件
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*.moc
+
+# 忽略大型点云文件
+data/L16-1-M01-001_pred.ply
