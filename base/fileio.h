@@ -6,24 +6,35 @@
 
 namespace ct
 {
-    class CT_EXPORT FileIO :public QObject
+    struct FieldInfo{
+        QString name;
+        QString type;
+    };
+
+    class CT_EXPORT FileIO : public QObject
     {
         Q_OBJECT
     public:
         explicit FileIO(QObject *parent = nullptr) : QObject(parent) {}
 
-        // 信号不需实现，只需声明即可
     signals:
         /**
          * @brief 加载点云文件的结果
          * @note const Cloud::Ptr &cloud 表示参数cloud是对Cloud::Ptr 类型的智能指针的引用，且这个引用是常量
          */
-         void loadCloudResult(bool success, const Cloud::Ptr &cloud, float time);
+        void loadCloudResult(bool success, const Cloud::Ptr &cloud, float time);
 
-         /**
+        /**
          * @brief 保存点云文件的结果
          */
-         void saveCloudResult(bool success, const QString &filename, float time);
+        void saveCloudResult(bool success, const QString &filename, float time);
+
+        /**
+        * @brief 请求UI显示映射对话框 (阻塞式)
+        * @param fields 文件中探测到的字段列表
+        * @param result 用户选择的映射结果 (引用传出)
+        */
+        void requestFieldMapping(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result);
 
     public slots:
         /**
@@ -38,7 +49,6 @@ namespace ct
          * @param filename 保存的文件路径
          */
         void savePointCloud(const Cloud::Ptr &cloud, const QString &filename, bool isBinary);
-
     };
 }
 

@@ -208,6 +208,8 @@ namespace ct
          */
          void itemSelectionChangedEvent();
 
+         void onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result);
+
 
     private:
         QString m_path;

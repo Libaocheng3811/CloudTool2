@@ -1,4 +1,5 @@
 #include "base/cloudtree.h"
+#include "base/fieldmappingdialog.h"
 
 #include <QCheckBox>
 #include <QFileDialog>
@@ -13,6 +14,7 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QUrl>
+#include <QComboBox>
 
 namespace ct
 {
@@ -27,6 +29,8 @@ namespace ct
         // qRegisterMetaType 函数用于注册一个自定义类型，以便它可以被用于 Qt 的元对象系统
         qRegisterMetaType<Cloud::Ptr>("Cloud::Ptr &");
         qRegisterMetaType<Cloud::Ptr>("Cloud::Ptr");
+        qRegisterMetaType<QList<ct::FieldInfo>>("QList<ct::FieldInfo>");
+        qRegisterMetaType<QMap<QString, QString>>("QMap<QString, QString>&");
 
         // move to thread
         m_fileio = new FileIO;
@@ -37,13 +41,14 @@ namespace ct
         connect(m_fileio, &FileIO::saveCloudResult, this, &CloudTree::saveCloudResult);
         connect(this, &CloudTree::loadPointCloud, m_fileio, &FileIO::loadPointCloud);
         connect(this, &CloudTree::savePointCloud, m_fileio, &FileIO::savePointCloud);
-        m_thread.start();
-
         connect(this, &CloudTree::itemClicked, this, &CloudTree::itemClickedEvent);
         connect(this, &CloudTree::itemSelectionChanged, this, &CloudTree::itemSelectionChangedEvent);
+        connect(m_fileio, &FileIO::requestFieldMapping, this, &CloudTree::onFieldMappingRequested, Qt::BlockingQueuedConnection);
 
         // 设置窗口部件接受拖放操作
         this->setAcceptDrops(true);
+
+        m_thread.start();
     }
 
     CloudTree::~CloudTree()
@@ -381,14 +386,18 @@ namespace ct
         // update table
         if (m_table == nullptr)
             return;
-        QString id, type, format, size, resolution;
-        // 当前没有选中点云的情况下，也就是选中点云的索引为空
+
+        QString id, type, size_str, resolution_str;
+
+        const int COLOR_MODE_ROW = 7;
+
+        m_table->removeCellWidget(4, 1);
+        m_table->removeCellWidget(5, 1);
+        m_table->removeCellWidget(6, 1);
+        m_table->removeCellWidget(COLOR_MODE_ROW, 1);
         if (indexes.size() == 0)
         {
-            id = type = size = resolution = "";
-            m_table->removeCellWidget(4, 1); // point size
-            m_table->removeCellWidget(5, 1); //opacity
-            m_table->removeCellWidget(6, 1); //normals
+            id = type = size_str = resolution_str = "";
             // 在渲染窗口中显示点云id
             m_cloudview->showCloudId("");
         }
@@ -398,8 +407,8 @@ namespace ct
             Cloud::Ptr update_cloud = getCloud(indexes.front());
             id = update_cloud->id();
             type = update_cloud->type();
-            resolution = QString::number(update_cloud->resolution());
-            size = QString::number(update_cloud->size());
+            resolution_str = QString::number(update_cloud->resolution());
+            size_str = QString::number(update_cloud->size());
             m_cloudview->showCloudId(update_cloud->id());
 
             // point_size
@@ -414,6 +423,7 @@ namespace ct
                         // 更新点云视图大小
                         m_cloudview->setPointCloudSize(update_cloud->id(), value);
                     });
+            m_table->setCellWidget(4, 1, point_size);
 
             // opacity
             QDoubleSpinBox* opacity = new QDoubleSpinBox;
@@ -425,6 +435,7 @@ namespace ct
                         update_cloud->setOpacity(value);
                         m_cloudview->setPointCloudOpacity(update_cloud->id(), value);
                     });
+            m_table->setCellWidget(5, 1, opacity);
 
             // has normals
             QCheckBox* show_normals = new QCheckBox;
@@ -457,17 +468,65 @@ namespace ct
             layout->addWidget(scale);
             // 使用 addStretch() 方法可以在布局中插入一段可伸缩的空间，这段空间可以根据窗口大小的变化而调整。
             layout->addStretch();
-            QWidget* normals = new QWidget;
-            normals->setLayout(layout);
-            normals->layout()->setMargin(0);
-            m_table->setCellWidget(4, 1, point_size);
-            m_table->setCellWidget(5, 1, opacity);
-            m_table->setCellWidget(6, 1, normals);
+            QWidget* normals_widget = new QWidget;
+            normals_widget->setLayout(layout);
+            normals_widget->layout()->setMargin(0);
+            m_table->setCellWidget(6, 1, normals_widget);
+
+            if (m_table->rowCount() <= COLOR_MODE_ROW) m_table->setRowCount(COLOR_MODE_ROW + 1);
+
+            QComboBox* color_mode = new QComboBox;
+            color_mode->addItem("RGB (Default)"); // 恢复原始 RGB 或默认黑色
+            color_mode->addItem("x");
+            color_mode->addItem("y");
+            color_mode->addItem("z");
+
+            // 动态添加自定义字段 (如 Intensity)
+            QStringList fields = update_cloud->getScalarFieldNames();
+            for (const QString& f : fields) {
+                color_mode->addItem(f);
+            }
+
+            connect(color_mode, &QComboBox::currentTextChanged, [=](const QString& text)
+            {
+                if (text == "RGB (Default)") {
+                    // 调用 CloudView 的重置函数，它会内部调用 cloud->restoreColors()
+                    m_cloudview->resetPointCloudColor(update_cloud);
+                }
+                else if (text == "x" || text == "y" || text == "z") {
+                    // cloud->setCloudColor(axis) 内部会先 backupColors()
+                    update_cloud->setCloudColor(text.toLower());
+                    m_cloudview->addPointCloud(update_cloud); // 刷新显示
+                }
+                else {
+                    // 自定义字段着色（Cloud::updateColorByField 内部会先 backupColors()）
+                    update_cloud->updateColorByField(text);
+                    m_cloudview->addPointCloud(update_cloud); // 刷新显示
+                }
+            });
+
+//            m_table->setItem(COLOR_MODE_ROW, 0, new QTableWidgetItem("Color Mode"));
+            m_table->setCellWidget(COLOR_MODE_ROW, 1, color_mode);
+
         }
         m_table->setItem(0, 1, new QTableWidgetItem(id));
         m_table->setItem(1, 1, new QTableWidgetItem(type));
-        m_table->setItem(2, 1, new QTableWidgetItem(size));
-        m_table->setItem(3, 1, new QTableWidgetItem(resolution));
+        m_table->setItem(2, 1, new QTableWidgetItem(size_str));
+        m_table->setItem(3, 1, new QTableWidgetItem(resolution_str));
+    }
+
+    void CloudTree::onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result)
+    {
+        // 这个函数运行在主线程 (UI线程)
+        FieldMappingDialog dlg(fields, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            // 用户点击 OK，获取结果
+            FieldMappingDialog::MappingResult res = dlg.getMapping();
+            result = res.field_map;
+        } else {
+            // 用户取消，返回空结果
+            result.clear();
+        }
     }
 }
 

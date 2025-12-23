@@ -12,7 +12,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -118,6 +118,8 @@ if (PCL_FOUND)
 else ()
     message(STATUS "PCL is not found.")
 endif ()
+
+find_package(OpenMP REQUIRED)
 
 # 2. 配置编译选项：仅编译静态库，不编译工具
 set(LASZIP_BUILD_STATIC ON CACHE BOOL "Build static laszip" FORCE)

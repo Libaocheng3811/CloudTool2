@@ -80,12 +80,11 @@ namespace ct
     {
         if (!m_viewer->contains(cloud->id().toStdString()))
             m_viewer->addPointCloud<PointXYZRGBN>(cloud, cloud->id().toStdString());
-        // ?
         else
         {
-            pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb(cloud);
+            pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb_handler(cloud);
             // 调用PCLVisualizer类的updatePointCloud函数，用于更新视图器m_viewer中显示的点云数据
-            m_viewer->updatePointCloud<PointXYZRGBN>(cloud, cloud->id().toStdString());
+            m_viewer->updatePointCloud<PointXYZRGBN>(cloud, rgb_handler, cloud->id().toStdString());
         }
 
         if (cloud->pointSize() != 1)
@@ -374,9 +373,10 @@ namespace ct
 
     void CloudView::resetPointCloudColor(const Cloud::Ptr &cloud)
     {
-        // 创建了一个颜色处理器rgb，它会根据cloud中存储的RGB信息生成颜色
-        pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb(cloud);
-        m_viewer->updatePointCloud(cloud, rgb, cloud->id().toStdString());
+        cloud->restoreColors();
+
+        pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb_handler(cloud);
+        m_viewer->updatePointCloud(cloud, rgb_handler, cloud->id().toStdString());
         m_viewer->getRenderWindow()->Render();
     }
 

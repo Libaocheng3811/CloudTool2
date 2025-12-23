@@ -10,10 +10,10 @@
 #include <QColorDialog>
 
 // 通过宏定义为常量命名，并且为每个常量赋值，
-#define COLOR_POINTCLOUD    (0)
-#define COLOR_BACKGROUND    (1)
-#define COLOR_NORMALS       (2)
-#define COLOR_BOUNDINGBOX   (3)
+#define CT_COLOR_POINTCLOUD    (0)
+#define CT_COLOR_BACKGROUND    (1)
+#define CT_COLOR_NORMALS       (2)
+#define CT_COLOR_BOUNDINGBOX   (3)
 
 /**
  * @brief 十六进制颜色代码
@@ -47,8 +47,6 @@ const QColor colors[5][10] = {
 Color::Color(QWidget *parent) :
         CustomDock(parent), ui(new Ui::Color), m_field(""), m_rgb(QColor(255, 255, 255))
 {
-    // setupUi 是UI类的成员函数，它负责创建和布局所有的UI组件，并将它们添加到传入的 QWidget（或其子类）对象中。
-    // 这句代码将由Qt Designer设计的用户界面（UI）与你的应用程序代码关联起来，把这个由Qt Designer设计的UI布局应用到这个Color实例上。
     ui->setupUi(this);
     // spacing 参数指定了控件之间的固定空隙，单位是像素
     ui->gridLayout->setSpacing(0);
@@ -78,8 +76,6 @@ Color::Color(QWidget *parent) :
                 // 下述情况中，当使用lambda表达式作为槽时，它本身就是一个函数对象，可以直接执行，不依赖于某个对象
                 connect(btn, &QPushButton::clicked, [=]
                         {
-                            // QColorDialog::getColor(...):这是一个静态函数，返回一个 QColor 类型，调用它会弹出一个颜色选择对话框，让用户选择颜色。
-                            // 参数 Qt::white 定义了对话框初始显示的颜色，this 是窗口的父对象，tr("select color") 是对话框的标题（使用国际化支持）。
                             emit rgb(QColorDialog::getColor(Qt::white, this, tr("select color")));
                         });
             }
@@ -127,7 +123,7 @@ void Color::apply()
         // currentIndex()是ComboBox类中的一个成员函数，用于返回用户当前所选项的索引
         switch (ui->cbox_type->currentIndex())
         {
-            case COLOR_POINTCLOUD:
+            case CT_COLOR_POINTCLOUD:
                 // 为某个坐标轴设置颜色，例如x轴，就是颜色是根据点云点的x坐标变化的
                 if (m_field != "")
                 {
@@ -143,14 +139,14 @@ void Color::apply()
                 }
                 m_cloudview->addPointCloud(cloud);
                 break;
-            case COLOR_BACKGROUND:
+            case CT_COLOR_BACKGROUND:
                 break;
-            case COLOR_NORMALS:
+            case CT_COLOR_NORMALS:
                 cloud->setNormalColor({m_rgb.red(), m_rgb.green(), m_rgb.blue()});
                 printI(QString("Apply cloud[id:%1] normals color[r:%2, g:%3, b:%4] done.")
                         .arg(m_rgb.red()).arg(m_rgb.green()).arg(m_rgb.blue()));
                 break;
-            case COLOR_BOUNDINGBOX:
+            case CT_COLOR_BOUNDINGBOX:
                 cloud->setBoxColor({m_rgb.red(), m_rgb.green(), m_rgb.blue()});
                 printI(QString("Apply cloud [id:%1] box color[r:%2, g:%3, b:%4] done.")
                         .arg(m_rgb.red()).arg(m_rgb.green()).arg(m_rgb.blue()));
@@ -166,21 +162,21 @@ void Color::reset()
     {
         switch (ui->cbox_type->currentIndex())
         {
-            case COLOR_POINTCLOUD:
+            case CT_COLOR_POINTCLOUD:
                 m_cloudview->resetPointCloudColor(cloud);
                 break;
-            case COLOR_NORMALS:
+            case CT_COLOR_NORMALS:
                 if (m_cloudview->contains(cloud->normalId()))
                     m_cloudview->setPointCloudColor(cloud->normalId(), cloud->normalColor());
                 break;
-            case COLOR_BOUNDINGBOX:
+            case CT_COLOR_BOUNDINGBOX:
                 if (m_cloudview->contains(cloud->boxId()))
                     m_cloudview->setShapeColor(cloud->boxId(), cloud->boxColor());
                 break;
         }
         printI(QString("Reset cloud[id:%1] color done.").arg(cloud->id()));
     }
-    if (ui->cbox_type->currentIndex() == COLOR_BACKGROUND)
+    if (ui->cbox_type->currentIndex() == CT_COLOR_BACKGROUND)
         m_cloudview->resetBackgroundColor();
 }
 
@@ -195,21 +191,21 @@ void Color::setColorRGB(const QColor &rgb)
     }
     switch (ui->cbox_type->currentIndex())
     {
-        case COLOR_POINTCLOUD:
+        case CT_COLOR_POINTCLOUD:
             for (auto& cloud : selected_clouds)
                 // 传入CloudView执行时，颜色是RGB类型的，而在Color类中颜色是QColor类型的
                 m_cloudview->setPointCloudColor(cloud, {rgb.red(), rgb.green(), rgb.blue()});
             break;
 
-        case COLOR_BACKGROUND:
+        case CT_COLOR_BACKGROUND:
             m_cloudview->setBackgroundColor({rgb.red(), rgb.green(), rgb.blue()});
             break;
-        case COLOR_NORMALS:
+        case CT_COLOR_NORMALS:
             for (auto& cloud : selected_clouds)
                 if (m_cloudview->contains(cloud->normalId()))
                     m_cloudview->setPointCloudColor(cloud->normalId(), {rgb.red(), rgb.green(), rgb.blue()});
             break;
-        case COLOR_BOUNDINGBOX:
+        case CT_COLOR_BOUNDINGBOX:
             for (auto& cloud : selected_clouds)
                 if (m_cloudview->contains(cloud->boxId()))
                     m_cloudview->setShapeColor(cloud->boxId(), {rgb.red(), rgb.green(), rgb.blue()});

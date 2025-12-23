@@ -9,11 +9,12 @@
 
 #include <QFileInfo>
 #include <QString>
+#include <QMap>
 
 #define CLOUD_TYPE_XYZ       "xyz"
 #define CLOUD_TYPE_XYZRGB    "XYZRGB"
 #define CLOUD_TYPE_XYZN      "XYZNormal"
-#define CLOUD_TYPE_XYARGBN   "XYZRGBNormal"
+#define CLOUD_TYPE_XYZRGBN   "XYZRGBNormal"
 
 #define BOX_PRE_FLAG         "-box"
 #define NORMALS_PRE_FLAG     "-normals"
@@ -256,27 +257,71 @@ namespace ct
          */
         void update(bool box_flag = true, bool type_flag = false, bool resolution_flag = true);
 
+        /*
+         * @brief 添加一个标量场
+        */
+        void addScalarField(const QString& name, const std::vector<float>& data);
+
+        /*
+         * @brief 获取标量场名称
+        */
+        QStringList getScalarFieldNames() const { return m_scalar_fields.keys(); };
+
+        /*
+         * @brief 是否存在某个字段
+        */
+        bool hasScalarField(const QString& name) const { return m_scalar_fields.contains(name); };
+
+        // TODO 优化返回局部变量问题
+        const std::vector<float>* getScalarField(const QString& name) const {
+            auto it = m_scalar_fields.find(name);
+            return (it != m_scalar_fields.end()) ? &it.value() : nullptr;
+        }
+
+        /*
+         * @brief 颜色映射，根据字段重新计算点云颜色
+        */
+        void updateColorByField(const QString& field_name);
+
+        /*
+         * @brief 备份点云颜色
+        */
+        void backupColors();
+
+        /*
+         * @brief 恢复点云颜色
+        */
+        void restoreColors();
+
+        void setHasRGB(bool has) { m_has_rgb = has; }
+        bool hasRGB() const { return m_has_rgb; }
+
+        void removeInvalidPoints();
 
     private:
-        // m_box的初始化在update()函数中完成
         Box m_box;
-        // m_id存储的是点云文件名信息
         QString m_id;
         RGB m_box_rgb;
-        // 法线向量的颜色
         RGB m_normals_rgb;
         QString m_type;
-        // m_info存储点云的路径信息
         QFileInfo m_info;
         int m_point_size;
-        // 点云透明度
         float m_opacity;
         float m_resolution;
         PointXYZRGBN m_min;
         PointXYZRGBN m_max;
+
+        // 标量场，字段名：数据向量
+        QMap<QString, std::vector<float>> m_scalar_fields;
+
+        std::vector<std::uint32_t> m_original_colors;
+        bool m_has_backup = false; // 是否备份原始颜色信息
+        bool m_has_rgb = false; // 是否有rgb颜色信息
+        bool m_color_modified = false; // 是否修改颜色信息
+
+        // 静态颜色查找表
+        static std::vector<float> s_jet_lut;
+        static void initColorTable();
     };
 }
-
-
-
 #endif //CLOUDTOOL2_CLOUD_H
