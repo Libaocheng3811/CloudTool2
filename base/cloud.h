@@ -272,7 +272,6 @@ namespace ct
         */
         bool hasScalarField(const QString& name) const { return m_scalar_fields.contains(name); };
 
-        // TODO 优化返回局部变量问题
         const std::vector<float>* getScalarField(const QString& name) const {
             auto it = m_scalar_fields.find(name);
             return (it != m_scalar_fields.end()) ? &it.value() : nullptr;
@@ -292,6 +291,8 @@ namespace ct
          * @brief 恢复点云颜色
         */
         void restoreColors();
+
+        std::uint32_t getPointColorForSave(size_t index) const;
 
         void setHasRGB(bool has) { m_has_rgb = has; }
         bool hasRGB() const { return m_has_rgb; }

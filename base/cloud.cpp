@@ -257,6 +257,16 @@ namespace ct
         m_color_modified = false;
     }
 
+    std::uint32_t Cloud::getPointColorForSave(size_t index) const
+    {
+        // 如果有备份数据，则使用备份数据
+        if(m_has_backup && !m_original_colors.empty()){
+            return m_original_colors[index];
+        }
+        // 没有备份数据，说明颜色数据没有被修改
+        return *reinterpret_cast<const std::uint32_t *>(&points[index].rgb);
+    }
+
     void Cloud::restoreColors()
     {
         if (!m_has_backup || !m_color_modified) return;
@@ -312,7 +322,7 @@ namespace ct
 
         const float* pData = data.data();
         const float* pLut = s_jet_lut.data();
-        int lut_max_idx = s_jet_lut.size() - 1;
+        size_t lut_max_idx = s_jet_lut.size() - 1;
 
         //并行赋值
 #pragma omp parallel for
@@ -347,7 +357,7 @@ namespace ct
             for (int idx : indices) new_colors.push_back(m_original_colors[idx]);
             m_original_colors = std::move(new_colors);
         }
-        
+
         for (auto it = m_scalar_fields.begin(); it != m_scalar_fields.end(); ++it) {
             std::vector<float>& old_data = it.value();
             std::vector<float> new_data;
