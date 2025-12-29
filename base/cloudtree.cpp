@@ -1,6 +1,7 @@
 #include "base/cloudtree.h"
 #include "base/fieldmappingdialog.h"
 #include "base/txtimportdialog.h"
+#include "base/txtexportdialog.h"
 
 #include <QCheckBox>
 #include <QFileDialog>
@@ -33,6 +34,7 @@ namespace ct
         qRegisterMetaType<QList<ct::FieldInfo>>("QList<ct::FieldInfo>");
         qRegisterMetaType<QMap<QString, QString>>("QMap<QString, QString>&");
         qRegisterMetaType<ct::TxtImportParams>("ct::TxtImportParams");
+        qRegisterMetaType<ct::TxtExportParams>("ct::TxtExportParams");
 
         // move to thread
         m_fileio = new FileIO;
@@ -47,6 +49,7 @@ namespace ct
         connect(this, &CloudTree::itemSelectionChanged, this, &CloudTree::itemSelectionChangedEvent);
         connect(m_fileio, &FileIO::requestFieldMapping, this, &CloudTree::onFieldMappingRequested, Qt::BlockingQueuedConnection);
         connect(m_fileio, &FileIO::requestTxtImportSetup, this, &CloudTree::onTxtImportRequested, Qt::BlockingQueuedConnection);
+        connect(m_fileio, &FileIO::requestTxtExportSetup, this, &CloudTree::onTxtExportRequested, Qt::BlockingQueuedConnection);
 
         // 设置窗口部件接受拖放操作
         this->setAcceptDrops(true);
@@ -213,18 +216,15 @@ namespace ct
     void CloudTree::saveCloud(const ct::Index &index)
     {
         Cloud::Ptr cloud = getCloud(index);
-        QString filter = "ply(*.ply);;pcd(*.pcd)";
+        QString filter = "PLY(*.ply);;PCD(*.pcd);;LAS(*.las);;TXT(*.txt)";
         QString filepath = QFileDialog::getSaveFileName(this, tr("Save cloud file"), cloud->id(), filter);
         if (filepath.isEmpty())
             return;
         QMessageBox message_box(QMessageBox::NoIcon, "Saved format", tr("Save in binary or ascii format?"),
                                 QMessageBox::NoButton, this);
-        // 添加按钮，向消息框中添加一个 “Ascii” 按钮。按钮类型为 QMessageBox::ActionRole
         message_box.addButton(tr("Ascii"), QMessageBox::ActionRole);
-        // 添加一个 “Binary” 按钮，并将其设置为默认按钮
         message_box.addButton(tr("Binary"), QMessageBox::ActionRole)->setDefault(true);
         message_box.addButton(QMessageBox::Cancel);
-        // 模态窗口，用户做出选择后，返回的值将被存储在 k 变量中
         int k = message_box.exec();
         if (k == QMessageBox::Cancel)
         {
@@ -313,7 +313,7 @@ namespace ct
         }
         // 设置文件树中新名称
         item(index)->setText(0, name);
-        // 移除旧点云ID相关数据，点云、法线、包围盒。
+
         m_cloudview->removePointCloud(cloud->id());
         m_cloudview->removePointCloud(cloud->normalId());
         m_cloudview->removeShape(cloud->boxId());
@@ -538,6 +538,16 @@ namespace ct
             params = dlg.getParams();
         } else{
             params.col_map.clear();
+        }
+    }
+
+    void CloudTree::onTxtExportRequested(const QStringList &available_fields, ct::TxtExportParams &params) {
+        TxtExportDialog dlg(available_fields, this);
+        if (dlg.exec() == QDialog::Accepted){
+            params = dlg.getParams();
+        }
+        else{
+            params.selected_fields.clear(); //标志取消
         }
     }
 }

@@ -212,6 +212,8 @@ namespace ct
 
          void onTxtImportRequested(const QStringList& preview_lines, ct::TxtImportParams& params);
 
+         void onTxtExportRequested(const QStringList& available_fields, ct::TxtExportParams& params);
+
 
     private:
         QString m_path;

@@ -4,6 +4,7 @@
 #include "base/cloud.h"
 #include "base/exports.h"
 #include "base/txtimportdialog.h"
+#include "base/txtexportdialog.h"
 
 namespace ct
 {
@@ -44,6 +45,13 @@ namespace ct
          */
          void requestTxtImportSetup(const QStringList& preview_lines, ct::TxtImportParams& params);
 
+         /**
+          * @brief 显示导出对话框 (阻塞式)
+          * @param available_fields 告诉UI 可用的字段列表
+          * @param params 接收用户配置
+          */
+         void requestTxtExportSetup(const QStringList& available_fields, ct::TxtExportParams& params);
+
     public slots:
         /**
          * @brief 加载点云文件
@@ -63,6 +71,10 @@ namespace ct
         bool loadPLY_PCD(const QString &filename, Cloud::Ptr &cloud); // 支持自定义字段
         bool loadTXT(const QString &filename, Cloud::Ptr &cloud); // 支持交互
         bool loadGeneralPCL(const QString &filename, Cloud::Ptr &cloud); // OBJ, IFS 等标准格式
+
+        bool saveLAS(const Cloud::Ptr &cloud, const QString &filename);
+        bool saveTXT(const Cloud::Ptr &cloud, const QString &filename);
+        bool savePCL(const Cloud::Ptr &cloud, const QString &filename, bool isBinary);
     };
 }
 

@@ -14,6 +14,7 @@
 
 #include <fstream>
 #include <string>
+#include <iomanip> // std::setprecision
 
 namespace ct
 {
@@ -375,6 +376,7 @@ namespace ct
     }
     */
 
+    /*
     void FileIO::savePointCloud(const Cloud::Ptr &cloud, const QString &filename, bool isBinary) {
         TicToc time;
         time.tic();
@@ -558,6 +560,31 @@ namespace ct
                 emit saveCloudResult(true, filename, time.toc());
         else
                 emit saveCloudResult(false, filename, time.toc());
+    }
+    */
+
+    void FileIO::savePointCloud(const Cloud::Ptr &cloud, const QString &filename, bool isBinary) {
+        TicToc time;
+        time.tic();
+        QFileInfo fileInfo(filename);
+        QString suffix = fileInfo.suffix().toLower();
+        bool is_success = false;
+
+        // 恢复原始数据
+        cloud->restoreColors();
+
+        if (suffix == "las" || suffix == "laz"){
+            is_success = saveLAS(cloud, filename);
+        }
+        else if (suffix == "txt" || suffix == "xyz" || suffix == "csv"){
+            is_success = saveTXT(cloud, filename);
+        }
+        else {
+            is_success = savePCL(cloud, filename, isBinary);
+        }
+
+        if (is_success) emit saveCloudResult(true, filename, time.toc());
+        else emit saveCloudResult(false, filename, time.toc());
     }
 
     bool FileIO::loadLAS(const QString &filename, Cloud::Ptr &cloud) {
@@ -780,5 +807,269 @@ namespace ct
         cloud->setHasRGB(true);
         cloud->is_dense = cloud->is_dense;
         return true;
+    }
+
+    bool FileIO::saveLAS(const Cloud::Ptr &cloud, const QString &filename) {
+        LASwriteOpener laswriteopener;
+        laswriteopener.set_file_name(filename.toLocal8Bit().constData());
+        LASheader lasheader;
+
+        // 确定格式
+        if (cloud->hasRGB()) {
+            // 原文件有颜色，保存为 Format 2 (支持 XYZ, Intensity, RGB)
+            lasheader.point_data_format = 2; // XYZ + RGB + Intensity
+            lasheader.point_data_record_length = 26;
+        } else {
+            lasheader.point_data_format = 0;  // XYZ + Intensity (不存 RGB)
+            lasheader.point_data_record_length = 20;
+        }
+
+        // 设置精度因子
+        lasheader.x_scale_factor = 0.0001; // 0.1毫米精度
+        lasheader.y_scale_factor = 0.0001;
+        lasheader.z_scale_factor = 0.0001;
+
+        // 设置偏移量 (Offset)，避免坐标过大导致精度丢失，通常取点云的最小值
+        if (!cloud->empty()) {
+            lasheader.x_offset = cloud->min().x;
+            lasheader.y_offset = cloud->min().y;
+            lasheader.z_offset = cloud->min().z;
+        } else {
+            lasheader.x_offset = 0;
+            lasheader.y_offset = 0;
+            lasheader.z_offset = 0;
+        }
+
+        LASwriter *laswriter = laswriteopener.open(&lasheader);
+        if (!laswriter) return false;
+
+        // 预取 Intensity 字段指针 (如果存在)
+        const std::vector<float>* intensity_ptr = nullptr;
+        if (cloud->hasScalarField("Intensity")) {
+            intensity_ptr = cloud->getScalarField("Intensity");
+        }
+
+        LASpoint laspoint;
+        laspoint.init(&lasheader, lasheader.point_data_format, lasheader.point_data_record_length, &lasheader);
+
+        // 循环写入
+        size_t num_points = cloud->size();
+        for (size_t i = 0; i < num_points; ++i)
+        {
+            const auto& p = cloud->points[i];
+            laspoint.set_x(p.x);
+            laspoint.set_y(p.y);
+            laspoint.set_z(p.z);
+
+            // [RGB] 仅当格式支持且需要保存时写入
+            if (cloud->hasRGB()) {
+                // 直接获取原始颜色 (uint32)，避免了 float 转换误差和伪彩色干扰
+                std::uint32_t rgb_val = cloud->getPointColorForSave(i);
+                // 解包并转为 LAS 的 16位颜色
+                laspoint.rgb[0] = ((rgb_val >> 16) & 0xFF) * 256;
+                laspoint.rgb[1] = ((rgb_val >> 8) & 0xFF) * 256;
+                laspoint.rgb[2] = (rgb_val & 0xFF) * 256;
+            }
+
+            // [Intensity]
+            if (intensity_ptr) {
+                // 截断为 uint16
+                laspoint.set_intensity(static_cast<uint16_t>((*intensity_ptr)[i]));
+            } else {
+                laspoint.set_intensity(0);
+            }
+
+            laswriter->write_point(&laspoint);
+        }
+
+        laswriter->close();
+        delete laswriter;
+        return true;
+    }
+
+    bool FileIO::saveTXT(const Cloud::Ptr &cloud, const QString &filename) {
+        // 收集可用字段
+        QStringList available_fields;
+        available_fields << "x" << "y" << "z";
+        if (cloud->hasRGB()) available_fields << "r" << "g" << "b";
+
+        //添加标量字段
+        QStringList scalar_names = cloud->getScalarFieldNames();
+        available_fields.append(scalar_names);
+
+        //请求配置
+        ct::TxtExportParams params;
+        emit requestTxtExportSetup(available_fields, params);
+
+        if (params.selected_fields.isEmpty()) return false; // 用户取消
+
+        //打开文件
+        std::ofstream file(filename.toLocal8Bit().constData());
+        if (!file.is_open()) return false;
+
+        //设置精度
+        file << std::fixed << std::setprecision(params.precision);
+
+        //写入header（可选）
+        if (params.has_header) {
+            for (int i = 0; i < params.selected_fields.size(); i++){
+                file << params.selected_fields[i].toStdString();
+                if (i < params.selected_fields.size() - 1) file << params.separator;
+            }
+            file << "\n";
+        }
+
+        //准备数据指针以加速访问
+        struct FieldPtr {
+            enum Type { XYZ, RGB, Scalar};
+            Type type;
+            int sub_index; // 0=x/r, 1=y/g, 2=z/b
+            const std::vector<float>* scalar_vec; // 标量字段
+        };
+
+        std::vector<FieldPtr> field_ptrs;
+
+        for (const QString& f : params.selected_fields){
+            if (f == "x") field_ptrs.push_back({FieldPtr::XYZ, 0, nullptr});
+            else if (f == "y") field_ptrs.push_back({FieldPtr::XYZ, 1, nullptr});
+            else if (f == "z") field_ptrs.push_back({FieldPtr::XYZ, 2, nullptr});
+            else if (f == "r") field_ptrs.push_back({FieldPtr::RGB, 0, nullptr});
+            else if (f == "g") field_ptrs.push_back({FieldPtr::RGB, 1, nullptr});
+            else if (f == "b") field_ptrs.push_back({FieldPtr::RGB, 2, nullptr});
+            else {
+                field_ptrs.push_back({FieldPtr::Scalar, 0, cloud->getScalarField(f)});
+            }
+        }
+
+        //循环写入
+        char sep = params.separator;
+        size_t num_points = cloud->size();
+
+        for (size_t i = 0; i < num_points; i++){
+            const auto& p = cloud->points[i];
+
+            //预取颜色
+            uint32_t rgb_val = 0;
+            if (cloud->hasRGB()) rgb_val = cloud->getPointColorForSave(i);
+
+            // 填充字段
+            for (size_t k = 0; k < field_ptrs.size(); k++){
+                const auto& fp = field_ptrs[k];
+
+                if (fp.type == FieldPtr::XYZ){
+                    if (fp.sub_index == 0) file << p.x;
+                    else if (fp.sub_index == 1) file << p.y;
+                    else file << p.z;
+                }
+                else if (fp.type == FieldPtr::RGB){
+                    //解包颜色
+                    int val = 0;
+                    if (fp.sub_index == 0) val = (rgb_val >>16) & 0xFF; //R
+                    else if (fp.sub_index == 1) val = (rgb_val >>8) & 0xFF; //G
+                    else val = rgb_val & 0xFF; //  B
+                    file << val;
+                }
+                else if (fp.type == FieldPtr::Scalar){
+                    file << (*fp.scalar_vec)[i];
+                }
+                //分隔符
+                if (k < field_ptrs.size() - 1) file << sep;
+            }
+            file << "\n";
+        }
+        file.close();
+        return true;
+    }
+
+    bool FileIO::savePCL(const Cloud::Ptr &cloud, const QString &filename, bool isBinary) {
+        pcl::PCLPointCloud2 msg;
+        msg.height = 1;
+        msg.width = cloud->size();
+        msg.is_dense = cloud->is_dense;
+        msg.is_bigendian = false;
+
+        // 动态定义字段 (Fields)
+        pcl::PCLPointField f;
+        int current_offset = 0;
+
+        // [XYZ]
+        f.name = "x"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
+        msg.fields.push_back(f); current_offset += 4;
+
+        f.name = "y"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
+        msg.fields.push_back(f); current_offset += 4;
+
+        f.name = "z"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
+        msg.fields.push_back(f); current_offset += 4;
+
+        // [RGB] 按需添加
+        if (cloud->hasRGB()) {
+            f.name = "rgb"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
+            msg.fields.push_back(f); current_offset += 4;
+        }
+
+        // [Scalar Fields] 按需添加所有自定义字段
+        QStringList fieldNames = cloud->getScalarFieldNames();
+        for (const QString& name : fieldNames) {
+            f.name = name.toStdString();
+            f.offset = current_offset;
+            f.datatype = pcl::PCLPointField::FLOAT32;
+            f.count = 1;
+            msg.fields.push_back(f);
+            current_offset += 4;
+        }
+
+        // 填充数据 Blob
+        msg.point_step = current_offset;
+        msg.row_step = msg.point_step * msg.width;
+        msg.data.resize(msg.row_step);
+        uint8_t* ptr = msg.data.data();
+
+        // 预取指针加速
+        std::vector<const std::vector<float>*> scalar_ptrs;
+        for (const QString& name : fieldNames) {
+            // 注意：cloud->getScalarField 返回的是 vector 指针，这里直接存储
+            scalar_ptrs.push_back(cloud->getScalarField(name));
+        }
+
+        size_t num_points = cloud->size();
+        for (size_t i = 0; i < num_points; ++i)
+        {
+            const auto& p = cloud->points[i];
+
+            // 写入 XYZ
+            memcpy(ptr, &p.x, 12); // float*3 = 12 bytes
+            int internal_offset = 12;
+
+            // 写入 RGB
+            if (cloud->hasRGB()) {
+                // 直接取原始颜色 (uint32)
+                std::uint32_t rgb_val = cloud->getPointColorForSave(i);
+                memcpy(ptr + internal_offset, &rgb_val, 4);
+                internal_offset += 4;
+            }
+
+            // 写入 自定义字段
+            for (size_t k = 0; k < scalar_ptrs.size(); ++k) {
+                float val = (*scalar_ptrs[k])[i];
+                memcpy(ptr + internal_offset, &val, 4);
+                internal_offset += 4;
+            }
+
+            ptr += msg.point_step;
+        }
+
+        // 写入文件
+        if (filename.endsWith(".pcd", Qt::CaseInsensitive)) {
+            pcl::io::savePCDFile(filename.toLocal8Bit().toStdString(), msg, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), isBinary);
+            return true;
+        }
+        else {
+            // 默认为 PLY
+            pcl::PLYWriter writer;
+            // 最后一个参数 false 表示不写入 camera 元素，避免那个 warning
+            int res = writer.write(filename.toLocal8Bit().toStdString(), msg, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), isBinary, false);
+            return (res == 0);
+        }
     }
 }

@@ -21,6 +21,7 @@ set(LibHdrs
         customdock.h
         fieldmappingdialog.h
         txtimportdialog.h
+        txtexportdialog.h
         )
 
 find_package(VTK COMPONENTS
