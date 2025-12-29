@@ -210,6 +210,8 @@ namespace ct
 
          void onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result);
 
+         void onTxtImportRequested(const QStringList& preview_lines, ct::TxtImportParams& params);
+
 
     private:
         QString m_path;

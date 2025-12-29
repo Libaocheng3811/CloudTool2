@@ -3,6 +3,7 @@
 
 #include "base/cloud.h"
 #include "base/exports.h"
+#include "base/txtimportdialog.h"
 
 namespace ct
 {
@@ -36,6 +37,13 @@ namespace ct
         */
         void requestFieldMapping(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result);
 
+        /**
+         * @brief 显示映射对话框 (阻塞式)
+         * @param preview_lines 文件中探测到的字段列表
+         * @param params 用户选择的映射结果 (引用传入)
+         */
+         void requestTxtImportSetup(const QStringList& preview_lines, ct::TxtImportParams& params);
+
     public slots:
         /**
          * @brief 加载点云文件
@@ -49,6 +57,12 @@ namespace ct
          * @param filename 保存的文件路径
          */
         void savePointCloud(const Cloud::Ptr &cloud, const QString &filename, bool isBinary);
+
+    private:
+        bool loadLAS(const QString &filename, Cloud::Ptr &cloud);
+        bool loadPLY_PCD(const QString &filename, Cloud::Ptr &cloud); // 支持自定义字段
+        bool loadTXT(const QString &filename, Cloud::Ptr &cloud); // 支持交互
+        bool loadGeneralPCL(const QString &filename, Cloud::Ptr &cloud); // OBJ, IFS 等标准格式
     };
 }
 

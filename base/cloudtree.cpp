@@ -1,5 +1,6 @@
 #include "base/cloudtree.h"
 #include "base/fieldmappingdialog.h"
+#include "base/txtimportdialog.h"
 
 #include <QCheckBox>
 #include <QFileDialog>
@@ -31,6 +32,7 @@ namespace ct
         qRegisterMetaType<Cloud::Ptr>("Cloud::Ptr");
         qRegisterMetaType<QList<ct::FieldInfo>>("QList<ct::FieldInfo>");
         qRegisterMetaType<QMap<QString, QString>>("QMap<QString, QString>&");
+        qRegisterMetaType<ct::TxtImportParams>("ct::TxtImportParams");
 
         // move to thread
         m_fileio = new FileIO;
@@ -44,6 +46,7 @@ namespace ct
         connect(this, &CloudTree::itemClicked, this, &CloudTree::itemClickedEvent);
         connect(this, &CloudTree::itemSelectionChanged, this, &CloudTree::itemSelectionChangedEvent);
         connect(m_fileio, &FileIO::requestFieldMapping, this, &CloudTree::onFieldMappingRequested, Qt::BlockingQueuedConnection);
+        connect(m_fileio, &FileIO::requestTxtImportSetup, this, &CloudTree::onTxtImportRequested, Qt::BlockingQueuedConnection);
 
         // 设置窗口部件接受拖放操作
         this->setAcceptDrops(true);
@@ -70,7 +73,7 @@ namespace ct
          * pattern1 pattern2 ... 是一个或多个文件模式，它们定义了过滤器匹配的文件类型, 如 *.*, *.ply
          */
         // 定义了一个文件过滤器
-        QString filter = "all(*.*);;ply(*.ply);;pcd(*.pcd)";
+        QString filter = "All Supported(*.ply *.pcd *.las *.laz *.obj *.ifs *.txt *.asc *.xyz);;All Files(*.*)";
         // 打开文件对话框,可以选择多个文件
         QStringList filePathList = QFileDialog::getOpenFileNames(this, tr("open cloud files"), m_path, filter);
         if (filePathList.isEmpty())
@@ -526,6 +529,15 @@ namespace ct
         } else {
             // 用户取消，返回空结果
             result.clear();
+        }
+    }
+
+    void CloudTree::onTxtImportRequested(const QStringList& preview_lines, ct::TxtImportParams& params){
+        TxtImportDialog dlg(preview_lines, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            params = dlg.getParams();
+        } else{
+            params.col_map.clear();
         }
     }
 }

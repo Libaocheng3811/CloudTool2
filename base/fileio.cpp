@@ -12,6 +12,9 @@
 #include "lasreader.hpp"
 #include "laswriter.hpp"
 
+#include <fstream>
+#include <string>
+
 namespace ct
 {
     // 辅助函数
@@ -45,6 +48,50 @@ namespace ct
             default: return 0.0f;
         }
     }
+
+    void FileIO::loadPointCloud(const QString &filename) {
+        TicToc time;
+        time.tic();
+        Cloud::Ptr cloud(new Cloud);
+        QFileInfo fileInfo(filename);
+        QString suffix = fileInfo.suffix().toLower();
+        bool is_success = false;
+
+        //根据后缀分发处理
+        if (suffix == "las" || suffix == "laz"){
+            is_success = loadLAS(filename, cloud);
+        }
+        else if (suffix == "ply" || suffix == "pcd"){
+            is_success = loadPLY_PCD(filename, cloud);
+        }
+        else if (suffix == "txt" || suffix == "xyz" || suffix == "asc"){
+            is_success = loadTXT(filename, cloud);
+        }
+        else{
+            is_success = loadGeneralPCL(filename, cloud);
+        }
+
+        // 失败处理
+        if (!is_success){
+            emit loadCloudResult(false, cloud, time.toc());
+            return;
+        }
+        //后处理
+        if (!cloud->is_dense){
+            cloud->removeInvalidPoints(); // 移除无效点并同步标量场
+        }
+
+        cloud->setId(fileInfo.baseName());
+        cloud->setInfo(fileInfo);
+        cloud->update(); //更新包围盒，统计信息
+
+        //备份颜色
+        cloud->backupColors();
+
+        emit loadCloudResult(true, cloud, time.toc());
+    }
+
+    /*
     void FileIO::loadPointCloud(const QString &filename)
     {
         TicToc time;
@@ -54,7 +101,109 @@ namespace ct
         QString suffix = fileInfo.suffix().toLower();
 
         bool is_success = false;
-        if (suffix == "ply" || suffix == "pcd") {
+        if (suffix == "txt" || suffix == "xyz" || suffix == "asc"){
+            // 预读阶段
+            std::ifstream file(filename.toLocal8Bit().constData());
+            if (!file.is_open()){
+                emit loadCloudResult(false, cloud, 0);
+                return;
+            }
+            QStringList preview_lines;
+            std::string line;
+            int preview_count = 0;
+            while (std::getline(file, line) && preview_count < 50){
+                if (!line.empty()){
+                    preview_lines << QString::fromStdString(line);
+                    preview_count++;
+                }
+            }
+            file.clear(); // 清除eof标志
+            file.seekg(0); // 回到文件头
+
+            // 交互配置
+            TxtImportParams params;
+            emit requestTxtImportSetup(preview_lines, params); //发送阻塞信号
+
+            bool has_x = false, has_y = false, has_z = false;
+            for (const auto& val : params.col_map){
+                if (val == "x") has_x = true;
+                else if (val == "y") has_y = true;
+                else if (val == "z") has_z = true;
+            }
+            if (params.col_map.isEmpty() || !has_x || !has_y || !has_z){
+                emit loadCloudResult(false, cloud, 0); // 用户取消或配置无效
+                return;
+            }
+
+            // 全量解析
+            //跳过header
+            for (int i = 0; i < params.skip_lines; ++i) std::getline(file, line);
+
+            QMap<QString, std::vector<float>> scalars;
+            QList<int> scalar_indices;
+            QList<QString> scalar_names;
+
+            // 找出哪些是scalar fields
+            for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it){
+                QString type = it.value();
+                if (type != "x" && type != "y" && type != "z" && type != "r" && type != "g" && type != "b"){
+                    scalar_indices.append(it.key());
+                    scalar_names.append(type);
+                }
+            }
+
+            //循环读取
+            bool has_color = false;
+
+            while (std::getline(file, line)){
+                if (line.empty()) continue;
+
+                QString qline = QString::fromStdString(line);
+                QStringList parts;
+                if (params.separator == ' ')
+                    parts = qline.simplified().split(' ', QString::SkipEmptyParts);
+                else
+                    parts = qline.split(params.separator);
+
+                PointXYZRGBN p;
+                uint8_t r = 255, g = 255, b = 255;
+
+                //解析每一列
+                for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it){
+                    int idx = it.key();
+                    if (idx >= parts.size()) continue;
+
+                    float val = parts[idx].toFloat();
+                    QString type = it.value();
+
+                    if (type == "x") p.x = val;
+                    else if (type == "y") p.y = val;
+                    else if (type == "z") p.z = val;
+                    else if (type == "r") { r = (uint8_t)val; has_color = true; }
+                    else if (type == "g") { g = (uint8_t)val; has_color = true; }
+                    else if (type == "b") { b = (uint8_t)val; has_color = true;}
+                    else{
+                        // 标量场
+                        scalars[type].push_back(val);
+                    }
+                }
+
+                //打包颜色
+                std::uint32_t  rgb_val = (std::uint32_t)r << 16 | (std::uint32_t)g << 8 | (std::uint32_t)b;
+                p.rgb = *reinterpret_cast<float*>(&rgb_val);
+
+                cloud->push_back(p);
+            }
+            // 存入标量场
+            for (const auto & scalar_name : scalar_names){
+                if (scalars[scalar_name].size() == cloud->size()){
+                    cloud->addScalarField(scalar_name, scalars[scalar_name]);
+                }
+            }
+            cloud->setHasRGB(has_color);
+            is_success = true;
+        }
+        else if (suffix == "ply" || suffix == "pcd") {
             pcl::PCLPointCloud2 blob;
             int res = -1;
             if (suffix == "ply") res = pcl::io::loadPLYFile(filename.toLocal8Bit().toStdString(), blob);
@@ -208,7 +357,7 @@ namespace ct
         }
 
         // 注意：pcl::fromPCLPointCloud2 会保留 NaN，如果需要 removeNaN
-        if (cloud->is_dense == false) {
+        if (!cloud->is_dense) {
             std::vector<int> indices;
             cloud->removeInvalidPoints();
             // 注意：移除了点后，scalar fields 的数据也必须同步移除！
@@ -224,6 +373,7 @@ namespace ct
 
         emit loadCloudResult(true, cloud, time.toc());
     }
+    */
 
     void FileIO::savePointCloud(const Cloud::Ptr &cloud, const QString &filename, bool isBinary) {
         TicToc time;
@@ -408,5 +558,227 @@ namespace ct
                 emit saveCloudResult(true, filename, time.toc());
         else
                 emit saveCloudResult(false, filename, time.toc());
+    }
+
+    bool FileIO::loadLAS(const QString &filename, Cloud::Ptr &cloud) {
+        LASreadOpener lasreadopener;
+        lasreadopener.set_file_name(filename.toLocal8Bit().constData());
+        LASreader* lasreader = lasreadopener.open();
+
+        if (!lasreader) return false;
+
+        // 判断颜色
+        int fmt = lasreader->header.point_data_format;
+        bool has_color = (fmt == 2 || fmt == 3 || fmt == 5 || fmt == 7);
+        cloud->setHasRGB(has_color);
+
+        std::vector<float> intensities;
+        // 预分配内存优化速度
+        if (lasreader->npoints > 0) {
+            cloud->reserve(lasreader->npoints);
+            intensities.reserve(lasreader->npoints);
+        }
+
+        while (lasreader->read_point())
+        {
+            PointXYZRGBN p;
+            p.x = lasreader->point.get_x();
+            p.y = lasreader->point.get_y();
+            p.z = lasreader->point.get_z();
+
+            uint8_t r = 0, g = 0, b = 0;
+            if (has_color) {
+                r = lasreader->point.rgb[0] >> 8;
+                g = lasreader->point.rgb[1] >> 8;
+                b = lasreader->point.rgb[2] >> 8;
+            }
+
+            std::uint32_t rgb_val = ((std::uint32_t)r << 16 | (std::uint32_t)g << 8 | (std::uint32_t)b);
+            p.rgb = *reinterpret_cast<float*>(&rgb_val);
+
+            intensities.push_back(static_cast<float>(lasreader->point.get_intensity()));
+            cloud->push_back(p);
+        }
+
+        if (!intensities.empty()) {
+            cloud->addScalarField("Intensity", intensities);
+        }
+
+        lasreader->close();
+        delete lasreader;
+
+        // LAS 通常是 dense 的，除非有点在无穷远，这里设为 true
+        cloud->is_dense = true;
+        return true;
+    }
+
+    bool FileIO::loadPLY_PCD(const QString &filename, Cloud::Ptr &cloud) {
+        pcl::PCLPointCloud2 blob;
+        int res = -1;
+        if (filename.endsWith(".ply", Qt::CaseInsensitive))
+            res = pcl::io::loadPLYFile(filename.toLocal8Bit().toStdString(), blob);
+        else
+            res = pcl::io::loadPCDFile(filename.toLocal8Bit().toStdString(), blob);
+
+        if (res == -1) return false;
+
+        // 准备字段信息
+        QList<ct::FieldInfo> fields_info;
+        for (const auto &f: blob.fields) {
+            fields_info.append({QString::fromStdString(f.name), getPCLFieldType(f.datatype)});
+        }
+
+        // 请求 UI
+        QMap<QString, QString> mapping_result;
+        emit requestFieldMapping(fields_info, mapping_result);
+
+        if (mapping_result.isEmpty()) return false; // 用户取消
+
+        // 基础转换
+        pcl::fromPCLPointCloud2(blob, *cloud);
+
+        // 提取自定义字段
+        size_t num_points = blob.width * blob.height;
+        struct ExtractInfo { QString targetName; int offset; int datatype; };
+        std::vector<ExtractInfo> extract_list;
+
+        for (const auto &f: blob.fields) {
+            QString fname = QString::fromStdString(f.name);
+            if (mapping_result.contains(fname)) {
+                QString action = mapping_result[fname];
+                if (action == "Scalar Field" || action == "Intensity") {
+                    QString saveName = (action == "Intensity") ? "Intensity" : fname;
+                    extract_list.push_back({saveName, (int)f.offset, (int)f.datatype});
+                }
+            }
+        }
+
+        if (!extract_list.empty()) {
+            QMap<QString, std::vector<float>> scalar_data;
+            for (auto &ex: extract_list) scalar_data[ex.targetName].resize(num_points);
+
+            for (size_t i = 0; i < num_points; ++i) {
+                const uint8_t *point_ptr = &blob.data[i * blob.point_step];
+                for (const auto &ex: extract_list) {
+                    scalar_data[ex.targetName][i] = getFieldValueAsFloat(point_ptr + ex.offset, ex.datatype);
+                }
+            }
+
+            for (auto &ex: extract_list) {
+                if (!cloud->hasScalarField(ex.targetName))
+                    cloud->addScalarField(ex.targetName, scalar_data[ex.targetName]);
+            }
+        }
+
+        // 设置 hasRGB
+        bool has_color = false;
+        for (const auto &f: blob.fields) {
+            if (f.name == "rgb" || f.name == "rgba") has_color = true;
+        }
+        cloud->setHasRGB(has_color);
+
+        // PCL 加载的可能有 NaN
+        cloud->is_dense = blob.is_dense;
+        return true;
+    }
+
+    bool FileIO::loadTXT(const QString &filename, Cloud::Ptr &cloud) {
+        std::ifstream file(filename.toLocal8Bit().constData());
+        if (!file.is_open()) return false;
+
+        // 1. 预读
+        QStringList preview_lines;
+        std::string line;
+        int preview_count = 0;
+        while (std::getline(file, line) && preview_count < 50) {
+            if (!line.empty()) {
+                preview_lines << QString::fromStdString(line);
+                preview_count++;
+            }
+        }
+
+        file.clear();
+        file.seekg(0);
+
+        // 2. 交互配置
+        ct::TxtImportParams params;
+        emit requestTxtImportSetup(preview_lines, params);
+
+        // 检查配置
+        bool has_x = false, has_y = false, has_z = false;
+        for(auto val : params.col_map) {
+            if(val == "x") has_x = true;
+            if(val == "y") has_y = true;
+            if(val == "z") has_z = true;
+        }
+        if (params.col_map.isEmpty() || !has_x || !has_y || !has_z) return false;
+
+        // 3. 解析
+        for(int i=0; i<params.skip_lines; ++i) std::getline(file, line);
+
+        QMap<QString, std::vector<float>> scalars;
+        bool has_color = false;
+
+        while (std::getline(file, line))
+        {
+            if (line.empty()) continue;
+
+            QString qline = QString::fromStdString(line);
+            QStringList parts;
+            if (params.separator == ' ') parts = qline.simplified().split(' ', QString::SkipEmptyParts);
+            else parts = qline.split(params.separator);
+
+            PointXYZRGBN p;
+            uint8_t r=255, g=255, b=255;
+
+            for(auto it = params.col_map.begin(); it != params.col_map.end(); ++it) {
+                int idx = it.key();
+                if (idx >= parts.size()) continue;
+
+                float val = parts[idx].toFloat();
+                QString type = it.value();
+
+                if (type == "x") p.x = val;
+                else if (type == "y") p.y = val;
+                else if (type == "z") p.z = val;
+                else if (type == "r") { r = (uint8_t)val; has_color=true; }
+                else if (type == "g") { g = (uint8_t)val; has_color=true; }
+                else if (type == "b") { b = (uint8_t)val; has_color=true; }
+                else if (type != "ignore") {
+                    scalars[type].push_back(val);
+                }
+            }
+
+            std::uint32_t rgb_val = ((std::uint32_t)r << 16 | (std::uint32_t)g << 8 | (std::uint32_t)b);
+            p.rgb = *reinterpret_cast<float*>(&rgb_val);
+
+            cloud->push_back(p);
+        }
+
+        // 添加标量场
+        for(auto it = scalars.begin(); it != scalars.end(); ++it) {
+            if (it.value().size() == cloud->size()) {
+                cloud->addScalarField(it.key(), it.value());
+            }
+        }
+
+        cloud->setHasRGB(has_color);
+        cloud->is_dense = true; // 假设解析后没有NaN
+        return true;
+    }
+
+    bool FileIO::loadGeneralPCL(const QString &filename, Cloud::Ptr &cloud) {
+        int res = -1;
+        if (filename.endsWith(".obj", Qt::CaseInsensitive))
+            res = pcl::io::loadOBJFile(filename.toLocal8Bit().toStdString(), *cloud);
+        else if (filename.endsWith(".ifs", Qt::CaseInsensitive))
+            res = pcl::io::loadIFSFile(filename.toLocal8Bit().toStdString(), *cloud);
+
+        if (res == -1) return false;
+
+        // 默认假设有颜色
+        cloud->setHasRGB(true);
+        cloud->is_dense = cloud->is_dense;
+        return true;
     }
 }
