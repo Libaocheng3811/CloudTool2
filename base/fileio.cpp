@@ -642,6 +642,7 @@ namespace ct
     bool FileIO::loadPLY_PCD(const QString &filename, Cloud::Ptr &cloud) {
         pcl::PCLPointCloud2 blob;
         int res = -1;
+        // 先初步读取ply信息到blob中
         if (filename.endsWith(".ply", Qt::CaseInsensitive))
             res = pcl::io::loadPLYFile(filename.toLocal8Bit().toStdString(), blob);
         else
@@ -655,52 +656,83 @@ namespace ct
             fields_info.append({QString::fromStdString(f.name), getPCLFieldType(f.datatype)});
         }
 
-        // 请求 UI
+        // 请求 UI, mapping_result是用户选择的映射结果，Key是原字段名，Value是映射后的字段名
         QMap<QString, QString> mapping_result;
         emit requestFieldMapping(fields_info, mapping_result);
 
         if (mapping_result.isEmpty()) return false; // 用户取消
 
-        // 基础转换
+        // 基础转换，XYZRGBN信息会自动读取到cloud中
         pcl::fromPCLPointCloud2(blob, *cloud);
 
         // 提取自定义字段
         size_t num_points = blob.width * blob.height;
-        struct ExtractInfo { QString targetName; int offset; int datatype; };
-        std::vector<ExtractInfo> extract_list;
 
-        for (const auto &f: blob.fields) {
+        struct ExtractInfo {
+            QString targetType; // "Scalar", "ColorPacked", "NormalX"...
+            QString saveName;  // 存入Map的key(仅Scalar用)
+            int offset;
+            int datatype;
+        };
+        std::vector<ExtractInfo> tasks;
+
+        // 遍历bolb中提取的字段名，若存在映射表中的字段名，则获取其映射字段名
+        for (const auto& f : blob.fields){
             QString fname = QString::fromStdString(f.name);
-            if (mapping_result.contains(fname)) {
+            if (mapping_result.contains(fname)){
                 QString action = mapping_result[fname];
-                if (action == "Scalar Field" || action == "Intensity") {
+
+                if (action == "Scalar Field" || action == "Intensity"){
                     QString saveName = (action == "Intensity") ? "Intensity" : fname;
-                    extract_list.push_back({saveName, (int)f.offset, (int)f.datatype});
+                    tasks.push_back({"Scalar", saveName, (int)f.offset, f.datatype});
+                }
+                else if (action == "Color (Packed)"){
+                    tasks.push_back({"ColorPacked", "", (int)f.offset, f.datatype});
                 }
             }
         }
 
-        if (!extract_list.empty()) {
-            QMap<QString, std::vector<float>> scalar_data;
-            for (auto &ex: extract_list) scalar_data[ex.targetName].resize(num_points);
+        // 准备容器
+        QMap<QString, std::vector<float>> scalar_data;
+        for(auto& t : tasks){
+            if (t.targetType == "Scalar") scalar_data[t.saveName].resize(num_points);
+        }
 
-            for (size_t i = 0; i < num_points; ++i) {
-                const uint8_t *point_ptr = &blob.data[i * blob.point_step];
-                for (const auto &ex: extract_list) {
-                    scalar_data[ex.targetName][i] = getFieldValueAsFloat(point_ptr + ex.offset, ex.datatype);
+        //遍历提取
+        for (size_t i = 0; i < num_points; i++){
+            const uint8_t *point_ptr = &blob.data[i * blob.point_step];
+
+            for (const auto& t : tasks){
+                if (t.targetType == "Scalar"){
+                    scalar_data[t.saveName][i] = getFieldValueAsFloat(point_ptr + t.offset, t.datatype);
+                }
+                else if (t.targetType == "ColorPacked"){
+                    // 处理打包颜色
+                    uint32_t rgb_packed = 0;
+                    if (t.datatype == pcl::PCLPointField::FLOAT32){
+                        rgb_packed = *reinterpret_cast<const uint32_t*>(point_ptr + t.offset);
+                    }
+                    else if (t.datatype == pcl::PCLPointField::UINT32){
+                        rgb_packed = *reinterpret_cast<const uint32_t*>(point_ptr + t.offset);
+                    }
+                    cloud->points[i].rgb = *reinterpret_cast<float*>(&rgb_packed);
                 }
             }
+        }
 
-            for (auto &ex: extract_list) {
-                if (!cloud->hasScalarField(ex.targetName))
-                    cloud->addScalarField(ex.targetName, scalar_data[ex.targetName]);
+        //存入标量场
+        for (auto &t : tasks){
+            if (t.targetType == "Scalar"){
+                if (!cloud->hasScalarField(t.saveName)){
+                    cloud->addScalarField(t.saveName, scalar_data[t.saveName]);
+                }
             }
         }
 
         // 设置 hasRGB
         bool has_color = false;
-        for (const auto &f: blob.fields) {
-            if (f.name == "rgb" || f.name == "rgba") has_color = true;
+        for (const auto& val : mapping_result){
+            if (val.contains("Color") || val.contains("Red")) has_color = true;
         }
         cloud->setHasRGB(has_color);
 

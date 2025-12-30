@@ -48,14 +48,17 @@ public:
 
             QComboBox* combo = new QComboBox();
             combo->addItem("Ignore");
-            combo->addItem("Scalar Field"); // 导入为自定义标量场
 
             // 智能预选
             QString lowerName = fields[i].name.toLower();
             if (lowerName == "x" || lowerName == "y" || lowerName == "z") {
                 combo->addItem("Axis " + fields[i].name.toUpper());
+                combo->setCurrentIndex(1);
                 combo->setCurrentText("Axis " + fields[i].name.toUpper());
                 combo->setEnabled(false); // 坐标强制映射
+            } else if (lowerName == "rgba" || lowerName == "rgb"){
+                combo->addItem("Color(Packed)");
+                combo->setCurrentText("Color(Packed)");
             } else if (lowerName.contains("red") || lowerName == "r") {
                 combo->addItem("Red");
                 combo->setCurrentText("Red");
@@ -65,14 +68,29 @@ public:
             } else if (lowerName.contains("blue") || lowerName == "b") {
                 combo->addItem("Blue");
                 combo->setCurrentText("Blue");
-            } else if (lowerName.contains("intensity")) {
-                combo->addItem("Intensity"); // 特殊标量场
-                combo->setCurrentText("Intensity");
+            } else if (lowerName == "normal_x" || lowerName == "nx"){
+                combo->addItem("Normal X");
+                combo->setCurrentText("Normal X");
+            } else if (lowerName == "normal_y" || lowerName == "ny"){
+                combo->addItem("Normal Y");
+                combo->setCurrentText("Normal Y");
+            } else if (lowerName == "normal_z" || lowerName == "nz") {
+                combo->addItem("Normal Z");
+                combo->setCurrentText("Normal Z");
+            } else if (lowerName == "curvature"){
+                combo->addItem("Curvature");
+                combo->setCurrentText("Curvature");
             } else {
                 // 默认其他字段作为标量场导入
-                combo->setCurrentText("Scalar Field");
+                combo->addItem("Scalar Field");
+                if (lowerName == "intensity"){
+                    combo->addItem("Intensity");
+                    combo->setCurrentText("Intensity");
+                }
+                else{
+                    combo->setCurrentText("Scalar Field");
+                }
             }
-
             m_table->setCellWidget(i, 2, combo);
         }
 
