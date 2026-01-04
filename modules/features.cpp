@@ -2,7 +2,7 @@
 // Created by LBC on 2024/11/13.
 //
 
-#include "modules//features.h"
+#include "modules/features.h"
 
 #include <pcl/features/boundary.h>
 #include <pcl/features/impl/3dsc.hpp>

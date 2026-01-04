@@ -43,7 +43,7 @@
      <x>0</x>
      <y>0</y>
      <width>1300</width>
-     <height>29</height>
+     <height>23</height>
     </rect>
    </property>
    <property name="font">
@@ -173,11 +173,18 @@
     <addaction name="action_Help"/>
     <addaction name="actionAbout"/>
    </widget>
+   <widget class="QMenu" name="menuPlugins">
+    <property name="title">
+     <string>Plugins</string>
+    </property>
+    <addaction name="actionCSF_Filters"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
    <addaction name="menuView"/>
    <addaction name="menuTools"/>
    <addaction name="menuDevices"/>
+   <addaction name="menuPlugins"/>
    <addaction name="menuOptions"/>
    <addaction name="menuHelp"/>
   </widget>
@@ -250,7 +257,6 @@ QHeaderView {
         </property>
         <property name="font">
          <font>
-          <weight>75</weight>
           <bold>true</bold>
          </font>
         </property>
@@ -423,9 +429,6 @@ QScrollBar::sub-line:horizontal {
        <item row="0" column="0">
         <property name="text">
          <string>Id</string>
-        </property>
-        <property name="textAlignment">
-         <set>AlignLeading|AlignVCenter</set>
         </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
@@ -1073,6 +1076,11 @@ QScrollBar::sub-line:horizontal {
    </property>
    <property name="text">
     <string> Help</string>
+   </property>
+  </action>
+  <action name="actionCSF_Filters">
+   <property name="text">
+    <string>CSF Filters</string>
    </property>
   </action>
  </widget>

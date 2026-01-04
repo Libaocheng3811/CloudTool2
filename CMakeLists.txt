@@ -124,9 +124,7 @@ find_package(OpenMP REQUIRED)
 # 2. 配置编译选项：仅编译静态库，不编译工具
 set(LASZIP_BUILD_STATIC ON CACHE BOOL "Build static laszip" FORCE)
 set(LASLIB_BUILD_STATIC ON CACHE BOOL "Build static laslib" FORCE)
-set(BUILD_TOOLS OFF CACHE BOOL "Build tools" FORCE) 
-
-add_subdirectory(3rdparty/LASTools)
+set(BUILD_TOOLS OFF CACHE BOOL "Build tools" FORCE)
 
 # camera sdk
 # 1. Azure Kinect
@@ -159,6 +157,8 @@ set(CMAKE_INSTALL_PREFIX ${PROJECT_SOURCE_DIR}/install)
 add_definitions(-DROOT_PATH="${PROJECT_SOURCE_DIR}")
 add_definitions(-DDATA_PATH="${PROJECT_SOURCE_DIR}/data/")
 
+add_subdirectory(3rdparty/LASTools)
+add_subdirectory(3rdparty/CSF)
 add_subdirectory(base)
 add_subdirectory(cloudtool)
 add_subdirectory(modules)

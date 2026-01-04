@@ -40,13 +40,8 @@ Filters::Filters(QWidget *parent) :
     connect(ui->btn_reset, &QPushButton::clicked, this, &Filters::reset);
 
     m_filters = new ct::Filters;
-    // moveToThread: 这是 QObject 类的一个成员函数，用于将一个对象移动到指定的线程中。
-    // 这意味着该对象的所有槽函数（slot）将在指定的线程中执行，而不是在主线程中执行。
-    // 这样的目的是将过滤器处理逻辑放到一个独立的线程中执行，避免阻塞主线程（通常是UI线程）
     m_filters->moveToThread(&m_thread);
 
-    // 当一个线程执行完任务并终止时，会自动发射 finished 信号。
-    // deleteLater 是 QObject 类提供的一个成员函数，作用是将对象的删除操作推迟到事件循环的合适时机，避免在对象销毁时访问不当导致的潜在问题。
     connect(&m_thread, &QThread::finished, m_filters, &QObject::deleteLater);
     connect(this, &Filters::PassThrough, m_filters, &ct::Filters::PassThrough);
     connect(this, &Filters::VoxelGrid, m_filters, &ct::Filters::VoxelGrid);
