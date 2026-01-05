@@ -70,58 +70,86 @@ namespace ct
      * @brief 创建弹出窗口
      * @param parent 主窗口
      * @param label 窗口标签
-     * @param central_pos 中心部件的相对位置
-     * @param move_signal 窗口移动信号 void posChanged(const QPoint &pos)
+     * @param cloudview, cloudtree, console 注入的组件
+     * @param isToolWidget 是否为工具浮窗（无边框、跟随 CloudView 移动），默认为 true
+     * @param isModal 是否为模态窗口（阻塞），默认为 false
      */
     template <class T>
     void createDialog(QMainWindow* parent, const QString& label, CloudView* cloudview = nullptr,
-                      CloudTree* cloudtree = nullptr, Console* console = nullptr)
+                      CloudTree* cloudtree = nullptr, Console* console = nullptr,
+                      bool isToolWidget = true, bool isModal = false)
     {
         if (parent == nullptr) return;
+
         if (registed_dialogs.find(label) == registed_dialogs.end()) // register dock
             registed_dialogs[label] = nullptr;
+
         if (registed_dialogs.find(label)->second == nullptr) // create new dialog
         {
-            for (auto& dialog : registed_dialogs)
-                if (dialog.first != label && dialog.second != nullptr) return;
-            registed_dialogs[label] = new T(parent);
-            if (cloudview)
-                registed_dialogs[label]->setCloudView(cloudview);
-            if (cloudtree)
-                registed_dialogs[label]->setCloudTree(cloudtree);
-            if (console)
-                registed_dialogs[label]->setConsole(console);
-            registed_dialogs[label]->setAttribute(Qt::WA_DeleteOnClose);
-            registed_dialogs[label]->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
-            registed_dialogs[label]->init();
-            QObject::connect(registed_dialogs[label], &QDialog::destroyed, [=]
-                            { registed_dialogs[label] = nullptr; });
-            registed_dialogs[label]->show();
+            // 如果是工具浮窗，保持互斥逻辑（关闭其他已打开的工具浮窗）
+            if (isToolWidget){
+                for (auto& dialog : registed_dialogs){
+                    if (dialog.first != label && dialog.second != nullptr) return;
+                }
+            }
 
-            QPoint pos = cloudview->mapToGlobal(QPoint(0, 0));
-            registed_dialogs[label]->move(pos.x() + cloudview->width() - registed_dialogs[label]->width() - 9, pos.y() + 9);
-            QObject::connect(cloudview, &CloudView::posChanged, [=](const QPoint& pos)
-            {
-                if (registed_dialogs[label] != nullptr)
+            registed_dialogs[label] = new T(parent);
+            auto dlg = registed_dialogs[label];
+
+            if (cloudview)
+                dlg->setCloudView(cloudview);
+            if (cloudtree)
+                dlg->setCloudTree(cloudtree);
+            if (console)
+                dlg->setConsole(console);
+            dlg->setAttribute(Qt::WA_DeleteOnClose);
+
+            if (isToolWidget){
+                // 工具浮窗模式
+                dlg->setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
+                QPoint pos = cloudview->mapToGlobal(QPoint(0, 0));
+                dlg->move(pos.x() + cloudview->width() - dlg->width() - 9, pos.y() + 9);
+
+                // 跟随移动
+                QObject::connect(cloudview, &CloudView::posChanged, [=](const QPoint& pos)
                 {
-                    int ax = pos.x() + cloudview->width() - registed_dialogs[label]->width() - 9;
-                    int ay = pos.y() + 9;
-                    registed_dialogs[label]->move(ax, ay);
-                }
-            });
-            QObject::connect(registed_dialogs[label], &CustomDialog::sizeChanged, [=](const QSize& size)
-            {
-                if (registed_dialogs[label] != nullptr)
+                    if (registed_dialogs[label] != nullptr) {
+                        int ax = pos.x() + cloudview->width() - registed_dialogs[label]->width() - 9;
+                        int ay = pos.y() + 9;
+                        registed_dialogs[label]->move(ax, ay);
+                    }
+                });
+
+                QObject::connect(dlg, &CustomDialog::sizeChanged, [=](const QSize& size)
                 {
-                    QPoint pos = cloudview->mapToGlobal(QPoint(0, 0));
-                    int ax = pos.x() + cloudview->width() - size.width() - 9;
-                    int ay = pos.y() + 9;
-                    registed_dialogs[label]->move(ax, ay);
-                }
-            });
+                    if (registed_dialogs[label] != nullptr) {
+                        QPoint pos = cloudview->mapToGlobal(QPoint(0, 0));
+                        int ax = pos.x() + cloudview->width() - size.width() - 9;
+                        int ay = pos.y() + 9;
+                        registed_dialogs[label]->move(ax, ay);
+                    }
+                });
+            }
+            else{
+                // 普通/模态对话框模式
+                dlg->setWindowFlags(Qt::Dialog | Qt::WindowCloseButtonHint);
+                dlg->setWindowTitle(label);
+            }
+
+            dlg->init();
+
+            QObject::connect(dlg, &QDialog::destroyed, [=] { registed_dialogs[label] = nullptr;});
+
+            if (isModal){
+                dlg->exec();
+            }
+            else{
+                dlg->show();
+            }
         }
-        else // update dialog
+        else{ // update dialog (已存在则关闭，通常用于 toggle)
             registed_dialogs[label]->close();
+        }
     }
 
     /**

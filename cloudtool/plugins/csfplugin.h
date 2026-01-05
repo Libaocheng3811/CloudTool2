@@ -5,34 +5,42 @@
 #ifndef CLOUDTOOL2_CSFPLUGIN_H
 #define CLOUDTOOL2_CSFPLUGIN_H
 
-#include <QObject>
+#include <QDialog>
 #include <QThread>
 
+#include "base/customdialog.h"
 #include "modules/csffilter.h"
-#include "base/cloudtree.h"
-#include "base/cloudview.h"
 
-class CSFPlugin : public QObject {
-    Q_OBJECT
+
+QT_BEGIN_NAMESPACE
+namespace Ui { class CSFPlugin; }
+QT_END_NAMESPACE
+
+class CSFPlugin : public ct::CustomDialog {
+Q_OBJECT
+
 public:
-    CSFPlugin(ct::CloudTree* tree, ct::CloudView* view, QObject* parent = nullptr);
-    ~CSFPlugin();
+    explicit CSFPlugin(QWidget *parent = nullptr);
 
-    void exec();
+    ~CSFPlugin() override;
+
+    void init() override;
 
 private slots:
-    void onFilterDone(const ct::Cloud::Ptr &ground_cloud, const ct::Cloud::Ptr &off_ground_cloud, float time);
+    void onApply();
+    void onCancel();
+    void onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud::Ptr& off_ground_cloud, float time);
 
 signals:
-    void startFilter(bool bSloop, float dt, double thresh, double res, int rigid, int iter);
+    void requestCSF(bool bSloopSmooth, float time_step, double class_threshold,
+                    double cloth_resolution, int rigidness, int iterations);
 
 private:
-    ct::CloudTree* m_tree;
-    ct::CloudView* m_view;
+    Ui::CSFPlugin *ui;
     QThread m_thread;
     ct::CSFFilter* m_filter;
-
-    ct::Cloud::Ptr m_source_cloud; // 原始点云
+    ct::Cloud::Ptr m_cloud;
 };
+
 
 #endif //CLOUDTOOL2_CSFPLUGIN_H

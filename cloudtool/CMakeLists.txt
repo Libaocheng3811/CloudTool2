@@ -10,8 +10,6 @@ set(Srcs
         tool/rangeimage.cpp
         tool/registration.cpp
         tool/descriptor.cpp
-        plugins/csf.cpp
-        plugins/csfdialog.cpp
         plugins/csfplugin.cpp
         )
 
@@ -26,8 +24,6 @@ set(Hdrs
         tool/rangeimage.h
         tool/registration.h
         tool/descriptor.h
-        plugins/csf.h
-        plugins/csfdialog.h
         plugins/csfplugin.h
         )
 

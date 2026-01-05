@@ -10,8 +10,8 @@
 
 #include <QObject>
 
-#include "CSF.h"
-#include "point_cloud.h"
+#include "3rdparty/CSF/src/CSF.h"
+#include "3rdparty/CSF/src/point_cloud.h"
 
 namespace ct{
     class CT_EXPORT CSFFilter : public QObject{

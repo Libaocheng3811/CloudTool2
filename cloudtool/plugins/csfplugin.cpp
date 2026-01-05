@@ -2,19 +2,31 @@
 // Created by LBC on 2026/1/4.
 //
 
+// You may need to build the project (run Qt uic code generator) to get "ui_csfplugin.h" resolved
+
 #include "csfplugin.h"
-#include "csfdialog.h"
+#include "ui_csfplugin.h"
 
+Q_DECLARE_METATYPE(ct::Cloud::Ptr)
 
-CSFPlugin::CSFPlugin(ct::CloudTree *tree, ct::CloudView *view, QObject *parent)
-    : QObject(parent), m_tree(tree), m_view(view){
-    // 初始化后台线程
-    m_filter = new ct::CSFFilter;
+CSFPlugin::CSFPlugin(QWidget *parent) :
+        ct::CustomDialog(parent), ui(new Ui::CSFPlugin), m_thread(this) {
+    ui->setupUi(this);
+
+    qRegisterMetaType<ct::Cloud::Ptr>("Cloud::Ptr");
+    qRegisterMetaType<ct::Cloud::Ptr>("ct::Cloud::Ptr");
+
+    m_filter = new ct::CSFFilter();
     m_filter->moveToThread(&m_thread);
-
     connect(&m_thread, &QThread::finished, m_filter, &QObject::deleteLater);
-    connect(this, &CSFPlugin::startFilter, m_filter, &ct::CSFFilter::applyCSF);
+
+    // 信号连接
+    connect(this, &CSFPlugin::requestCSF, m_filter, &ct::CSFFilter::applyCSF);
     connect(m_filter, &ct::CSFFilter::filterResult, this, &CSFPlugin::onFilterDone);
+
+    // ui按钮
+    connect(ui->btnOk, &QPushButton::clicked, this, &CSFPlugin::onApply);
+    connect(ui->btnCancel, &QPushButton::clicked, this, &CSFPlugin::onCancel);
 
     m_thread.start();
 }
@@ -22,45 +34,59 @@ CSFPlugin::CSFPlugin(ct::CloudTree *tree, ct::CloudView *view, QObject *parent)
 CSFPlugin::~CSFPlugin() {
     m_thread.quit();
     m_thread.wait();
+    delete ui;
 }
 
-void CSFPlugin::exec() {
-    auto selection = m_tree->getSelectedClouds();
-    if (selection.empty()) return;
+void CSFPlugin::init(){
+    auto selection = m_cloudtree->getSelectedClouds();
+    if (selection.empty()){
+        printW("Please select at least one cloud.");
+        return;
+    }
+    m_cloud = selection.front();
+    m_filter->setInputCloud(m_cloud);
+}
 
-    m_source_cloud = selection.front();
-
-    // 阻塞式窗口
-    CSFDialog dlg;
-    if (dlg.exec() != QDialog::Accepted) return;
+void CSFPlugin::onApply() {
+    if (!m_cloud) return;
 
     //获取参数
-    CSFParams p = dlg.getParams();
+    bool smooth = ui->m_chkSlopeProcessing->isChecked();
+    double res = ui->m_dsResolution->value();
+    double thresh = ui->m_dsThreshold->value();
+    int iter = ui->m_spIterations->value();
 
-    m_filter->setInputCloud(m_source_cloud);
-    m_tree->showProgressBar();
+    int rigidness = 2; // 默认为relief
+    if (ui->m_rbFlat->isChecked()) rigidness = 3;
+    else if (ui->m_rbRelief->isChecked()) rigidness = 2;
+    else rigidness = 1;
 
-    emit startFilter(p.bsloopSmooth, p.time_step, p.class_threshold,
-                     p.cloth_resolution, p.rigidness, p.iterations);
+    m_cloudtree->showProgressBar();
+
+    emit requestCSF(smooth, 0.65f, thresh, res, rigidness, iter);
 }
 
-void CSFPlugin::onFilterDone(const ct::Cloud::Ptr &ground_cloud, const ct::Cloud::Ptr &off_ground_cloud,
-                             float time)
-{
-    m_tree->closeProgressBar();
+void CSFPlugin::onCancel() {
+    this->close();
+}
 
-    ground_cloud->setId(m_source_cloud->id() + "_ground");
-    off_ground_cloud->setId(m_source_cloud->id() + "_off_ground");
+void CSFPlugin::onFilterDone(const ct::Cloud::Ptr &ground_cloud, const ct::Cloud::Ptr &off_ground_cloud, float time) {
+    m_cloudtree->closeProgressBar();
+    printI(QString("CSF Finished in %1 s").arg(time));
 
-    //设置颜色
-    // ct::RGB{0,255,0}创建临时对象
-    ground_cloud->setCloudColor(ct::RGB{0,255,0}); // 绿地
-    off_ground_cloud->setCloudColor(ct::RGB{255,0,0}); // 红房
+    ground_cloud->setId(m_cloud->id() + "_ground");
+    off_ground_cloud->setId(m_cloud->id() + "_off_ground");
 
-    m_tree->appendCloud(m_source_cloud, ground_cloud);
-    m_tree->appendCloud(m_source_cloud, off_ground_cloud);
+    if (!m_cloud->hasRGB()){
+        // 如果没有RGB信息，手动赋色
+        ground_cloud->setCloudColor(ct::RGB{0, 255, 0}); // Green
+        off_ground_cloud->setCloudColor(ct::RGB{255, 0, 0}); // Red
+    }
 
-    // 隐藏原始点云
-    m_tree->setCloudChecked(m_source_cloud, false);
+    m_cloudtree->setCloudChecked(m_cloud, false);
 
+    m_cloudtree->appendCloud(m_cloud, ground_cloud);
+    m_cloudtree->appendCloud(m_cloud, off_ground_cloud);
+
+    this->accept();
 }

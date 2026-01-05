@@ -7,6 +7,32 @@
 #include <pcl/filters/extract_indices.h>
 
 namespace ct{
+
+    void extractScalarField(const Cloud::Ptr& source, Cloud::Ptr& target, const std::vector<int>& indices){
+        target->setHasRGB(source->hasRGB());
+
+        // 遍历源点云自定义字段
+        QStringList fields = source->getScalarFieldNames();
+        for (const QString& name : fields){
+            const std::vector<float>* src_data = source->getScalarField(name);
+            if (!src_data) continue;
+
+            std::vector<float> tgt_data;
+            tgt_data.reserve(indices.size());
+
+            for (int idx : indices){
+                if (idx >= 0 && idx < src_data->size()){
+                    tgt_data.push_back((*src_data)[idx]);
+                }
+                else{
+                    tgt_data.push_back(0.0f); //异常填充
+                }
+            }
+            target->addScalarField(name, tgt_data);
+        }
+        target->backupColors();
+    }
+
     void CSFFilter::applyCSF(bool bSloopSmooth, float time_step, double class_threshold, double cloth_resolution,
                             int rigidness, int iterations) {
         if (!cloud_ || cloud_->empty()) return;
@@ -46,14 +72,16 @@ namespace ct{
         pcl::PointIndices::Ptr off_ground_indices(new pcl::PointIndices);
         off_ground_indices->indices = offGroundIndexes;
 
+        pcl::ExtractIndices<PointXYZRGBN> extract;
+        extract.setInputCloud(cloud_);
+
         // 提取地面点
         Cloud::Ptr ground_cloud(new Cloud);
         ground_cloud->setId(cloud_->id() + "_ground");
-        pcl::ExtractIndices<PointXYZRGBN> extract;
-        extract.setInputCloud(cloud_);
         extract.setIndices(ground_indices);
         extract.setNegative(false);
         extract.filter(*ground_cloud);
+        extractScalarField(cloud_, ground_cloud, groundIndexes);
 
         // 提取非地面点
         Cloud::Ptr off_ground_cloud(new Cloud);
@@ -61,6 +89,7 @@ namespace ct{
         extract.setIndices(off_ground_indices);
         extract.setNegative(false);
         extract.filter(*off_ground_cloud);
+        extractScalarField(cloud_, off_ground_cloud, offGroundIndexes);
 
         emit filterResult(ground_cloud, off_ground_cloud, time.toc());
     }

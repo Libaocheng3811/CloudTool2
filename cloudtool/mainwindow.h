@@ -47,6 +47,12 @@ public:
         ct::createDialog<T>(this, label, ui->cloudview, ui->cloudtree, ui->console);
     }
 
+    template <class T>
+    void createModalDialog(const QString& label)
+    {
+        ct::createDialog<T>(this, label, ui->cloudview, ui->cloudtree, ui->console, false, true);
+    }
+
 protected:
     void moveEvent(QMoveEvent* event);
 

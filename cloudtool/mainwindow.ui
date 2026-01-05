@@ -43,7 +43,7 @@
      <x>0</x>
      <y>0</y>
      <width>1300</width>
-     <height>23</height>
+     <height>29</height>
     </rect>
    </property>
    <property name="font">
@@ -177,7 +177,7 @@
     <property name="title">
      <string>Plugins</string>
     </property>
-    <addaction name="actionCSF_Filters"/>
+    <addaction name="actionCSF"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -257,6 +257,7 @@ QHeaderView {
         </property>
         <property name="font">
          <font>
+          <weight>75</weight>
           <bold>true</bold>
          </font>
         </property>
@@ -1078,7 +1079,7 @@ QScrollBar::sub-line:horizontal {
     <string> Help</string>
    </property>
   </action>
-  <action name="actionCSF_Filters">
+  <action name="actionCSF">
    <property name="text">
     <string>CSF Filters</string>
    </property>

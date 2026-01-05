@@ -13,6 +13,8 @@
 #include "tool/keypoints.h"
 #include "tool/registration.h"
 
+#include "plugins/csfplugin.h"
+
 #include <QDesktopWidget>
 #include <QDebug>
 #include <QDir>
@@ -91,6 +93,11 @@ MainWindow::MainWindow(QWidget *parent) :
       if (ct::getDock<Registration>("Registration"))
           ct::getDock<Registration>("Registration")->setDescriptor(ct::getDock<Descriptor>("Descriptor"));
     } );
+
+    // plugins
+    connect(ui->actionCSF, &QAction::triggered, [=] {
+        this->createModalDialog<CSFPlugin>("Cloth Simulation Filter");
+    });
 
 }
 
