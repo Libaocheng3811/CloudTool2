@@ -17,6 +17,7 @@
 #include <QMimeData>
 #include <QUrl>
 #include <QComboBox>
+#include <QApplication>
 
 namespace ct
 {
@@ -79,14 +80,12 @@ namespace ct
         QString filter = "All Supported(*.ply *.pcd *.las *.laz *.obj *.ifs *.txt *.asc *.xyz);;All Files(*.*)";
         // 打开文件对话框,可以选择多个文件
         QStringList filePathList = QFileDialog::getOpenFileNames(this, tr("open cloud files"), m_path, filter);
-        if (filePathList.isEmpty())
-        {
-            return;
-        }
-        if (m_progress_bar != nullptr)
-            m_progress_bar->show();
+        if (filePathList.isEmpty()) return;
 
-        // 这种循环方式特别适合于遍历容器中的所有元素，如数组、向量、列表、字符串等
+        showProgress("Loading Point Cloud...");
+
+        bindWorker(m_fileio);
+
         for (auto& i : filePathList)
             emit loadPointCloud(i);
     }
@@ -218,8 +217,8 @@ namespace ct
         Cloud::Ptr cloud = getCloud(index);
         QString filter = "PLY(*.ply);;PCD(*.pcd);;LAS(*.las);;TXT(*.txt)";
         QString filepath = QFileDialog::getSaveFileName(this, tr("Save cloud file"), cloud->id(), filter);
-        if (filepath.isEmpty())
-            return;
+        if (filepath.isEmpty()) return;
+
         QMessageBox message_box(QMessageBox::NoIcon, "Saved format", tr("Save in binary or ascii format?"),
                                 QMessageBox::NoButton, this);
         message_box.addButton(tr("Ascii"), QMessageBox::ActionRole);
@@ -231,8 +230,10 @@ namespace ct
             printW("Save cloud canceled.");
             return;
         }
-        if (m_progress_bar != nullptr)
-            m_progress_bar->show();
+
+        showProgress("Saving Point Cloud...");
+        bindWorker(m_fileio);
+
         emit savePointCloud(cloud, filepath, k);
     }
 
@@ -332,8 +333,8 @@ namespace ct
             m_path = cloud->info().path();
             appendCloud(cloud);
         }
-        if (m_progress_bar != nullptr)
-            m_progress_bar->close();
+
+        closeProgress();
     }
 
     void CloudTree::saveCloudResult(bool success, const QString &path, float time)
@@ -345,8 +346,8 @@ namespace ct
             m_path = path;
             printI(QString("Save the file [path:%1] done, take time %2 ms.").arg(path).arg(time));
         }
-        if (m_progress_bar != nullptr)
-            m_progress_bar->close();
+
+        closeProgress();
     }
 
     void CloudTree::itemClickedEvent(QTreeWidgetItem *item, int)
@@ -516,6 +517,42 @@ namespace ct
         m_table->setItem(1, 1, new QTableWidgetItem(type));
         m_table->setItem(2, 1, new QTableWidgetItem(size_str));
         m_table->setItem(3, 1, new QTableWidgetItem(resolution_str));
+    }
+
+    void CloudTree::showProgress(const QString &message) {
+        if (!m_processing_dialog){
+            // 寻找最顶层的窗口作为父窗口，确保模态对话框居中显示
+            QWidget* topLevel = this->window();
+            m_processing_dialog = new ProcessingDialog(topLevel);
+            m_processing_dialog->setWindowModality(Qt::WindowModal);
+        }
+
+        m_processing_dialog->reset();
+        m_processing_dialog->setMessage(message);
+        m_processing_dialog->show();
+        QApplication::processEvents(); // 强制刷新UI
+    }
+
+    void CloudTree::closeProgress() {
+        if (m_processing_dialog){
+            m_processing_dialog->close();
+            delete m_processing_dialog;
+            m_processing_dialog = nullptr;
+        }
+    }
+
+    void CloudTree::bindWorker(QObject *worker) {
+        if (!m_processing_dialog || !worker) return;
+
+        // Worker -> Dialog (进度更新)
+        bool ok = connect(worker, SIGNAL(progress(int)), m_processing_dialog, SLOT(setProgress(int)), Qt::UniqueConnection);
+        std::cout << "connect progress: " << ok << std::endl;
+
+        // Dialog -> Worker (取消请求),信号和槽连接方式为直接连接，确保能够快速响应取消请求
+        ok = connect(m_processing_dialog, SIGNAL(cancelRequested()), worker, SLOT(cancel()), Qt::DirectConnection);
+        std::cout << "connect cancelRequested: " << ok << std::endl;
+
+        connect(m_processing_dialog, &ProcessingDialog::cancelRequested, this, &CloudTree::closeProgress);
     }
 
     void CloudTree::onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result)

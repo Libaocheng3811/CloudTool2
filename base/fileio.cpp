@@ -588,6 +588,9 @@ namespace ct
     }
 
     bool FileIO::loadLAS(const QString &filename, Cloud::Ptr &cloud) {
+        m_is_canceled = false;
+        emit progress(0);
+
         LASreadOpener lasreadopener;
         lasreadopener.set_file_name(filename.toLocal8Bit().constData());
         LASreader* lasreader = lasreadopener.open();
@@ -606,8 +609,24 @@ namespace ct
             intensities.reserve(lasreader->npoints);
         }
 
+        long long total_points = lasreader->npoints;
+        long long current_point = 0;
+
         while (lasreader->read_point())
         {
+            // 取消检查
+            if (m_is_canceled){
+                lasreader->close();
+                delete lasreader;
+                return false;
+            }
+
+            //进度更新,每读取2%更新一次
+            current_point++;
+            if (total_points > 0 && current_point % (total_points / 50 + 1) == 0){
+                emit progress((int)(current_point * 100 / total_points));
+            }
+
             PointXYZRGBN p;
             p.x = lasreader->point.get_x();
             p.y = lasreader->point.get_y();
@@ -636,10 +655,19 @@ namespace ct
 
         // LAS 通常是 dense 的，除非有点在无穷远，这里设为 true
         cloud->is_dense = true;
+
+        emit progress(100);
+
         return true;
     }
 
     bool FileIO::loadPLY_PCD(const QString &filename, Cloud::Ptr &cloud) {
+        m_is_canceled = false;
+        emit progress(0);
+
+        // 注意：pcl::io::loadPLYFile 这是一个阻塞函数，PCL内部不支持进度回调。
+        // 所以加载 Blob 的阶段，进度条只能卡在 0 或者给一个假进度 (或者设为繁忙模式)。
+        // 只有到了后面的“手动提取”阶段，我们才能控制进度。
         pcl::PCLPointCloud2 blob;
         int res = -1;
         // 先初步读取ply信息到blob中
@@ -649,6 +677,8 @@ namespace ct
             res = pcl::io::loadPCDFile(filename.toLocal8Bit().toStdString(), blob);
 
         if (res == -1) return false;
+
+        emit progress(20);
 
         // 准备字段信息
         QList<ct::FieldInfo> fields_info;
@@ -664,6 +694,8 @@ namespace ct
 
         // 基础转换，XYZRGBN信息会自动读取到cloud中
         pcl::fromPCLPointCloud2(blob, *cloud);
+
+        emit progress(40);
 
         // 提取自定义字段
         size_t num_points = blob.width * blob.height;
@@ -700,6 +732,13 @@ namespace ct
 
         //遍历提取
         for (size_t i = 0; i < num_points; i++){
+            if (m_is_canceled) return false;
+
+            if (num_points > 0 && i % (num_points / 50 + 1) == 0){
+                int p = 40 + (int)(i * 60 / num_points);
+                emit progress(p);
+            }
+
             const uint8_t *point_ptr = &blob.data[i * blob.point_step];
 
             for (const auto& t : tasks){
@@ -742,10 +781,19 @@ namespace ct
     }
 
     bool FileIO::loadTXT(const QString &filename, Cloud::Ptr &cloud) {
+        m_is_canceled = false;
+        emit progress(0);
+
         std::ifstream file(filename.toLocal8Bit().constData());
         if (!file.is_open()) return false;
 
-        // 1. 预读
+        //获取文件大小
+        file.seekg(0, std::ios::end);
+        long long file_size = file.tellg();
+        file.seekg(0, std::ios::beg);
+        long long read_bytes = 0;
+
+        // 预读
         QStringList preview_lines;
         std::string line;
         int preview_count = 0;
@@ -759,7 +807,7 @@ namespace ct
         file.clear();
         file.seekg(0);
 
-        // 2. 交互配置
+        // 交互配置
         ct::TxtImportParams params;
         emit requestTxtImportSetup(preview_lines, params);
 
@@ -772,7 +820,7 @@ namespace ct
         }
         if (params.col_map.isEmpty() || !has_x || !has_y || !has_z) return false;
 
-        // 3. 解析
+        // 解析
         for(int i=0; i<params.skip_lines; ++i) std::getline(file, line);
 
         QMap<QString, std::vector<float>> scalars;
@@ -780,6 +828,16 @@ namespace ct
 
         while (std::getline(file, line))
         {
+            // 取消检测
+            if (m_is_canceled) return false;
+
+            //进度更新
+            read_bytes += line.size() + 1;
+            // 每1MB更新一次
+            if (read_bytes % 102400 == 0){
+                emit progress((int)(read_bytes * 100 / file_size));
+            }
+
             if (line.empty()) continue;
 
             QString qline = QString::fromStdString(line);

@@ -6,6 +6,8 @@
 #include "base/txtimportdialog.h"
 #include "base/txtexportdialog.h"
 
+#include <atomic>
+
 namespace ct
 {
     struct FieldInfo{
@@ -52,6 +54,11 @@ namespace ct
           */
          void requestTxtExportSetup(const QStringList& available_fields, ct::TxtExportParams& params);
 
+         /**
+          * @brief 进度信号
+          */
+         void progress(int percent);
+
     public slots:
         /**
          * @brief 加载点云文件
@@ -66,6 +73,11 @@ namespace ct
          */
         void savePointCloud(const Cloud::Ptr &cloud, const QString &filename, bool isBinary);
 
+        /**
+         * @brief 取消当前操作
+         */
+        void cancel() { m_is_canceled = true;};
+
     private:
         bool loadLAS(const QString &filename, Cloud::Ptr &cloud);
         bool loadPLY_PCD(const QString &filename, Cloud::Ptr &cloud); // 支持自定义字段
@@ -75,6 +87,9 @@ namespace ct
         bool saveLAS(const Cloud::Ptr &cloud, const QString &filename);
         bool saveTXT(const Cloud::Ptr &cloud, const QString &filename);
         bool savePCL(const Cloud::Ptr &cloud, const QString &filename, bool isBinary);
+
+    private:
+        std::atomic<bool> m_is_canceled{false};
     };
 }
 

@@ -261,7 +261,10 @@ void Registration::preview()
     }
     m_reg->setInputSource(m_source_cloud);
     m_reg->setInputTarget(m_target_cloud);
-    m_cloudtree->showProgressBar();
+
+    m_cloudtree->showProgress("Processing Registration...");
+    m_cloudtree->bindWorker(m_reg);
+
     switch (ui->cbox_type->currentIndex())
     {
         case REG_TYPE_CorrespondenceEstimation:
@@ -273,7 +276,7 @@ void Registration::preview()
                     if (ui->cbox_ce_type->currentIndex() > 0 && m_descriptor == nullptr)
                     {
                         printW("Please estimate target and source cloud descriptor first!");
-                        m_cloudtree->closeProgressBar();
+                        m_cloudtree->closeProgress();
                         return;
                     }
                     switch (ui->cbox_ce_type->currentIndex())
@@ -290,7 +293,7 @@ void Registration::preview()
                             else
                             {
                                 printW("Please estimate target and source cloud PFHFeature first!");
-                                m_cloudtree->closeProgressBar();
+                                m_cloudtree->closeProgress();
                                 return;
                             }
 
@@ -303,7 +306,7 @@ void Registration::preview()
                             else
                             {
                                 printW("Please estimate target and source cloud FPFHFeature first!");
-                                m_cloudtree->closeProgressBar();
+                                m_cloudtree->closeProgress();
                                 return;
                             }
                             break;
@@ -315,7 +318,7 @@ void Registration::preview()
                     if (!m_source_cloud->hasNormals() || !m_target_cloud->hasNormals())
                     {
                         printW("Please estimate target and source cloud normals first!");
-                        m_cloudtree->closeProgressBar();
+                        m_cloudtree->closeProgress();
                         return;
                     }
                     emit CorrespondenceEstimationBackProjection(ui->spin_k1->value());
@@ -325,7 +328,7 @@ void Registration::preview()
                     if (!m_target_cloud->hasNormals())
                     {
                         printW("Please estimate target cloud normals first!");
-                        m_cloudtree->closeProgressBar();
+                        m_cloudtree->closeProgress();
                         return;
                     }
                     emit CorrespondenceEstimationNormalShooting(ui->spin_k2_2->value());
@@ -337,7 +340,7 @@ void Registration::preview()
             if (m_corr == nullptr)
             {
                 printW("please estimate target and source cloud correspondence first!");
-                m_cloudtree->closeProgressBar();
+                m_cloudtree->closeProgress();
                 return;
             }
             m_reg->setInputCorrespondences(m_corr);
@@ -394,7 +397,7 @@ void Registration::preview()
                     if ((m_target_cloud->size() != 3) || (m_source_cloud->size() != 3))
                     {
                         printW(QString("Number of points in source (%1) and target (%2) must be 3!").arg(m_source_cloud->size()).arg(m_target_cloud->size()));
-                        m_cloudtree->closeProgressBar();
+                        m_cloudtree->closeProgress();
                         return;
                     }
                     emit TransformationEstimation3Point();
@@ -457,7 +460,7 @@ void Registration::preview()
                     if (ui->cbox_feature2->currentIndex() > 0 && m_descriptor == nullptr)
                     {
                         printW("Please estimate target and source cloud descriptor first!");
-                        m_cloudtree->closeProgressBar();
+                        m_cloudtree->closeProgress();
                         return;
                     }
                     m_cloudview->showInfo("Registration: SampleConsensusInitialAlignment", 3);
@@ -465,7 +468,7 @@ void Registration::preview()
                     {
                         case REG_TYPE_PointCloud:
                             printW("Please estimate target and source cloud Feature first!");
-                            m_cloudtree->closeProgressBar();
+                            m_cloudtree->closeProgress();
                             return;
                         case REG_TYPE_PFHFeature:
                             m_cloudview->showInfo("Estimation Type: PFHFeature", 4);
@@ -478,7 +481,7 @@ void Registration::preview()
                             else
                             {
                                 printW("Please estimate target and source cloud PFHFeature first!");
-                                m_cloudtree->closeProgressBar();
+                                m_cloudtree->closeProgress();
                                 return;
                             }
 
@@ -494,7 +497,7 @@ void Registration::preview()
                             else
                             {
                                 printW("Please estimate target and source cloud FPFHFeature first!");
-                                m_cloudtree->closeProgressBar();
+                                m_cloudtree->closeProgress();
                                 return;
                             }
                             break;
@@ -505,7 +508,7 @@ void Registration::preview()
                     if (ui->cbox_feature2->currentIndex() > 0 && m_descriptor == nullptr)
                     {
                         printW("Please estimate target and source cloud descriptor first!");
-                        m_cloudtree->closeProgressBar();
+                        m_cloudtree->closeProgress();
                         return;
                     }
                     m_cloudview->showInfo("Registration: SampleConsensusPrerejective", 3);
@@ -513,7 +516,7 @@ void Registration::preview()
                     {
                         case REG_TYPE_PointCloud:
                             printW("Please estimate target and source cloud Feature first!");
-                            m_cloudtree->closeProgressBar();
+                            m_cloudtree->closeProgress();
                             return;
                         case REG_TYPE_PFHFeature:
                             m_cloudview->showInfo("Estimation Type: PFHFeature", 4);
@@ -527,7 +530,7 @@ void Registration::preview()
                             else
                             {
                                 printW("Please estimate target and source cloud PFHFeature first!");
-                                m_cloudtree->closeProgressBar();
+                                m_cloudtree->closeProgress();
                                 return;
                             }
 
@@ -544,7 +547,7 @@ void Registration::preview()
                             else
                             {
                                 printW("Please estimate target and source cloud FPFHFeature first!");
-                                m_cloudtree->closeProgressBar();
+                                m_cloudtree->closeProgress();
                                 return;
                             }
                             break;
@@ -642,7 +645,7 @@ void Registration::reset()
 void Registration::correspondenceEstimationResult(const ct::CorrespondencesPtr &corr, float time,
                                                   const ct::CorreEst::Ptr &ce)
 {
-    m_cloudtree->closeProgressBar();
+    m_cloudtree->closeProgress();
     printI(QString("Estimate target cloud[id:%1] and source cloud[id:%2] correspondences done, take time %3 ms.").arg(m_target_cloud->id()).arg(m_source_cloud->id()).arg(time));
     QString id = m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG;
     m_cloudview->addCorrespondences(m_source_cloud, m_target_cloud, corr, id);
@@ -653,7 +656,7 @@ void Registration::correspondenceEstimationResult(const ct::CorrespondencesPtr &
 void Registration::correspondenceRejectorResult(const ct::CorrespondencesPtr &corr, float time,
                                                 const ct::CorreRej::Ptr &cj)
 {
-    m_cloudtree->closeProgressBar();
+    m_cloudtree->closeProgress();
     printI(QString("Reject target cloud[id:%1] and source cloud[id:%2] correspondences done, take time %3 ms.").arg(m_target_cloud->id()).arg(m_source_cloud->id()).arg(time));
     QString id = m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG;
     m_cloudview->addCorrespondences(m_source_cloud, m_target_cloud, corr, id);
@@ -662,7 +665,7 @@ void Registration::correspondenceRejectorResult(const ct::CorrespondencesPtr &co
 
 void Registration::transformationEstimationResult(const Eigen::Matrix4f& matrix, float time, const ct::TransEst::Ptr& te)
 {
-    m_cloudtree->closeProgressBar();
+    m_cloudtree->closeProgress();
     printI(QString("Estimate target cloud[id:%1] and source cloud[id:%2] transformation done, take time %3 ms.").arg(m_target_cloud->id()).arg(m_source_cloud->id()).arg(time));
     ct::Cloud::Ptr cloud(new ct::Cloud);
     pcl::transformPointCloud(*m_source_cloud, *cloud, matrix);
@@ -676,7 +679,7 @@ void Registration::transformationEstimationResult(const Eigen::Matrix4f& matrix,
 void Registration::registrationResult(bool success, const ct::Cloud::Ptr& ail_cloud, double score,
                                       const Eigen::Matrix4f& matrix, float time)
 {
-    m_cloudtree->closeProgressBar();
+    m_cloudtree->closeProgress();
     if (!success)
     {
         printE(QString("Registrate target cloud[id:%1] and source cloud[id:%2] failed!").arg(m_target_cloud->id()).arg(m_source_cloud->id()));

@@ -22,6 +22,7 @@ set(LibHdrs
         fieldmappingdialog.h
         txtimportdialog.h
         txtexportdialog.h
+        processingdialog.h
         )
 
 find_package(VTK COMPONENTS

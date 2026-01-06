@@ -141,7 +141,9 @@ namespace ct
             QObject::connect(dlg, &QDialog::destroyed, [=] { registed_dialogs[label] = nullptr;});
 
             if (isModal){
-                dlg->exec();
+//                dlg->exec();
+                dlg->setWindowModality(Qt::ApplicationModal);
+                dlg->show();
             }
             else{
                 dlg->show();

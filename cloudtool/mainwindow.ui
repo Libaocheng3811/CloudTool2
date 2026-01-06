@@ -267,46 +267,6 @@ QHeaderView {
        </column>
       </widget>
      </item>
-     <item>
-      <widget class="QProgressBar" name="progress_bar">
-       <property name="maximumSize">
-        <size>
-         <width>16777215</width>
-         <height>10</height>
-        </size>
-       </property>
-       <property name="styleSheet">
-        <string notr="true">QProgressBar {
-    border: 2px solid #aaa;
-    border-radius: 4px;
-    background-color: #f0f0f0;
-    text-align: center;
-    height: 10px;  /* 可选：设定固定高度 */
-}
-
-QProgressBar::chunk {
-    border-radius: 4px;
-    background-color: qlineargradient(
-        x1: 0, y1: 0, x2: 1, y2: 0,
-        stop: 0 #4caf50,  /* 深绿色 */
-        stop: 1 #8bc34a   /* 浅绿色 */
-    );
-}</string>
-       </property>
-       <property name="maximum">
-        <number>0</number>
-       </property>
-       <property name="value">
-        <number>-1</number>
-       </property>
-       <property name="textVisible">
-        <bool>false</bool>
-       </property>
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-      </widget>
-     </item>
     </layout>
    </widget>
   </widget>

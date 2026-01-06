@@ -127,7 +127,6 @@ public slots:
 
     void registrationResult(bool success, const ct::Cloud::Ptr& ail_cloud, double score, const Eigen::Matrix4f& matrix, float time);
 
-
 private:
     Ui::Registration *ui;
     QThread m_thread;

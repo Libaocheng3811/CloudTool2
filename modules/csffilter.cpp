@@ -33,9 +33,11 @@ namespace ct{
         target->backupColors();
     }
 
-    void CSFFilter::applyCSF(bool bSloopSmooth, float time_step, double class_threshold, double cloth_resolution,
-                            int rigidness, int iterations) {
+    void CSFFilter::applyCSF(bool bSloopSmooth, float time_step, double class_threshold,
+                             double cloth_resolution, int rigidness, int iterations) {
+        std::cout<< "CSFFilter::applyCSF() called"<<std::endl;
         if (!cloud_ || cloud_->empty()) return;
+        m_is_canceled = false;
 
         TicToc time;
         time.tic();
@@ -51,6 +53,10 @@ namespace ct{
             csf_points.emplace_back(pt);
         }
 
+        if (m_is_canceled) return;
+        emit progress(10);
+        std::cout << "emit progress(10) signal" << std::endl;
+
         // 配置参数
         CSF csf;
         csf.setPointCloud(csf_points);
@@ -61,9 +67,15 @@ namespace ct{
         csf.params.rigidness = rigidness;
         csf.params.interations = iterations;
 
+        if (m_is_canceled) return;
+
         // 执行滤波
         std::vector<int> groundIndexes, offGroundIndexes;
         csf.do_filtering(groundIndexes, offGroundIndexes, true);
+
+        if (m_is_canceled) return;
+        emit progress(60);
+        std::cout << "emit progress(60) signal" << std::endl;
 
         // 将结果转换PCL Cloud
         pcl::PointIndices::Ptr ground_indices(new pcl::PointIndices);
@@ -75,23 +87,39 @@ namespace ct{
         pcl::ExtractIndices<PointXYZRGBN> extract;
         extract.setInputCloud(cloud_);
 
+        if (m_is_canceled) return;
+
         // 提取地面点
-        Cloud::Ptr ground_cloud(new Cloud);
+        ct::Cloud::Ptr ground_cloud(new Cloud);
         ground_cloud->setId(cloud_->id() + "_ground");
         extract.setIndices(ground_indices);
         extract.setNegative(false);
         extract.filter(*ground_cloud);
+
+        if (m_is_canceled) return;
+
         extractScalarField(cloud_, ground_cloud, groundIndexes);
 
+        if (m_is_canceled) return;
+        emit progress(80);
+
         // 提取非地面点
-        Cloud::Ptr off_ground_cloud(new Cloud);
+        ct::Cloud::Ptr off_ground_cloud(new Cloud);
         off_ground_cloud->setId(cloud_->id() + "_off_ground");
         extract.setIndices(off_ground_indices);
         extract.setNegative(false);
+        if (m_is_canceled) return;
         extract.filter(*off_ground_cloud);
+
+        if (m_is_canceled) return;
+
         extractScalarField(cloud_, off_ground_cloud, offGroundIndexes);
 
+        if (m_is_canceled) return;
+        emit progress(100);
+
         emit filterResult(ground_cloud, off_ground_cloud, time.toc());
+        std::cout << "filterResult signal emitted" << std::endl;
     }
 
 } // namespace ct

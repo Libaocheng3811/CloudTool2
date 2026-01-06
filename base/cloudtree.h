@@ -2,6 +2,7 @@
 #define CLOUDTOOL2_CLOUDTREE_H
 
 #include "base/customtree.h"
+#include "base/processingdialog.h"
 #include "fileio.h"
 
 #include <QMenu>
@@ -125,14 +126,19 @@ namespace ct
         void setCloudSelected(const Cloud::Ptr& cloud, bool selected = true);
 
         /**
-         * @brief 显示进度条
+         * @brief 显示模态进度条
          */
-        void showProgressBar() {if (m_progress_bar) m_progress_bar->show(); }
+        void showProgress(const QString& message);
 
         /**
          * @brief 关闭进度条
          */
-        void closeProgressBar() {if (m_progress_bar) m_progress_bar->close(); }
+        void closeProgress();
+
+        /**
+         * @brief 将任意后台 Worker (如 FileIO, GroundFilter) 绑定到当前进度条
+         */
+        void bindWorker(QObject* worker);
 
     protected:
         /**
@@ -220,6 +226,7 @@ namespace ct
         QThread m_thread;
         FileIO* m_fileio;
         QMenu* m_tree_menu;
+        ProcessingDialog* m_processing_dialog = nullptr;
         // 使用Cloud类型的智能指针的二维向量来实现树形结构
         std::vector<std::vector<Cloud::Ptr >> m_cloud_vec;
     };

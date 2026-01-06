@@ -63,11 +63,6 @@ namespace ct
         void setPropertiesTable(QTableWidget* table) {m_table = table;}
 
         /**
-        * @brief 设置处理进度条
-        */
-        void setProgressBar(QProgressBar* progress_bar) {m_progress_bar = progress_bar;}
-
-        /**
          * @brief 设置输出窗口
          */
         void setConsole(Console* console) {m_console = console;}
@@ -161,7 +156,6 @@ namespace ct
         CloudView* m_cloudview;
         Console* m_console;
         QTableWidget* m_table;
-        QProgressBar* m_progress_bar;
 
     private:
         QIcon m_parent_icon;

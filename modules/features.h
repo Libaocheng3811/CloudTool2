@@ -12,6 +12,8 @@
 
 #include <pcl/point_types.h>
 
+#include <atomic>
+
 namespace ct
 {
     typedef pcl::PointCloud<pcl::ShapeContext1980>          SC3DFeature;
@@ -85,6 +87,8 @@ namespace ct
         int k_;
         double radius_;
 
+        std::atomic<bool> m_is_canceled{false};
+
     signals:
 
         /**
@@ -111,6 +115,11 @@ namespace ct
          * @brief 特征估计结果
          */
         void featureResult(const QString& id, const FeatureType::Ptr& feature, float time);
+
+        /**
+         * @brief 进度信号
+         */
+        void progress(int percent);
 
     public slots:
 
@@ -274,6 +283,11 @@ namespace ct
          * @brief 估计在（SHOT）描述符的计算中使用的局部参考帧
          */
         void SHOTLocalReferenceFrameEstimation();
+
+        /**
+         * @brief 取消计算
+         */
+        void cancel() { m_is_canceled = true;}
     };
 
 

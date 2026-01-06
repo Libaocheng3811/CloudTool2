@@ -128,9 +128,6 @@ Filters::Filters(QWidget *parent) :
     {
         ui->slider_min->setValue(value * 1000);
     });
-    // 它的目的是将 QDoubleSpinBox 的 valueChanged 信号的地址转换为一个特定类型的成员函数指针
-    // 因为在连接信号与槽的时候，Qt 的 connect 函数要求信号和槽的类型要一致。因为槽函数是lambda函数，通常不期望槽函数返回任何值，所以它的返回类型是void
-    // 如果没有显式指定返回类型，C++11 及以后的标准会自动推导 lambda 表达式的返回类型。由于 lambda 函数中并没有 return 语句，所以返回类型默认为 void。
 
     /**
      * @brief 总结：信号&QDoubleSpinBox::valueChanged的类型是void(QDoubleSpinBox::*)(double)，类型是一个成员函数指针
@@ -267,6 +264,13 @@ void Filters::preview()
         // 为滤波器设置输入点云
         m_filters->setInputCloud(cloud);
         m_filters->setNegative(ui->check_reverse->isChecked());
+
+        if (!ui->check_refresh->isChecked()){
+            //非实时刷新
+            m_cloudtree->showProgress("Filtering PointCloud...");
+            m_cloudtree->bindWorker(m_filters);
+        }
+
         // 判断滤波类型，并发射对应滤波信号
         switch (ui->cbox_type->currentIndex()) {
             case FILTER_TYPE_PassThrough:
@@ -307,7 +311,6 @@ void Filters::preview()
                 emit ShadowPoints(ui->dspin_threshold->value());
                 break;
         }
-        if (!ui->check_refresh->isChecked()) m_cloudtree->showProgressBar();
     }
 }
 
@@ -377,16 +380,20 @@ void Filters::reset()
 
 void Filters::filterResult(const ct::Cloud::Ptr &cloud, float time)
 {
+    if (!ui->check_refresh->isChecked()){
+        m_cloudtree->closeProgress();
+    }
+
     // 传入的参数cloud是滤波之后的结果
     printI(QString("Filter cloud[id:%1] done, take time %2 ms.").arg(cloud->id()).arg(time));
     QString id = cloud->id();
     cloud->setId(id + FILTER_PRE_FLAG);
-    // 在视图器中添加点云、设置点云颜色和大小
+
     m_cloudview->addPointCloud(cloud);
-    m_cloudview->setPointCloudColor(cloud->id(), ct::Color::Green);
+    if (!cloud->hasRGB()) //如果原本没有颜色，则设置颜色
+        m_cloudview->setPointCloudColor(cloud->id(), ct::Color::Green);
     m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize() + 2);
     m_filter_map[id] = cloud;
-    if (!ui->check_refresh->isChecked()) m_cloudtree->closeProgressBar();
 }
 
 ct::ConditionBase::Ptr Filters::getCondition()

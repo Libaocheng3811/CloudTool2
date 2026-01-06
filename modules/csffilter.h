@@ -10,6 +10,8 @@
 
 #include <QObject>
 
+#include <atomic>
+
 #include "3rdparty/CSF/src/CSF.h"
 #include "3rdparty/CSF/src/point_cloud.h"
 
@@ -29,7 +31,9 @@ namespace ct{
          * @param off_ground_cloud 滤波后的非地面点云
          * @param time 耗时
          */
-        void filterResult(const Cloud::Ptr &ground_cloud, const Cloud::Ptr &off_ground_cloud, float time);
+        void filterResult(const Cloud::Ptr& ground_cloud, const Cloud::Ptr& off_ground_cloud, float time);
+
+        void progress(int percent);
 
     public slots:
         /**
@@ -44,8 +48,11 @@ namespace ct{
         void applyCSF(bool bSloopSmooth, float time_step, double class_threshold, double cloth_resolution,
                       int rigidness, int iterations);
 
+        void cancel() { m_is_canceled = true;}
+
     private:
         Cloud::Ptr cloud_;
+        std::atomic<bool> m_is_canceled{false};
     };
 } // namespace ct
 

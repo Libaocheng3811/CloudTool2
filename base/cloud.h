@@ -11,6 +11,8 @@
 #include <QString>
 #include <QMap>
 
+#include <QMetaType>
+
 #define CLOUD_TYPE_XYZ       "xyz"
 #define CLOUD_TYPE_XYZRGB    "XYZRGB"
 #define CLOUD_TYPE_XYZN      "XYZNormal"
@@ -325,4 +327,7 @@ namespace ct
         static void initColorTable();
     };
 }
+
+Q_DECLARE_METATYPE(ct::Cloud::Ptr)
+
 #endif //CLOUDTOOL2_CLOUD_H

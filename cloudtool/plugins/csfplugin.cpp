@@ -7,22 +7,23 @@
 #include "csfplugin.h"
 #include "ui_csfplugin.h"
 
-Q_DECLARE_METATYPE(ct::Cloud::Ptr)
+#include <iostream>
 
 CSFPlugin::CSFPlugin(QWidget *parent) :
         ct::CustomDialog(parent), ui(new Ui::CSFPlugin), m_thread(this) {
     ui->setupUi(this);
 
-    qRegisterMetaType<ct::Cloud::Ptr>("Cloud::Ptr");
     qRegisterMetaType<ct::Cloud::Ptr>("ct::Cloud::Ptr");
+    qRegisterMetaType<ct::Cloud::Ptr>("Cloud::Ptr");
 
-    m_filter = new ct::CSFFilter();
+    m_filter = new ct::CSFFilter(nullptr);
     m_filter->moveToThread(&m_thread);
     connect(&m_thread, &QThread::finished, m_filter, &QObject::deleteLater);
 
     // 信号连接
     connect(this, &CSFPlugin::requestCSF, m_filter, &ct::CSFFilter::applyCSF);
-    connect(m_filter, &ct::CSFFilter::filterResult, this, &CSFPlugin::onFilterDone);
+    bool connected = connect(m_filter, &ct::CSFFilter::filterResult, this, &CSFPlugin::onFilterDone);
+    std::cout<< "connect status:"<< connected << std::endl;
 
     // ui按钮
     connect(ui->btnOk, &QPushButton::clicked, this, &CSFPlugin::onApply);
@@ -43,6 +44,7 @@ void CSFPlugin::init(){
         printW("Please select at least one cloud.");
         return;
     }
+    std::cout << "init() called" << std::endl;
     m_cloud = selection.front();
     m_filter->setInputCloud(m_cloud);
 }
@@ -61,17 +63,23 @@ void CSFPlugin::onApply() {
     else if (ui->m_rbRelief->isChecked()) rigidness = 2;
     else rigidness = 1;
 
-    m_cloudtree->showProgressBar();
+    this->hide();
+    QCoreApplication::processEvents();
+//    this->accept();
+    m_cloudtree->showProgress("Running Cloth Simulation Filter...");
+    m_cloudtree->bindWorker(m_filter);
 
     emit requestCSF(smooth, 0.65f, thresh, res, rigidness, iter);
+    std::cout << "requestCSF signal emitted" << std::endl;
 }
 
 void CSFPlugin::onCancel() {
     this->close();
 }
 
-void CSFPlugin::onFilterDone(const ct::Cloud::Ptr &ground_cloud, const ct::Cloud::Ptr &off_ground_cloud, float time) {
-    m_cloudtree->closeProgressBar();
+void CSFPlugin::onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud::Ptr& off_ground_cloud, float time) {
+    std::cout<< "break point 1"<<std::endl;
+    m_cloudtree->closeProgress();
     printI(QString("CSF Finished in %1 s").arg(time));
 
     ground_cloud->setId(m_cloud->id() + "_ground");

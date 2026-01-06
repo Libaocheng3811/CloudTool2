@@ -6,15 +6,13 @@ namespace ct
         : QTreeWidget(parent),
         m_cloudview(nullptr),
         m_console(nullptr),
-        m_table(nullptr),
-        m_progress_bar(nullptr)
+        m_table(nullptr)
     {
         /** QAbstractItemView 是 Qt 模型/视图框架中的一个抽象基类，提供了显示和编辑模型（Model）中数据的通用接口。
          *  setSelectionMode 函数接受一个 QAbstractItemView::SelectionMode 枚举值，定义了选择行为。
          *  QAbstractItemView::SingleSelection表示单选模式，QAbstractItemView::MultiSelection表示多选模式
          *  QAbstractItemView::ExtendedSelection表示扩展模式
          */
-        // 设置视图（View）的选中模式。setSelectionMode 是 QAbstractItemView 类的一个函数，用于定义用户如何选择项（Item）
         this->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
         // 信号itemSelectionChanged和itemClicked继承自QTreeWidget

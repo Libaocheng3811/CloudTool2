@@ -29,6 +29,8 @@ public:
 private slots:
     void onApply();
     void onCancel();
+
+public slots:
     void onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud::Ptr& off_ground_cloud, float time);
 
 signals:

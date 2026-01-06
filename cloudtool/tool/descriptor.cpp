@@ -117,6 +117,7 @@ void Descriptor::preview() {
     m_plotter->clearPlots();
     if (ui->check_show_histogram->isChecked())
         m_plotter.reset(new pcl::visualization::PCLPlotter);
+
     for (auto &cloud: selected_clouds) {
         if (ui->spin_k->value() == 0 && ui->dspin_r->value() == 0) {
             printW("Parameter set error!");
@@ -125,6 +126,10 @@ void Descriptor::preview() {
         m_features->setInputCloud(cloud);
         m_features->setKSearch(ui->spin_k->value());
         m_features->setRadiusSearch(ui->dspin_r->value());
+
+        m_cloudtree->showProgress("Computing Feature Descriptor...");
+        m_cloudtree->bindWorker(m_features);
+
         switch (ui->cbox_type->currentIndex()) {
             case DESCRIPTOR_TYPE_PFHEstimation:
                 m_cloudview->showInfo("PFHEstimation", 1);
@@ -223,7 +228,6 @@ void Descriptor::preview() {
                 emit SHOTLocalReferenceFrameEstimation();
                 break;
         }
-        m_cloudtree->showProgressBar();
     }
 }
 
@@ -250,7 +254,7 @@ void Descriptor::reset() {
 
 void Descriptor::featureResult(const QString &id, const ct::FeatureType::Ptr &feature, float time) {
     m_descriptor_map[id] = feature;
-    m_cloudtree->closeProgressBar();
+    m_cloudtree->closeProgress();
     switch (ui->cbox_type->currentIndex()) {
         case DESCRIPTOR_TYPE_PFHEstimation:
             printI(QString("Estimate cloud[id:%1] PFHFeature done, take time %2 ms.").arg(id).arg(time));
@@ -349,5 +353,5 @@ void Descriptor::lrfResult(const QString &id, const ct::ReferenceFrame::Ptr& clo
             break;
     }
     m_lrf_map[id] = cloud;
-    m_cloudtree->closeProgressBar();
+    m_cloudtree->closeProgress();
 }

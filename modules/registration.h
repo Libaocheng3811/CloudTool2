@@ -18,6 +18,8 @@
 
 #include <QObject>
 
+#include <atomic>
+
 namespace ct {
     // pcl::registration::TransformationEstimation是PCL库中用于估计两个点云之间转换
     typedef pcl::registration::TransformationEstimation<PointXYZRGBN, PointXYZRGBN, float> TransEst; //表示转换估计方法的类
@@ -48,10 +50,6 @@ namespace ct {
                   transformation_rotation_epsilon_(0.0),
                   euclidean_fitness_epsilon_(-std::numeric_limits<double>::max()) {}
         // std::numeric_limits<double>::max() 返回类型为 double 的最大有限值。这个值是 double 类型能够表示的最大正数
-
-        // ~Registration();这么写表示你声明了析构函数；如果你没有声明任何析构函数，编译器会隐式生成一个默认的析构函数。
-        // 但一旦你显式声明了析构函数，编译器就不再自动生成默认实现。此时你必须手动提供定义。
-        // ~Registration();
 
         /**
          * @brief 设置输入源点云
@@ -160,6 +158,8 @@ namespace ct {
         double transformation_rotation_epsilon_;
         double euclidean_fitness_epsilon_;
 
+        std::atomic<bool> m_is_canceled{false};
+
     signals:
         void registrationResult(bool success, const Cloud::Ptr &ail_cloud, double score, const Eigen::Matrix4f &matrix, float time);
 
@@ -168,6 +168,8 @@ namespace ct {
         void correspondenceRejectorResult(const CorrespondencesPtr &corr, float time, const CorreRej::Ptr &cj = nullptr);
 
         void transformationEstimationResult(const Eigen::Matrix4f &matrix, float time, const TransEst::Ptr &te = nullptr);
+
+        void progress(int percent);
 
     public:
 
@@ -544,6 +546,8 @@ namespace ct {
          * @brief 计算源数据集和目标数据集之间的 L2SQR 范数
          */
         void TransformationValidationEuclidean();
+
+        void cancel() { m_is_canceled = true;}
 
     };
 }

@@ -45,9 +45,6 @@ void Cutting::init()
      * 成员函数指针的类型形态是 返回类型 (类名::*)(参数类型)。
      * @brief static_cast 是一种 C++ 中强制转换的方式，用于安全地转换指针和引用类型
      */
-     // static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged)是将 QComboBox 类中的 currentIndexChanged 信号的
-     // 地址转换为一个特定类型的成员函数指针，以便将这个信号连接到处理函数 Cutting::updateInfo
-     // &QComboBox::currentIndexChanged是获取 currentIndexChanged 信号的地址。也就是获得了一个指针
     connect(ui->cbox_type, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, &Cutting::updateInfo);
     this->updateInfo(ui->cbox_type->currentIndex());
 }
@@ -232,7 +229,6 @@ void Cutting::cuttingCloud(bool select_in)
     // 遍历选中的点云
     for (auto& cloud : selected_clouds)
     {
-        //
         std::vector<int> indices = m_cloudview->areaPick(m_pick_points, cloud, select_in);
         ct::Cloud::Ptr cut_cloud = cloud->makeShared();
         pcl::copyPointCloud(*cloud, indices, *cut_cloud);

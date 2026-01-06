@@ -47,7 +47,6 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->cloudtree->setCloudView(ui->cloudview);
     ui->cloudtree->setConsole(ui->console);
     ui->cloudtree->setPropertiesTable(ui->cloudtable);
-    ui->cloudtree->setProgressBar(ui->progress_bar);
     ui->cloudtree->setParentIcon(QIcon(PARENT_ICON_PATH));
     ui->cloudtree->setChildIcon(QIcon(CHILD_ICON_PATH));
 

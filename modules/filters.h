@@ -10,10 +10,11 @@
 
 #include <QObject>
 
+#include <atomic>
+
 #include <pcl/Vertices.h>
 #include <pcl/filters/conditional_removal.h>
 #include <pcl/surface/mls.h>
-
 #include <pcl/sample_consensus/impl/sac_model_circle.hpp>
 #include <pcl/sample_consensus/impl/sac_model_cylinder.hpp>
 #include <pcl/sample_consensus/impl/sac_model_cone.hpp>
@@ -58,6 +59,7 @@ namespace ct
         // negative_ 的作用是控制降采样滤波操作时是否反向操作
         // negative_为true时，保留滤波器选出的保留点，否则，为false时，保留将要被滤波器移除的点
         bool negative_;
+        std::atomic<bool> m_is_canceled{false};
 
     signals:
 
@@ -65,6 +67,8 @@ namespace ct
          * @brief 点云滤波的结果
          */
         void filterResult(const Cloud::Ptr &cloud, float time);
+
+        void progress(int percent);
 
     public slots:
 
@@ -139,6 +143,11 @@ namespace ct
          * @param threshold 设置阴影点拒绝的阈值
          */
         void ShadowPoints(float threshold);
+
+        /**
+         * @brief 取消操作
+         */
+        void cancel() { m_is_canceled = true;}
     };
 }
 
