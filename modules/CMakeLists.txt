@@ -4,13 +4,16 @@ set(LibSrcs
         keypoints.cpp
         registration.cpp
         csffilter.cpp
+        vegfilter.cpp
         )
 set(LibHdrs
         features.h
         filters.h
         keypoints.h
         registration.h
-        csffilter.h)
+        csffilter.h
+        vegfilter.h
+        utils.h)
 
 
 

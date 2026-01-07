@@ -11,6 +11,7 @@ set(Srcs
         tool/registration.cpp
         tool/descriptor.cpp
         plugins/csfplugin.cpp
+        plugins/vegplugin.cpp
         )
 
 set(Hdrs
@@ -25,6 +26,7 @@ set(Hdrs
         tool/registration.h
         tool/descriptor.h
         plugins/csfplugin.h
+        plugins/vegplugin.h
         )
 
 set(QRCs resources/res.qrc)

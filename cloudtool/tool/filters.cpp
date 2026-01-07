@@ -25,15 +25,11 @@ Filters::Filters(QWidget *parent) :
 {
     ui->setupUi(this);
 
-    // qRegisterMetaType： 这是一个 Qt 的元对象系统功能，它的作用是注册自定义类型，以便能够在信号和槽机制中使用，
-    // Qt 的信号和槽机制是基于元对象系统（Meta-Object System）的，它要求传递的类型必须是已经注册的类型
-    // 将std::string 类型及其引用类型注册到 Qt 的元对象系统中，允许在信号与槽机制中传递string类型和引用的参数
     qRegisterMetaType<std::string>("std::string &");
     qRegisterMetaType<std::string>("std::string");
     qRegisterMetaType<ct::ConditionBase::Ptr>("ConditionBase::Ptr &");
     qRegisterMetaType<ct::ConditionBase::Ptr>("ConditionBase::Ptr");
 
-//    QObject::connect(ui->cbox_type, &QComboBox::currentIndexChanged, ui->stackedWidget, &QStackedWidget::setCurrentIndex);
     connect(ui->btn_preview, &QPushButton::clicked, this, &Filters::preview);
     connect(ui->btn_add, &QPushButton::clicked, this, &Filters::add);
     connect(ui->btn_apply, &QPushButton::clicked, this, &Filters::apply);
@@ -390,8 +386,7 @@ void Filters::filterResult(const ct::Cloud::Ptr &cloud, float time)
     cloud->setId(id + FILTER_PRE_FLAG);
 
     m_cloudview->addPointCloud(cloud);
-    if (!cloud->hasRGB()) //如果原本没有颜色，则设置颜色
-        m_cloudview->setPointCloudColor(cloud->id(), ct::Color::Green);
+    m_cloudview->setPointCloudColor(cloud->id(), ct::Color::Green);
     m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize() + 2);
     m_filter_map[id] = cloud;
 }

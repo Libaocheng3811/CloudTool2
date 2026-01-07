@@ -14,6 +14,7 @@
 #include "tool/registration.h"
 
 #include "plugins/csfplugin.h"
+#include "plugins/vegplugin.h"
 
 #include <QDesktopWidget>
 #include <QDebug>
@@ -96,6 +97,10 @@ MainWindow::MainWindow(QWidget *parent) :
     // plugins
     connect(ui->actionCSF, &QAction::triggered, [=] {
         this->createModalDialog<CSFPlugin>("Cloth Simulation Filter");
+    });
+
+    connect(ui->actionVegetation_Filters, &QAction::triggered, [=] {
+        this->createModalDialog<VegPlugin>("Vegetation Filters");
     });
 
 }

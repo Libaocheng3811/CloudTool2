@@ -48,9 +48,7 @@ public slots:
     void filterResult(const ct::Cloud::Ptr & cloud, float time);
 
 private:
-    // 获取条件信息，专用与ConditionalRemoval条件滤波
     ct::ConditionBase::Ptr getCondition();
-    // 获取点云不同字段（x, y, z等）的范围，用于PassThrough直通滤波
     void getRange(int index);
 
 private:

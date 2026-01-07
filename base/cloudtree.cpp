@@ -545,12 +545,10 @@ namespace ct
         if (!m_processing_dialog || !worker) return;
 
         // Worker -> Dialog (进度更新)
-        bool ok = connect(worker, SIGNAL(progress(int)), m_processing_dialog, SLOT(setProgress(int)), Qt::UniqueConnection);
-        std::cout << "connect progress: " << ok << std::endl;
+        connect(worker, SIGNAL(progress(int)), m_processing_dialog, SLOT(setProgress(int)), Qt::UniqueConnection);
 
         // Dialog -> Worker (取消请求),信号和槽连接方式为直接连接，确保能够快速响应取消请求
-        ok = connect(m_processing_dialog, SIGNAL(cancelRequested()), worker, SLOT(cancel()), Qt::DirectConnection);
-        std::cout << "connect cancelRequested: " << ok << std::endl;
+        connect(m_processing_dialog, SIGNAL(cancelRequested()), worker, SLOT(cancel()), Qt::DirectConnection);
 
         connect(m_processing_dialog, &ProcessingDialog::cancelRequested, this, &CloudTree::closeProgress);
     }

@@ -7,8 +7,6 @@
 #include "csfplugin.h"
 #include "ui_csfplugin.h"
 
-#include <iostream>
-
 CSFPlugin::CSFPlugin(QWidget *parent) :
         ct::CustomDialog(parent), ui(new Ui::CSFPlugin), m_thread(this) {
     ui->setupUi(this);
@@ -22,8 +20,7 @@ CSFPlugin::CSFPlugin(QWidget *parent) :
 
     // 信号连接
     connect(this, &CSFPlugin::requestCSF, m_filter, &ct::CSFFilter::applyCSF);
-    bool connected = connect(m_filter, &ct::CSFFilter::filterResult, this, &CSFPlugin::onFilterDone);
-    std::cout<< "connect status:"<< connected << std::endl;
+    connect(m_filter, &ct::CSFFilter::filterResult, this, &CSFPlugin::onFilterDone);
 
     // ui按钮
     connect(ui->btnOk, &QPushButton::clicked, this, &CSFPlugin::onApply);
@@ -34,7 +31,10 @@ CSFPlugin::CSFPlugin(QWidget *parent) :
 
 CSFPlugin::~CSFPlugin() {
     m_thread.quit();
-    m_thread.wait();
+    if (!m_thread.wait(3000)){
+        m_thread.terminate();
+        m_thread.wait();
+    }
     delete ui;
 }
 
@@ -44,7 +44,7 @@ void CSFPlugin::init(){
         printW("Please select at least one cloud.");
         return;
     }
-    std::cout << "init() called" << std::endl;
+
     m_cloud = selection.front();
     m_filter->setInputCloud(m_cloud);
 }
@@ -65,12 +65,11 @@ void CSFPlugin::onApply() {
 
     this->hide();
     QCoreApplication::processEvents();
-//    this->accept();
+
     m_cloudtree->showProgress("Running Cloth Simulation Filter...");
     m_cloudtree->bindWorker(m_filter);
 
     emit requestCSF(smooth, 0.65f, thresh, res, rigidness, iter);
-    std::cout << "requestCSF signal emitted" << std::endl;
 }
 
 void CSFPlugin::onCancel() {
@@ -78,7 +77,6 @@ void CSFPlugin::onCancel() {
 }
 
 void CSFPlugin::onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud::Ptr& off_ground_cloud, float time) {
-    std::cout<< "break point 1"<<std::endl;
     m_cloudtree->closeProgress();
     printI(QString("CSF Finished in %1 s").arg(time));
 

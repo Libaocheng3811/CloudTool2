@@ -178,6 +178,7 @@
      <string>Plugins</string>
     </property>
     <addaction name="actionCSF"/>
+    <addaction name="actionVegetation_Filters"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -1040,8 +1041,21 @@ QScrollBar::sub-line:horizontal {
    </property>
   </action>
   <action name="actionCSF">
+   <property name="icon">
+    <iconset resource="resources/res.qrc">
+     <normaloff>:/res/images/terrain.png</normaloff>:/res/images/terrain.png</iconset>
+   </property>
    <property name="text">
     <string>CSF Filters</string>
+   </property>
+  </action>
+  <action name="actionVegetation_Filters">
+   <property name="icon">
+    <iconset resource="resources/res.qrc">
+     <normaloff>:/res/images/vegetation.png</normaloff>:/res/images/vegetation.png</iconset>
+   </property>
+   <property name="text">
+    <string>Vegetation Filters</string>
    </property>
   </action>
  </widget>

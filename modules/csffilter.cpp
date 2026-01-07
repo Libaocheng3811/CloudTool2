@@ -3,39 +3,12 @@
 //
 
 #include "modules/csffilter.h"
-
+#include "utils.h"
 #include <pcl/filters/extract_indices.h>
 
 namespace ct{
-
-    void extractScalarField(const Cloud::Ptr& source, Cloud::Ptr& target, const std::vector<int>& indices){
-        target->setHasRGB(source->hasRGB());
-
-        // 遍历源点云自定义字段
-        QStringList fields = source->getScalarFieldNames();
-        for (const QString& name : fields){
-            const std::vector<float>* src_data = source->getScalarField(name);
-            if (!src_data) continue;
-
-            std::vector<float> tgt_data;
-            tgt_data.reserve(indices.size());
-
-            for (int idx : indices){
-                if (idx >= 0 && idx < src_data->size()){
-                    tgt_data.push_back((*src_data)[idx]);
-                }
-                else{
-                    tgt_data.push_back(0.0f); //异常填充
-                }
-            }
-            target->addScalarField(name, tgt_data);
-        }
-        target->backupColors();
-    }
-
     void CSFFilter::applyCSF(bool bSloopSmooth, float time_step, double class_threshold,
                              double cloth_resolution, int rigidness, int iterations) {
-        std::cout<< "CSFFilter::applyCSF() called"<<std::endl;
         if (!cloud_ || cloud_->empty()) return;
         m_is_canceled = false;
 
@@ -55,7 +28,6 @@ namespace ct{
 
         if (m_is_canceled) return;
         emit progress(10);
-        std::cout << "emit progress(10) signal" << std::endl;
 
         // 配置参数
         CSF csf;
@@ -75,7 +47,6 @@ namespace ct{
 
         if (m_is_canceled) return;
         emit progress(60);
-        std::cout << "emit progress(60) signal" << std::endl;
 
         // 将结果转换PCL Cloud
         pcl::PointIndices::Ptr ground_indices(new pcl::PointIndices);
@@ -98,7 +69,7 @@ namespace ct{
 
         if (m_is_canceled) return;
 
-        extractScalarField(cloud_, ground_cloud, groundIndexes);
+        syncAllScalarFields(cloud_, ground_cloud, groundIndexes);
 
         if (m_is_canceled) return;
         emit progress(80);
@@ -113,13 +84,12 @@ namespace ct{
 
         if (m_is_canceled) return;
 
-        extractScalarField(cloud_, off_ground_cloud, offGroundIndexes);
+        syncAllScalarFields(cloud_, off_ground_cloud, offGroundIndexes);
 
         if (m_is_canceled) return;
         emit progress(100);
 
         emit filterResult(ground_cloud, off_ground_cloud, time.toc());
-        std::cout << "filterResult signal emitted" << std::endl;
     }
 
 } // namespace ct

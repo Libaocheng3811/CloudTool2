@@ -22,6 +22,7 @@ namespace ct{
             setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
             setWindowModality(Qt::WindowModal);
             resize(400, 120);
+            setFixedSize(size());
 
             auto* layout = new QVBoxLayout(this);
 
@@ -50,7 +51,6 @@ namespace ct{
 
     public slots:
         void setProgress(int value){
-            std::cout << "setProgress slot called" << std::endl;
             m_progressBar->setValue(value);
         }
 
