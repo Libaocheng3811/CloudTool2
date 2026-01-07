@@ -42,11 +42,13 @@ void CSFPlugin::init(){
     auto selection = m_cloudtree->getSelectedClouds();
     if (selection.empty()){
         printW("Please select at least one cloud.");
+        ui->btnOk->setEnabled(false);
         return;
     }
 
     m_cloud = selection.front();
     m_filter->setInputCloud(m_cloud);
+    ui->btnOk->setEnabled(true);
 }
 
 void CSFPlugin::onApply() {

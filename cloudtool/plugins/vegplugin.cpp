@@ -41,7 +41,7 @@ VegPlugin::~VegPlugin() {
 void VegPlugin::init() {
     auto selection = m_cloudtree->getSelectedClouds();
     if (selection.empty() || !selection.front()->hasRGB()){
-        printE("Please select a cloud with RGB data first!");
+        printW("Please select a cloud with RGB data first!");
         ui->m_btnOk->setEnabled(false);
         return;
     }

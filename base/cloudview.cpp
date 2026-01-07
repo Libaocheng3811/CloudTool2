@@ -10,11 +10,13 @@ VTK_MODULE_INIT(vtkRenderingFreeType)
 #include "pcl/geometry/planar_polygon.h"
 #include "vtkAxesActor.h"
 #include "vtkPointPicker.h"
+#include <vtkCamera.h>
 
 #include "QDropEvent"
 #include "QMimeData"
 #include "QUrl"
 
+#include <cmath>
 #define INFO_CLOUD_ID  "info_cloud_id"
 #define INFO_TEXT      "info_text"
 
@@ -528,6 +530,65 @@ namespace ct
             m_renderwindow->GetInteractor()->SetInteractorStyle(style);
         }
         m_viewer->getRenderWindow()->Render();
+    }
+
+    ///////////////////////////////////////////////////////////////////
+    // viewport
+    void CloudView::setView(const Eigen::Vector3f& direction, const Eigen::Vector3f& up) {
+        m_viewer->resetCamera();
+
+        m_viewer->getRenderWindow()->Render();
+        vtkCamera* cam = m_render->GetActiveCamera();
+
+        double* fp = cam->GetFocalPoint();
+
+        double* pos = cam->GetPosition();
+        double dist = std::sqrt(std::pow(pos[0] - fp[0], 2) +
+                                std::pow(pos[1] - fp[1], 2) +
+                                std::pow(pos[2] - fp[2], 2));
+
+        double new_x = fp[0] + direction.x () * dist;
+        double new_y = fp[1] + direction.y () * dist;
+        double new_z = fp[2] + direction.z () * dist;
+
+        m_viewer->setCameraPosition(
+                new_x, new_y, new_z, // Eye,相机位置
+                fp[0], fp[1], fp[2], // Target (焦点/看向哪里)
+                up.x(), up.y(), up.z() // Up (头顶朝向)
+                );
+
+        m_viewer->getRenderWindow()->Render();
+    }
+
+    void CloudView::setTopView() {
+        // 俯视图：相机在 +Z，看向中心，头顶朝 +Y
+        setView(Eigen::Vector3f(0, 0, 1), Eigen::Vector3f(0, 1, 0));
+    }
+
+    void CloudView::setBottomView() {
+        // 底视图：相机在 -Z，看向中心，头顶朝 +Y
+        setView(Eigen::Vector3f(0, 0, -1), Eigen::Vector3f(0, 1, 0));
+    }
+
+    void CloudView::setFrontView() {
+        // 正视图：通常定义为从 -Y 看向 +Y (或者从 +Y 看向 -Y，取决于你的坐标系习惯)
+        // 这里假设 Z 是高，Y 是深。从 -Y 处看过去。头顶朝 +Z。
+        setView(Eigen::Vector3f(0, -1, 0), Eigen::Vector3f(0, 0, 1));
+    }
+
+    void CloudView::setBackView() {
+        // 后视图：相机在 +Y，头顶朝 +Z
+        setView(Eigen::Vector3f(0, 1, 0), Eigen::Vector3f(0, 0, 1));
+    }
+
+    void CloudView::setLeftSideView() {
+        // 左视图：相机在 -X，头顶朝 +Z
+        setView(Eigen::Vector3f(-1, 0, 0), Eigen::Vector3f(0, 0, 1));
+    }
+
+    void CloudView::setRightSideView() {
+        // 右视图：相机在 +X，头顶朝 +Z
+        setView(Eigen::Vector3f(1, 0, 0), Eigen::Vector3f(0, 0, 1));
     }
 
     void CloudView::mousePressEvent(QMouseEvent *event)

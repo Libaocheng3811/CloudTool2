@@ -295,58 +295,35 @@ namespace ct {
         ////////////////////////////////////////////////////////
         // viewport
         /**
-         * @brief 设置为俯视图
+         * @brief 设置为俯视图(+z)
          */
-        void setTopView()
-        {
-            m_viewer->setCameraPosition(0, 0, 0, 0, -1, 0, 0, 0, -1);
-            m_viewer->getRenderWindow()->Render();
-        }
+        void setTopView();
 
         /**
-         * @brief 设置为正视图
-         */
-        void setFrontView()
-        {
-            m_viewer->setCameraPosition(0, 0, 0, 0, 0, -1, 0, 1, 0);
-            m_viewer->getRenderWindow()->Render();
-        }
+        * @brief 设置底视图(-Z)
+        */
+        void setBottomView();
 
         /**
-         * @brief 设置为左视图
+         * @brief 设置为正视图(front)
          */
-        void setLeftSideView()
-        {
-            m_viewer->setCameraPosition(0, 0, 0, 1, 0, 0, 0, 1, 0);
-            m_viewer->getRenderWindow()->Render();
-        }
+        void setFrontView();
 
         /**
-         * @brief 设置后视图
-         */
-        void setBackView()
-        {
-            m_viewer->setCameraPosition(0, 0, 0, 0, 0, 1, 0, 1, 0);
-            m_viewer->getRenderWindow()->Render();
-        }
+        * @brief 设置后视图(Back)
+        */
+        void setBackView();
 
         /**
-         * @brief 设置右视图
+         * @brief 设置为左视图(Left)
          */
-        void setRightSideView()
-        {
-            m_viewer->setCameraPosition(0, 0, 0, -1, 0, 0, 0, 1, 0);
-            m_viewer->getRenderWindow()->Render();
-        }
+        void setLeftSideView();
 
         /**
-         * @brief 设置底视图
+         * @brief 设置右视图(Right)
          */
-        void setBottomView()
-        {
-            m_viewer->setCameraPosition(0, 0, 0, 0, 1, 0, 0, 0, 1);
-            m_viewer->getRenderWindow()->Render();
-        }
+        void setRightSideView();
+
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -368,6 +345,9 @@ namespace ct {
         void mouseRightPressed(const PointXY& pt);
         void mouseRightReleased(const PointXY& pt);
         void mouseMoved(const PointXY& pt);
+
+    private:
+        void setView(const Eigen::Vector3f& direction, const Eigen::Vector3f& up);
 
     private:
         Q_DISABLE_COPY(CloudView);
