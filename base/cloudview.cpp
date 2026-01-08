@@ -47,7 +47,6 @@ namespace ct
         m_show_id(true),
         m_info_level(0),
         m_last_id(""),
-        // 调用了 vtkSmartPointer<vtkRenderer> 的 New() 方法来创建一个新的 vtkRenderer 实例
         m_render(vtkSmartPointer<vtkRenderer>::New()),
         m_renderwindow(vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New()),
         m_axes(vtkSmartPointer<vtkOrientationMarkerWidget>::New())
@@ -80,6 +79,20 @@ namespace ct
 
     void CloudView::addPointCloud(const Cloud::Ptr &cloud)
     {
+        bool found = false;
+        for (auto& c : m_visible_clouds){
+            if (c->id() == cloud->id()) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) m_visible_clouds.push_back(cloud);
+
+        // 如果是大型点云，自动生成预览点云，只生成一次
+        if (cloud->size() > 30000000 && cloud->getPreviewCloud() == nullptr){
+            cloud->generatePreview();
+        }
+
         if (!m_viewer->contains(cloud->id().toStdString()))
             m_viewer->addPointCloud<PointXYZRGBN>(cloud, cloud->id().toStdString());
         else
@@ -88,6 +101,9 @@ namespace ct
             // 调用PCLVisualizer类的updatePointCloud函数，用于更新视图器m_viewer中显示的点云数据
             m_viewer->updatePointCloud<PointXYZRGBN>(cloud, rgb_handler, cloud->id().toStdString());
         }
+
+        m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
+                                                   pcl::visualization::PCL_VISUALIZER_SHADING_FLAT, cloud->id().toStdString());
 
         if (cloud->pointSize() != 1)
             m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
@@ -317,6 +333,14 @@ namespace ct
     // remove
     void CloudView::removePointCloud(const QString &id)
     {
+        auto it = std::remove_if(m_visible_clouds.begin(), m_visible_clouds.end(),
+                                 [&](const Cloud::Ptr& cloud) { return cloud->id() == id; });
+        m_visible_clouds.erase(it, m_visible_clouds.end());
+
+        std::string preview_id = id.toStdString() + "_preview";
+        if (m_viewer->contains(preview_id))
+            m_viewer->removePointCloud(preview_id);
+
         // 移除点云数据，并重新渲染窗口
         m_viewer->removePointCloud(id.toStdString());
         m_viewer->getRenderWindow()->Render();
@@ -337,6 +361,8 @@ namespace ct
 
     void CloudView::removeAllPointClouds()
     {
+        m_visible_clouds.clear();
+
         m_viewer->removeAllPointClouds();
         m_viewer->getRenderWindow()->Render();
     }
@@ -591,8 +617,51 @@ namespace ct
         setView(Eigen::Vector3f(1, 0, 0), Eigen::Vector3f(0, 0, 1));
     }
 
+    void CloudView::setInteractiveMode(bool activate) {
+        bool need_render = false;
+
+        for (const auto& cloud : m_visible_clouds){
+            //如果点云很小，不进行任何操作
+            if (cloud->getPreviewCloud() == nullptr) continue;
+
+            std::string full_id = cloud->id().toStdString();
+            std::string prev_id = cloud->getPreviewCloud()->id().toStdString();
+
+            if (activate){
+                // 动态模式，显示预览点云，隐藏原始点云
+                m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.0, full_id);
+                if (!m_viewer->contains(prev_id)){
+                    //如果是第一次显示预览，需要addPointCloud
+                    pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb_handler(cloud->getPreviewCloud());
+                    m_viewer->addPointCloud<PointXYZRGBN>(cloud->getPreviewCloud(), rgb_handler, prev_id);
+
+                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
+                                                               pcl::visualization::PCL_VISUALIZER_SHADING_FLAT, prev_id);
+
+                    //同步点的大小
+                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
+                                                               cloud->pointSize(), prev_id);
+                }
+                else {
+                    //如果已经存在，设置为可见
+                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 1.0, prev_id);
+                }
+            }
+            else{
+                //静态模式，隐藏预览点云，显示原始点云
+                if (m_viewer->contains(prev_id)){
+                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.0, prev_id);
+                }
+                m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, cloud->opacity(), full_id);
+            }
+            need_render = true;
+        }
+        if (need_render) m_viewer->getRenderWindow()->Render();
+    }
+
     void CloudView::mousePressEvent(QMouseEvent *event)
     {
+        setInteractiveMode(true);
         // button()是QMouseEvent的一个成员函数，返回一个 Qt::MouseButton 枚举值，表示哪个按键触发的事件
         if (event->button() == Qt::LeftButton)
         {
@@ -609,6 +678,8 @@ namespace ct
 
     void CloudView::mouseReleaseEvent(QMouseEvent *event)
     {
+        setInteractiveMode(false);
+
         if (event->button() == Qt::LeftButton)
         {
             // getViewerPose() 是 PCLVisualizer 类中的一个成员函数。它返回当前视图器的视角或位置的描述，例如相机的位置和方向。

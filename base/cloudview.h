@@ -324,6 +324,12 @@ namespace ct {
          */
         void setRightSideView();
 
+        /**
+         * @brief 设置交互模式(LOD切换)
+         * @param activate true=正在交互(显示稀疏)， false=静止(显示稠密)
+         */
+        void setInteractiveMode(bool activate);
+
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -358,6 +364,9 @@ namespace ct {
         vtkSmartPointer<vtkRenderer> m_render;
         vtkSmartPointer<vtkGenericOpenGLRenderWindow> m_renderwindow;
         vtkSmartPointer<vtkOrientationMarkerWidget> m_axes;
+
+        // 维护一个正在显示的Cloud::Ptr列表，方便进行预览模式切换
+        std::vector<Cloud::Ptr> m_visible_clouds;
 
     };
 } // namespace ct

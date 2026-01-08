@@ -83,6 +83,19 @@ namespace ct
                   m_resolution(0.0)
         {}
 
+        Cloud(const Cloud& other) : pcl::PointCloud<PointXYZRGBN>(other){
+            copyFrom(other);
+        }
+
+        Cloud& operator = (const Cloud& other){
+            if (this != &other)
+            {
+                pcl::PointCloud<PointXYZRGBN>::operator=(other);
+                copyFrom(other);
+            }
+            return *this;
+        }
+
         Cloud(const Cloud& cloud, const Indices& indices) :pcl::PointCloud<PointXYZRGBN>(cloud, indices) {}
 
         Cloud& operator+=(const Cloud& rhs)
@@ -259,19 +272,51 @@ namespace ct
          */
         void update(bool box_flag = true, bool type_flag = false, bool resolution_flag = true);
 
-        /*
+        /**
+         * @brief 获取预览点云
+         */
+        Cloud::Ptr getPreviewCloud() const { return m_preview_cloud;}
+
+        /**
+         * @brief 生成预览点云
+         * @param target_points 目标点数（默认500万）
+         */
+        void generatePreview(int target_points = 5000000);
+
+        /**
+         * @brief 设置全局偏移量（加载时设置）
+         */
+        void setGlobalShift(const Eigen::Vector3d& shift) { m_global_shift = shift;}
+
+        /**
+         * @brief 获取全局偏移量
+         */
+        Eigen::Vector3d getGlobalShift() const { return m_global_shift;}
+
+        /**
+         * @brief 获取正式的（全局）坐标点
+         * 将当前的局部坐标加上偏移量，还原为原始坐标
+         */
+        Eigen::Vector3d getGlobalPoint(size_t index) const {
+            if (index >= points.size()) return Eigen::Vector3d::Zero();
+            const auto& p = points[index];
+            // 局部 float 转 double + 全局 double offset
+            return Eigen::Vector3d(p.x, p.y, p.z) + m_global_shift;
+        }
+
+        /**
          * @brief 添加一个标量场
-        */
+        **/
         void addScalarField(const QString& name, const std::vector<float>& data);
 
-        /*
+        /**
          * @brief 获取标量场名称
-        */
+        **/
         QStringList getScalarFieldNames() const { return m_scalar_fields.keys(); };
 
-        /*
+        /**
          * @brief 是否存在某个字段
-        */
+        **/
         bool hasScalarField(const QString& name) const { return m_scalar_fields.contains(name); };
 
         const std::vector<float>* getScalarField(const QString& name) const {
@@ -279,19 +324,19 @@ namespace ct
             return (it != m_scalar_fields.end()) ? &it.value() : nullptr;
         }
 
-        /*
+        /**
          * @brief 颜色映射，根据字段重新计算点云颜色
-        */
+        **/
         void updateColorByField(const QString& field_name);
 
-        /*
+        /**
          * @brief 备份点云颜色
-        */
+        **/
         void backupColors();
 
-        /*
+        /**
          * @brief 恢复点云颜色
-        */
+        **/
         void restoreColors();
 
         std::uint32_t getPointColorForSave(size_t index) const;
@@ -300,6 +345,9 @@ namespace ct
         bool hasRGB() const { return m_has_rgb; }
 
         void removeInvalidPoints();
+
+    private:
+        void copyFrom(const Cloud& other);
 
     private:
         Box m_box;
@@ -325,6 +373,9 @@ namespace ct
         // 静态颜色查找表
         static std::vector<float> s_jet_lut;
         static void initColorTable();
+
+        Cloud::Ptr m_preview_cloud = nullptr; // 存储降采样后的点云
+        Eigen::Vector3d m_global_shift = Eigen::Vector3d::Zero();
     };
 }
 

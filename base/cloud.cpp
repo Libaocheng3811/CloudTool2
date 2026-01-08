@@ -3,6 +3,7 @@
 
 #include <pcl/search/kdtree.h>
 #include <pcl/filters/filter.h>
+#include <random>
 #include <omp.h>
 
 namespace ct
@@ -21,12 +22,12 @@ namespace ct
 
         for (int i = 0; i < table_size; ++i)
         {
-            // 1. 计算当前索引对应的归一化数值 v (0.0 ~ 1.0)
+            // 计算当前索引对应的归一化数值 v (0.0 ~ 1.0)
             float v = (float)i / (float)(table_size - 1);
 
             uint8_t r = 0, g = 0, b = 0;
 
-            // 2. Jet 颜色映射核心逻辑 (4段式)
+            // Jet 颜色映射核心逻辑 (4段式)
             // 这里的 255 是颜色通道的最大值
 
             if (v < 0.25f)
@@ -70,9 +71,6 @@ namespace ct
                 g = (uint8_t)(255.0f * (1.0f - 4.0f * (v - 0.75f)));
                 b = 0;
             }
-
-            // 3. 将 R, G, B 打包成 PCL 所需的 float 格式
-            // PCL 的 points[i].rgb 实际上是一个 float，但在内存中它的二进制位对应 uint32_t 的 0x00RRGGBB
 
             std::uint32_t rgb_packed = ((std::uint32_t)r << 16 | (std::uint32_t)g << 8 | (std::uint32_t)b);
 
@@ -232,6 +230,38 @@ namespace ct
             }
             if (n_points != 0) m_resolution /= n_points;
         }
+
+        if (m_preview_cloud){
+            m_preview_cloud = nullptr;
+            if (size() > 30000000) generatePreview();
+        }
+    }
+
+    void Cloud::generatePreview(int target_points) {
+        // 如果点数本身就很少，不需要预览点云，直接用本身
+        if (size() <= target_points){
+            m_preview_cloud = nullptr;
+            return;
+        }
+
+        // 如果已经生成过且大小差不多，就不重复计算
+        if (m_preview_cloud && m_preview_cloud->size() > 0) return;
+
+        m_preview_cloud.reset(new Cloud);
+
+        // 步长采样，速度快，适合交互预览
+        int step = size() / target_points;
+        if (step < 1) step = 1;
+
+        m_preview_cloud->reserve(target_points + 100);
+
+        m_preview_cloud->setId(m_id + "_preview");
+        m_preview_cloud->setInfo(m_info);
+        m_preview_cloud->setHasRGB(m_has_rgb);
+
+        for (size_t i = 0; i < size(); i += step){
+            m_preview_cloud->push_back(points[i]);
+        }
     }
 
     void Cloud::addScalarField(const QString &name, const std::vector<float> &values)
@@ -365,5 +395,27 @@ namespace ct
             for (int idx : indices) new_data.push_back(old_data[idx]);
             it.value() = std::move(new_data);
         }
+    }
+
+    void Cloud::copyFrom(const ct::Cloud &other) {
+        this->m_box = other.m_box;
+        this->m_id = other.m_id;
+        this->m_box_rgb = other.m_box_rgb;
+        this->m_normals_rgb = other.m_normals_rgb;
+        this->m_type = other.m_type;
+        this->m_info = other.m_info;
+        this->m_point_size = other.m_point_size;
+        this->m_opacity = other.m_opacity;
+        this->m_resolution = other.m_resolution;
+        this->m_min = other.m_min;
+        this->m_max = other.m_max;
+
+        this->m_scalar_fields = other.m_scalar_fields; // QMap 也是值语义，会深拷贝
+        this->m_original_colors = other.m_original_colors; // std::vector 深拷贝
+        this->m_has_backup = other.m_has_backup;
+        this->m_has_rgb = other.m_has_rgb;
+        this->m_color_modified = other.m_color_modified;
+        this->m_global_shift = other.m_global_shift;
+        this->m_preview_cloud = nullptr;
     }
 }
