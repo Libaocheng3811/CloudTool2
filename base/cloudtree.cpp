@@ -51,7 +51,7 @@ namespace ct
         connect(m_fileio, &FileIO::requestFieldMapping, this, &CloudTree::onFieldMappingRequested, Qt::BlockingQueuedConnection);
         connect(m_fileio, &FileIO::requestTxtImportSetup, this, &CloudTree::onTxtImportRequested, Qt::BlockingQueuedConnection);
         connect(m_fileio, &FileIO::requestTxtExportSetup, this, &CloudTree::onTxtExportRequested, Qt::BlockingQueuedConnection);
-
+        connect(m_fileio, &FileIO::requestGlobalShift, this, &CloudTree::onGlobalFilterRequested, Qt::BlockingQueuedConnection);
         // 设置窗口部件接受拖放操作
         this->setAcceptDrops(true);
 
@@ -583,6 +583,20 @@ namespace ct
         }
         else{
             params.selected_fields.clear(); //标志取消
+        }
+    }
+
+    void CloudTree::onGlobalFilterRequested(const Eigen::Vector3d &min_pt, Eigen::Vector3d &suggested_shift,
+                                            bool &skipped) {
+        GlobalShiftDialog dlg(min_pt, suggested_shift, this->window());
+
+        if (dlg.exec() == QDialog::Accepted){
+            suggested_shift = dlg.getShiftValue();
+            skipped = false;
+        }
+        else{
+            skipped = dlg.isSkipped();
+            if (!skipped && dlg.result() == QDialog::Rejected) skipped = true;
         }
     }
 }

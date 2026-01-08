@@ -59,6 +59,14 @@ namespace ct
           */
          void progress(int percent);
 
+         /**
+          * @brief 请求全局偏移设置
+          * @param bounding_min 原始数据的最小点 (用于显示)
+          * @param suggested_shift 建议的偏移值
+          * @param is_skipped 用户是否选择跳过大坐标偏移，使用大坐标显示
+          */
+         void requestGlobalShift(const Eigen::Vector3d& bounding_min, Eigen::Vector3d& suggested_shift, bool& is_skipped);
+
     public slots:
         /**
          * @brief 加载点云文件

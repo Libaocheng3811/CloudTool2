@@ -6,6 +6,7 @@ set(LibSrcs
         console.cpp
         customtree.cpp
         fileio.cpp
+        globalshiftdialog.cpp
         )
 
 set(LibHdrs
@@ -23,6 +24,7 @@ set(LibHdrs
         txtimportdialog.h
         txtexportdialog.h
         processingdialog.h
+        globalshiftdialog.h
         )
 
 find_package(VTK COMPONENTS

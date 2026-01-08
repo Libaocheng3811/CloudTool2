@@ -296,6 +296,9 @@ namespace ct
         /**
          * @brief 获取正式的（全局）坐标点
          * 将当前的局部坐标加上偏移量，还原为原始坐标
+         * 内存坐标 (Local) = 原始坐标 (Global) + Shift (负数)。
+         * m_global_shift 存储的是 Origin = -Shift (正数)。
+         * 所以：Global = Local + Origin。
          */
         Eigen::Vector3d getGlobalPoint(size_t index) const {
             if (index >= points.size()) return Eigen::Vector3d::Zero();

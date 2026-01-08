@@ -3,6 +3,7 @@
 
 #include "base/customtree.h"
 #include "base/processingdialog.h"
+#include "base/globalshiftdialog.h"
 #include "fileio.h"
 
 #include <QMenu>
@@ -219,6 +220,14 @@ namespace ct
          void onTxtImportRequested(const QStringList& preview_lines, ct::TxtImportParams& params);
 
          void onTxtExportRequested(const QStringList& available_fields, ct::TxtExportParams& params);
+
+        /**
+        * @brief 请求全局偏移设置 (阻塞式信号)
+        * @param bounding_min 原始数据的最小点 (用于显示)
+        * @param shift_suggest 建议的 Shift 值 (输入/输出)
+        * @param is_skipped 用户是否点击了 No (跳过 Shift)
+        */
+         void onGlobalFilterRequested(const Eigen::Vector3d& min_pt, Eigen::Vector3d& suggested_shift, bool& skipped);
 
 
     private:

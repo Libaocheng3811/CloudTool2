@@ -8,6 +8,7 @@
 #include "pcl/io/obj_io.h"
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/conversions.h>
+#include <pcl/common/common.h>
 
 #include "lasreader.hpp"
 #include "laswriter.hpp"
@@ -79,39 +80,41 @@ namespace ct
         }
 
         if (!cloud->empty() && cloud->getGlobalShift() == Eigen::Vector3d::Zero()){
-            const auto& p0 = cloud->points[0];
+            PointXYZRGBN min_pt, max_pt;
+            pcl::getMinMax3D(*cloud, min_pt, max_pt);
 
+            std::cout << std::fixed << std::setprecision(4) << min_pt.x << " " << min_pt.y << " " << min_pt.z << std::endl;
+            std::cout << std::fixed << std::setprecision(4) << max_pt.x << " " << max_pt.y << " " << max_pt.z << std::endl;
             const double THRESHOLD_XY = 10000.0; // XY 超过 1万 才移
-            const double THRESHOLD_Z = 1000.0; // Z 超过 10万 才移 (通常高程不动)
+            const double THRESHOLD_Z = 100000.0; // Z 超过 10万 才移 (通常高程不动)
 
-            double shift_x = 0.0;
-            double shift_y = 0.0;
-            double shift_z = 0.0;
-            bool need_shift = false;
-
-            if (std::abs(p0.x) > THRESHOLD_XY){
-                shift_x = std::floor(p0.x / 1000.0) * 1000.0;
-                need_shift = true;
-            }
-            if (std::abs(p0.y) > THRESHOLD_XY){
-                shift_y = std::floor(p0.y / 1000.0) * 1000.0;
-                need_shift = true;
-            }
-            if (std::abs(p0.z) > THRESHOLD_Z){
-                shift_z = std::floor(p0.z / 10000.0) * 10000.0;
-                need_shift = true;
-            }
+            bool need_shift =
+                    std::abs(min_pt.x) > THRESHOLD_XY || std::abs(max_pt.x) > THRESHOLD_XY ||
+                    std::abs(min_pt.y) > THRESHOLD_XY || std::abs(max_pt.y) > THRESHOLD_XY ||
+                    std::abs(min_pt.z) > THRESHOLD_Z || std::abs(max_pt.z) > THRESHOLD_Z;
 
             if (need_shift){
-                Eigen::Vector3d shift(shift_x, shift_y, shift_z);
-                cloud->setGlobalShift(shift);
+                double shift_x = (std::abs(min_pt.x) > THRESHOLD_XY) ? -std::floor(min_pt.x / 1000.0) * 1000.0 : 0.0;
+                double shift_y = (std::abs(min_pt.y) > THRESHOLD_XY) ? -std::floor(min_pt.y / 1000.0) * 1000.0 : 0.0;
+                double shift_z = (std::abs(min_pt.z) > THRESHOLD_Z) ? -std::floor(min_pt.z / 1000.0) * 1000.0 : 0.0;
 
-                size_t n = cloud->size();
-                #pragma omp parallel for
-                for (int i = 0; i < static_cast<int>(n); i++){
-                    cloud->points[i].x -= static_cast<float>(shift_x);
-                    cloud->points[i].y -= static_cast<float>(shift_y);
-                    cloud->points[i].z -= static_cast<float>(shift_z);
+                Eigen::Vector3d suggested_shift(shift_x, shift_y, shift_z);
+                Eigen::Vector3d min_vec(min_pt.x, min_pt.y, min_pt.z);
+                bool is_skipped = false;
+
+                emit requestGlobalShift(min_vec, suggested_shift, is_skipped);
+
+                if (!is_skipped){
+                    // Cloud 对象存储的是 Origin = -Shift
+                    cloud->setGlobalShift(-suggested_shift);
+
+                    size_t n = cloud->size();
+                    #pragma omp parallel for
+                    for (int i = 0; i < n; i++){
+                        cloud->points[i].x += static_cast<float>(suggested_shift.x());
+                        cloud->points[i].y += static_cast<float>(suggested_shift.y());
+                        cloud->points[i].z += static_cast<float>(suggested_shift.z());
+                    }
                 }
             }
         }

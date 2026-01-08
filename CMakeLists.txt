@@ -78,7 +78,6 @@ else ()
     message(STATUS "Not found OpenMP")
 endif ()
 
-# qt
 # QT 是你为找到的 Qt 包指定的别名
 set(CMAKE_PREFIX_PATH
     "D:/LibCommunity/Qt5.15/5.15.2/msvc2019_64"
@@ -159,6 +158,7 @@ add_definitions(-DDATA_PATH="${PROJECT_SOURCE_DIR}/data/")
 
 add_subdirectory(3rdparty/LASTools)
 add_subdirectory(3rdparty/CSF)
+#add_subdirectory(ui)
 add_subdirectory(base)
 add_subdirectory(cloudtool)
 add_subdirectory(modules)

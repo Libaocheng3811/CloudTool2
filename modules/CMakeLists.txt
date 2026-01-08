@@ -15,8 +15,6 @@ set(LibHdrs
         vegfilter.h
         utils.h)
 
-
-
 add_library(ct_modules SHARED ${LibSrcs} ${LibHdrs})
 
 target_compile_options(ct_modules PRIVATE /bigobj)
