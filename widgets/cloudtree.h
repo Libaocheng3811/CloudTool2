@@ -1,10 +1,10 @@
 #ifndef CLOUDTOOL2_CLOUDTREE_H
 #define CLOUDTOOL2_CLOUDTREE_H
 
-#include "base/customtree.h"
-#include "base/processingdialog.h"
-#include "base/globalshiftdialog.h"
-#include "fileio.h"
+#include "customtree.h"
+#include "common_ui/processingdialog.h"
+#include "common_ui/globalshiftdialog.h"
+#include "core/fileio.h"
 
 #include <QMenu>
 #include <QInputDialog>
@@ -15,7 +15,7 @@
 
 namespace ct
 {
-    class CT_EXPORT CloudTree : public CustomTree
+    class CloudTree : public CustomTree
     {
     Q_OBJECT
     public:

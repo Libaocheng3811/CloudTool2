@@ -1,4 +1,4 @@
-#include "base/cloudview.h"
+#include "cloudview.h"
 
 #include <vtkAutoInit.h>
 // VTK_MODULE_INIT 宏用于初始化 VTK 模块
@@ -7,14 +7,14 @@ VTK_MODULE_INIT(vtkInteractionStyle)
 VTK_MODULE_INIT(vtkRenderingVolumeOpenGL2)
 VTK_MODULE_INIT(vtkRenderingFreeType)
 
-#include "pcl/geometry/planar_polygon.h"
-#include "vtkAxesActor.h"
-#include "vtkPointPicker.h"
+#include <pcl/geometry/planar_polygon.h>
+#include <vtkAxesActor.h>
+#include <vtkPointPicker.h>
 #include <vtkCamera.h>
 
-#include "QDropEvent"
-#include "QMimeData"
-#include "QUrl"
+#include <QDropEvent>
+#include <QMimeData>
+#include <QUrl>
 
 #include <cmath>
 #define INFO_CLOUD_ID  "info_cloud_id"

@@ -5,8 +5,8 @@
 #ifndef CLOUDTOOL2_REGISTRATION_H
 #define CLOUDTOOL2_REGISTRATION_H
 
-#include "base/customdock.h"
-#include "base/common.h"
+#include "widgets/customdock.h"
+#include "core/common.h"
 #include "modules/registration.h"
 #include "cloudtool/tool/descriptor.h"
 

@@ -5,8 +5,8 @@
 #ifndef CLOUDTOOL2_VEGFILTER_H
 #define CLOUDTOOL2_VEGFILTER_H
 
-#include "base/cloud.h"
-#include "base/exports.h"
+#include "core/cloud.h"
+#include "core/exports.h"
 
 #include <QObject>
 

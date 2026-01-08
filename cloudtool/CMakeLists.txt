@@ -46,5 +46,5 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug")
         set(DEBUG_SUFFIX "d")
 endif ()
 
-target_link_libraries(cloudtool PRIVATE ct_base ct_modules)
+target_link_libraries(cloudtool PRIVATE ct_core ct_widget ct_modules)
 target_link_libraries(cloudtool PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${VTK_LIBRARIES} ${PCL_LIBRARIES})

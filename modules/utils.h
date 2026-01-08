@@ -5,7 +5,7 @@
 #ifndef CLOUDTOOL2_UTILS_H
 #define CLOUDTOOL2_UTILS_H
 
-#include "base/cloud.h"
+#include "core/cloud.h"
 #include <vector>
 
 namespace ct{

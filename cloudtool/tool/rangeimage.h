@@ -5,7 +5,7 @@
 #ifndef CLOUDTOOL2_RANGEIMAGE_H
 #define CLOUDTOOL2_RANGEIMAGE_H
 
-#include "base/customdialog.h"
+#include "widgets/customdialog.h"
 
 #include "modules/keypoints.h"
 

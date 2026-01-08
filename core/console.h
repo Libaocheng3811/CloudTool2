@@ -1,7 +1,7 @@
 #ifndef CLOUDTOOL2_CONSOLE_H
 #define CLOUDTOOL2_CONSOLE_H
 
-#include "base/exports.h"
+#include "exports.h"
 
 #include <QTextbrowser>
 

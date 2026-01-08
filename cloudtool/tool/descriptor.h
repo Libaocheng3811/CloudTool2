@@ -5,7 +5,7 @@
 #ifndef CLOUDTOOL2_DESCRIPTOR_H
 #define CLOUDTOOL2_DESCRIPTOR_H
 
-#include "base/customdock.h"
+#include "widgets/customdock.h"
 
 #include "modules/features.h"
 

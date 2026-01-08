@@ -9,8 +9,8 @@
 
 #include "ui_mainwindow.h"
 
-#include "base/customdialog.h"
-#include "base/customdock.h"
+#include "widgets/customdialog.h"
+#include "widgets/customdock.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui

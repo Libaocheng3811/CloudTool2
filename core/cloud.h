@@ -1,11 +1,11 @@
 #ifndef CLOUDTOOL2_CLOUD_H
 #define CLOUDTOOL2_CLOUD_H
 
-#include "base/exports.h"
+#include "exports.h"
 
-#include "pcl/point_cloud.h"
-#include "pcl/point_types.h"
-#include "pcl/console/time.h"
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/console/time.h>
 
 #include <QFileInfo>
 #include <QString>

@@ -1,5 +1,5 @@
-#include "base/cloud.h"
-#include "base/common.h"
+#include "cloud.h"
+#include "common.h"
 
 #include <pcl/search/kdtree.h>
 #include <pcl/filters/filter.h>

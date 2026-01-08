@@ -1,20 +1,14 @@
 #ifndef CLOUDTOOL2_FILEIO_H
 #define CLOUDTOOL2_FILEIO_H
 
-#include "base/cloud.h"
-#include "base/exports.h"
-#include "base/txtimportdialog.h"
-#include "base/txtexportdialog.h"
+#include "cloud.h"
+#include "common.h"
+#include "exports.h"
 
 #include <atomic>
 
 namespace ct
 {
-    struct FieldInfo{
-        QString name;
-        QString type;
-    };
-
     class CT_EXPORT FileIO : public QObject
     {
         Q_OBJECT

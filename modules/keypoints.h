@@ -7,7 +7,7 @@
 
 #include <QObject>
 
-#include "base/cloud.h"
+#include "core/cloud.h"
 
 #include <pcl/range_image/range_image.h>
 #include <pcl/features/range_image_border_extractor.h>

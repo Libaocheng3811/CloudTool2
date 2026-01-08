@@ -20,7 +20,7 @@ add_library(ct_modules SHARED ${LibSrcs} ${LibHdrs})
 target_compile_options(ct_modules PRIVATE /bigobj)
 
 # 在 CMake 中，Target（目标）的名字是全局可见的逻辑名称，而不是物理文件路径，并不是一个文件名，而是一个全局对象名
-target_link_libraries(ct_modules PRIVATE ct_base CSF_Lib)
+target_link_libraries(ct_modules PRIVATE ct_core CSF_Lib)
 target_link_libraries(ct_modules PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${PCL_LIBRARIES} ${VTK_LIBRARIES})
 
 # 在 CMake 构建过程中为 t_modules 库定义一个预处理宏。

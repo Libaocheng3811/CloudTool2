@@ -5,8 +5,8 @@
 #ifndef MODULES_FILTERS_H
 #define MODULES_FILTERS_H
 
-#include "base/exports.h"
-#include "base/cloud.h"
+#include "core/exports.h"
+#include "core/cloud.h"
 
 #include <QObject>
 

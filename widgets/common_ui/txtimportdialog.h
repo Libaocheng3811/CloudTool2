@@ -5,6 +5,8 @@
 #ifndef CLOUDTOOL2_TXTIMPORTDIALOG_H
 #define CLOUDTOOL2_TXTIMPORTDIALOG_H
 
+#include "core/common.h"
+
 #include <QDialog>
 #include <QTableWidget>
 #include <QComboBox>
@@ -20,13 +22,6 @@
 #include <QTextStream>
 
 namespace ct{
-    // 配置参数
-    struct TxtImportParams{
-        int skip_lines = 0; // 跳过行数
-        char separator = ' ';
-        QMap<int, QString> col_map; // 列索引->属性名
-    };
-
     class TxtImportDialog : public QDialog{
         Q_OBJECT
         public:

@@ -4,7 +4,7 @@
 
 // You may need to build the project (run Qt uic code generator) to get "ui_globalshiftdialog.h" resolved
 
-#include "base/globalshiftdialog.h"
+#include "globalshiftdialog.h"
 
 #include <utility>
 #include "ui_globalshiftdialog.h"

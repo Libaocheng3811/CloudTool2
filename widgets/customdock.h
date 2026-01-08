@@ -1,10 +1,11 @@
 #ifndef CLOUDTOOL2_CUSTOMDOCK_H
 #define CLOUDTOOL2_CUSTOMDOCK_H
 
-#include "base/cloudtree.h"
-#include "base/cloudview.h"
-#include "base/console.h"
-#include "base/exports.h"
+#include "cloudtree.h"
+
+#include "core/cloudview.h"
+#include "core/console.h"
+#include "core/exports.h"
 
 #include <QDockWidget>
 #include <QMainWindow>
@@ -14,7 +15,7 @@
 
 namespace ct
 {
-    class CT_EXPORT CustomDock : public QDockWidget
+    class CustomDock : public QDockWidget
     {
         Q_OBJECT
     public:

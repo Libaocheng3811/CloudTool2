@@ -1,7 +1,7 @@
 #ifndef CLOUDTOOL2_COMMON_H
 #define CLOUDTOOL2_COMMON_H
 
-#include "base/exports.h"
+#include "exports.h"
 
 #include <pcl/common/common.h>
 #include <pcl/common/io.h>
@@ -10,9 +10,38 @@
 #include <pcl/common/transforms.h>
 
 #include <QString>
+#include <QMap>
+#include <QStringList>
 
 namespace ct
 {
+    // 字段映射信息结构
+    struct FieldInfo {
+        QString name;
+        QString type; // int, float, uint8 etc.
+    };
+
+    // 字段映射映射结果
+    struct MappingResult {
+        // Key: 文件中的字段名, Value: 映射的目标 (如 "Ignore", "Scalar Field", "Red", "Intensity"...)
+        QMap<QString, QString> field_map;
+    };
+
+    //txt格式点云导出配置
+    struct TxtExportParams{
+        bool has_header = false; // 是否有表头
+        char separator = ' '; // 分隔符,默认空格
+        int precision = 6; //小数精度
+        QStringList selected_fields; // 选择导出的字段(按顺序)
+    };
+
+    // TXT格式点云导入配置参数
+    struct TxtImportParams{
+        int skip_lines = 0; // 跳过行数
+        char separator = ' ';
+        QMap<int, QString> col_map; // 列索引->属性名
+    };
+
     /**
      * @brief 将颜色从HSV格式转换为RGB格式
      * 在HSV模型中，颜色是通过三个分量表示的：色调（Hue），饱和度（Saturation）和明度（Value）

@@ -5,8 +5,8 @@
 #ifndef CLOUDTOOL2_PICKPOINTS_H
 #define CLOUDTOOL2_PICKPOINTS_H
 
-#include "base/customdialog.h"
-#include "base/common.h"
+#include "widgets/customdialog.h"
+#include "core/common.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui

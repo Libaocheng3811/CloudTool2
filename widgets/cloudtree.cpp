@@ -1,7 +1,10 @@
-#include "base/cloudtree.h"
-#include "base/fieldmappingdialog.h"
-#include "base/txtimportdialog.h"
-#include "base/txtexportdialog.h"
+#include "cloudtree.h"
+
+#include "core/common.h"
+
+#include "common_ui/fieldmappingdialog.h"
+#include "common_ui/txtimportdialog.h"
+#include "common_ui/txtexportdialog.h"
 
 #include <QCheckBox>
 #include <QFileDialog>
@@ -559,7 +562,7 @@ namespace ct
         FieldMappingDialog dlg(fields, this);
         if (dlg.exec() == QDialog::Accepted) {
             // 用户点击 OK，获取结果
-            FieldMappingDialog::MappingResult res = dlg.getMapping();
+            ct::MappingResult res = dlg.getMapping();
             result = res.field_map;
         } else {
             // 用户取消，返回空结果

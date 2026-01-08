@@ -5,7 +5,7 @@
 #ifndef TOOL_FILTERS_H
 #define TOOL_FILTERS_H
 
-#include "base/customdock.h"
+#include "widgets/customdock.h"
 #include "modules/filters.h"
 #include <QThread>
 

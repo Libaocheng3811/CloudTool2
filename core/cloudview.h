@@ -1,14 +1,14 @@
 #ifndef CLOUDTOOL2_CLOUDVIEW_H
 #define CLOUDTOOL2_CLOUDVIEW_H
 
-#include "base/cloud.h"
-#include "base/exports.h"
+#include "cloud.h"
+#include "exports.h"
 
 #include "QVTKOpenGLNativeWidget.h"
-#include "pcl/visualization/pcl_visualizer.h"
-#include "pcl/range_image/range_image.h"
-#include "vtkGenericOpenGLRenderWindow.h"
-#include "vtkOrientationMarkerWidget.h"
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/range_image/range_image.h>
+#include <vtkGenericOpenGLRenderWindow.h>
+#include <vtkOrientationMarkerWidget.h>
 
 namespace ct {
 

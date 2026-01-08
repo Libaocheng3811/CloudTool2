@@ -5,8 +5,8 @@
 #ifndef CLOUDTOOL2_CSFFILTER_H
 #define CLOUDTOOL2_CSFFILTER_H
 
-#include "base/exports.h"
-#include "base/cloud.h"
+#include "core/exports.h"
+#include "core/cloud.h"
 
 #include <QObject>
 

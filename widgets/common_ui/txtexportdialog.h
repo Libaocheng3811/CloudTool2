@@ -5,6 +5,8 @@
 #ifndef CLOUDTOOL2_TXTEXPORTDIALOG_H
 #define CLOUDTOOL2_TXTEXPORTDIALOG_H
 
+#include "core/common.h"
+
 #include <QDialog>
 #include <QCheckBox>
 #include <QComboBox>
@@ -19,14 +21,6 @@
 #include <QGroupBox>
 
 namespace ct{
-    //导出配置
-    struct TxtExportParams{
-        bool has_header = false; // 是否有表头
-        char separator = ' '; // 分隔符,默认空格
-        int precision = 6; //小数精度
-        QStringList selected_fields; // 选择导出的字段(按顺序)
-    };
-
     class TxtExportDialog : public QDialog {
         Q_OBJECT
     public:

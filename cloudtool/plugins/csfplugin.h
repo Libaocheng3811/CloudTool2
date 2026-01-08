@@ -8,7 +8,7 @@
 #include <QDialog>
 #include <QThread>
 
-#include "base/customdialog.h"
+#include "widgets/customdialog.h"
 #include "modules/csffilter.h"
 
 

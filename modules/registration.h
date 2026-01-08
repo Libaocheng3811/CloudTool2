@@ -5,8 +5,8 @@
 #ifndef MODULES_REGISTRATION_H
 #define MODULES_REGISTRATION_H
 
-#include "base/cloud.h"
-#include "base/exports.h"
+#include "core/cloud.h"
+#include "core/exports.h"
 #include "modules/features.h"
 
 #include <pcl/registration/correspondence_estimation.h>

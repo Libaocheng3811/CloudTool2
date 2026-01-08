@@ -6,7 +6,7 @@
 #define CLOUDTOOL2_CUTTING_H
 
 #include <QDialog>
-#include "base/customdialog.h"
+#include "widgets/customdialog.h"
 
 
 QT_BEGIN_NAMESPACE

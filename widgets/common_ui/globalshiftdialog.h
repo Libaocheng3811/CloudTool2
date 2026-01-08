@@ -5,7 +5,6 @@
 #ifndef CLOUDTOOL2_GLOBALSHIFTDIALOG_H
 #define CLOUDTOOL2_GLOBALSHIFTDIALOG_H
 
-#include "base/exports.h"
 #include <Eigen/Dense>
 #include <QDialog>
 

@@ -6,7 +6,7 @@
 
 #include "boundingbox.h"
 
-#include "base/common.h"
+#include "core/common.h"
 #include "modules/features.h"
 
 #include "ui_BoundingBox.h"

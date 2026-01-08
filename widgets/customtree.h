@@ -1,10 +1,9 @@
 #ifndef CLOUDTOOL2_CUSTORMTREE_H
 #define CLOUDTOOL2_CUSTORMTREE_H
 
-#include "base/exports.h"
-
-#include "base/cloudview.h"
-#include "base/console.h"
+#include "core/exports.h"
+#include "core/cloudview.h"
+#include "core/console.h"
 
 #include <QTreeWidget>
 #include <QTableWidget>
@@ -45,7 +44,7 @@ namespace ct
         int col = -1;
     };
 
-    class CT_EXPORT CustomTree : public QTreeWidget
+    class CustomTree : public QTreeWidget
     {
         Q_OBJECT
     public:

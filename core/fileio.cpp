@@ -1,5 +1,4 @@
-#include "base/fileio.h"
-#include "base/fieldmappingdialog.h"
+#include "fileio.h"
 
 #include "pcl/filters/filter.h"
 #include "pcl/io/pcd_io.h"

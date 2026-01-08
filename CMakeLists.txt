@@ -6,22 +6,33 @@ if (POLICY CMP0074)
     cmake_policy(SET CMP0074 NEW)
 endif ()
 
+set(CMAKE_CXX_STANDARD 17)
+SET(CMAKE_CXX_STANDARD_REQUIRED ON)
+SET(CMAKE_CXX_EXTENSIONS OFF)
+
 # 启用 Qt 的自动处理功能
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
     set(CMAKE_BUILD_TYPE Release)
 endif ()
 
+# Debug 版本库后缀 "d" (例如 ct_cored.lib)
 set(CMAKE_DEBUG_POSTFIX "d")
 
+# 统一输出目录，无论 Debug 还是 Release，都输出到统一的 bin 和 lib 目录
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib) # .lib (static)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin) # .dll
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin) # .exe
+
+foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
+    string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${CMAKE_BINARY_DIR}/lib)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${CMAKE_BINARY_DIR}/bin)
+endforeach()
 
 if (MSVC)
     # 设置 默认C++ 编译器标志
@@ -78,10 +89,8 @@ else ()
     message(STATUS "Not found OpenMP")
 endif ()
 
-# QT 是你为找到的 Qt 包指定的别名
-set(CMAKE_PREFIX_PATH
-    "D:/LibCommunity/Qt5.15/5.15.2/msvc2019_64"
-)
+# QT路径
+#set(CMAKE_PREFIX_PATH "D:/LibCommunity/Qt5.15/5.15.2/msvc2019_64")
 
 find_package(QT NAMES Qt5 COMPONENTS Core Widgets OpenGL Gui REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
@@ -91,7 +100,6 @@ if (QT_FOUND)
     message(STATUS "Qt5_DIR = ${Qt5_DIR}")
     message(STATUS "Qt5Widgets_DIR = ${Qt5Widgets_DIR}")
     message(STATUS "Qt5Core_DIR = ${Qt5Core_DIR}")
-
 else ()
     message(STATUS "Qt5 is not found.")
 endif ()
@@ -99,7 +107,6 @@ endif ()
 # vtk
 find_package(VTK REQUIRED)
 if (VTK_FOUND)
-    include(${VTK_USE_FILE})
     message(STATUS "Found VTK version: ${VTK_VERSION}.")
 else ()
     message(STATUS "VTK is not found.") 
@@ -107,9 +114,7 @@ endif ()
 
 # pcl
 find_package(PCL REQUIRED)
-
 if (PCL_FOUND)
-    # include_directories命令专门用于添加头文件搜索路径
     include_directories(${PCL_INCLUDE_DIRS})
     link_directories(${PCL_LIBRARY_DIRS})
     add_definitions(${PCL_DEFINITIONS})
@@ -119,11 +124,6 @@ else ()
 endif ()
 
 find_package(OpenMP REQUIRED)
-
-# 2. 配置编译选项：仅编译静态库，不编译工具
-set(LASZIP_BUILD_STATIC ON CACHE BOOL "Build static laszip" FORCE)
-set(LASLIB_BUILD_STATIC ON CACHE BOOL "Build static laslib" FORCE)
-set(BUILD_TOOLS OFF CACHE BOOL "Build tools" FORCE)
 
 # camera sdk
 # 1. Azure Kinect
@@ -147,18 +147,20 @@ endif()
 message(STATUS "Build Type: " ${CMAKE_BUILD_TYPE})
 
 include_directories(${PROJECT_SOURCE_DIR})
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
-set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
-set(CMAKE_INSTALL_PREFIX ${PROJECT_SOURCE_DIR}/install)
 
 # add_definitions 命令用于向编译器添加编译选项或定义宏
+file(TO_CMAKE_PATH "${PROJECT_SOURCE_DIR}" PROJECT_ROOT_PATH)
 add_definitions(-DROOT_PATH="${PROJECT_SOURCE_DIR}")
 add_definitions(-DDATA_PATH="${PROJECT_SOURCE_DIR}/data/")
 
+# 3rdParty 编译选项
+set(LASZIP_BUILD_STATIC ON CACHE BOOL "Build static laszip" FORCE)
+set(LASLIB_BUILD_STATIC ON CACHE BOOL "Build static laslib" FORCE)
+set(BUILD_TOOLS OFF CACHE BOOL "Build tools" FORCE)
+
 add_subdirectory(3rdparty/LASTools)
 add_subdirectory(3rdparty/CSF)
-#add_subdirectory(ui)
-add_subdirectory(base)
-add_subdirectory(cloudtool)
+add_subdirectory(core)
+add_subdirectory(widgets)
 add_subdirectory(modules)
+add_subdirectory(cloudtool)
