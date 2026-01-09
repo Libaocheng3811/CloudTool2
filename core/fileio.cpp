@@ -53,6 +53,9 @@ namespace ct
     void FileIO::loadPointCloud(const QString &filename) {
         TicToc time;
         time.tic();
+        m_is_canceled = false;
+        emit progress(0);
+
         Cloud::Ptr cloud(new Cloud);
         QFileInfo fileInfo(filename);
         QString suffix = fileInfo.suffix().toLower();
@@ -73,11 +76,12 @@ namespace ct
         }
 
         // 失败处理
-        if (!is_success){
+        if (!is_success || m_is_canceled){
             emit loadCloudResult(false, cloud, time.toc());
             return;
         }
 
+        /*
         if (!cloud->empty() && cloud->getGlobalShift() == Eigen::Vector3d::Zero()){
             PointXYZRGBN min_pt, max_pt;
             pcl::getMinMax3D(*cloud, min_pt, max_pt);
@@ -117,6 +121,9 @@ namespace ct
                 }
             }
         }
+        */
+        if (m_is_canceled) return;
+        emit progress(90);
 
         //后处理
         if (!cloud->is_dense){
@@ -127,8 +134,22 @@ namespace ct
         cloud->setInfo(fileInfo);
         cloud->update(); //更新包围盒，统计信息
 
+        if (m_is_canceled) return;
+        emit progress(92);
+
         //备份颜色
         cloud->backupColors();
+
+        if (m_is_canceled) return;
+        emit progress(95);
+
+        // 预览点云生成
+        if (cloud->size() > 30000000){
+            cloud->generatePreview();
+        }
+
+        if (m_is_canceled) return;
+        emit progress(100);
 
         emit loadCloudResult(true, cloud, time.toc());
     }
@@ -178,14 +199,45 @@ namespace ct
     }
 
     bool FileIO::loadLAS(const QString &filename, Cloud::Ptr &cloud) {
-        m_is_canceled = false;
-        emit progress(0);
-
         LASreadOpener lasreadopener;
         lasreadopener.set_file_name(filename.toLocal8Bit().constData());
         LASreader* lasreader = lasreadopener.open();
-
         if (!lasreader) return false;
+
+        Eigen::Vector3d header_offset(lasreader->header.x_offset, lasreader->header.y_offset, lasreader->header.z_offset);
+        Eigen::Vector3d first_point(0,0,0);
+
+        bool has_first_point = lasreader->read_point();
+        if (has_first_point){
+            first_point = Eigen::Vector3d(lasreader->point.get_x(), lasreader->point.get_y(), lasreader->point.get_z());
+        }
+        else {
+            lasreader->close();
+            delete lasreader;
+            return false;
+        }
+
+        const double THRESHOLD_XY = 10000.0;
+        const double THRESHOLD_Z = 100000.0;
+        bool is_large = std::abs(first_point.x()) > THRESHOLD_XY || std::abs(first_point.y()) > THRESHOLD_XY ||
+                        std::abs(header_offset.x()) > THRESHOLD_XY || std::abs(header_offset.y()) > THRESHOLD_XY ||
+                        std::abs(first_point.z()) > THRESHOLD_Z || std::abs(header_offset.z()) > THRESHOLD_Z;
+
+        if (is_large){
+            double shift_x = (std::abs(first_point.x()) > THRESHOLD_XY) ? -std::floor(first_point.x() / 1000.0) * 1000.0 : 0.0;
+            double shift_y = (std::abs(first_point.y()) > THRESHOLD_XY) ? -std::floor(first_point.y() / 1000.0) * 1000.0 : 0.0;
+            double shift_z = (std::abs(first_point.z()) > THRESHOLD_Z) ? -std::floor(first_point.z() / 1000.0) * 1000.0 : 0.0;
+
+            Eigen::Vector3d suggested_shift(shift_x, shift_y, shift_z);
+            bool skipped = false;
+
+            emit requestGlobalShift(first_point, suggested_shift, skipped);
+
+            if (!skipped){
+                cloud->setGlobalShift(-suggested_shift);
+            }
+        }
+        emit progress(5);
 
         // 判断颜色
         int fmt = lasreader->header.point_data_format;
@@ -199,8 +251,41 @@ namespace ct
             intensities.reserve(lasreader->npoints);
         }
 
+        Eigen::Vector3d shift = -cloud->getGlobalShift();
+        bool has_shift = (shift != Eigen::Vector3d::Zero());
+        float shiftX = static_cast<float>(shift.x());
+        float shiftY = static_cast<float>(shift.y());
+        float shiftZ = static_cast<float>(shift.z());
+
+        // 存入读取的第0个点
+        {
+            PointXYZRGBN  p0;
+            p0.x = first_point.x();
+            p0.y = first_point.y();
+            p0.z = first_point.z();
+            if (has_shift){
+                p0.x += shiftX;
+                p0.y += shiftY;
+                p0.z += shiftZ;
+            }
+
+            uint8_t r = 0, g = 0, b = 0;
+            if (has_color) {
+                r = lasreader->point.rgb[0] >>8;
+                g = lasreader->point.rgb[1] >>8;
+                b = lasreader->point.rgb[2] >>8;
+            }
+            std::uint32_t  rgb_val = ((std::uint32_t)r << 16 | (std::uint32_t)g << 8 | (std::uint32_t)b);
+            p0.rgb = *reinterpret_cast<float*>(&rgb_val);
+
+            intensities.push_back(static_cast<float>(lasreader->point.get_intensity()));
+
+            cloud->push_back(p0);
+        }
+
         long long total_points = lasreader->npoints;
-        long long current_point = 0;
+        long long current_point = 1;
+        long long step = (total_points > 100) ? (total_points / 100) : 1;
 
         while (lasreader->read_point())
         {
@@ -211,16 +296,23 @@ namespace ct
                 return false;
             }
 
-            //进度更新,每读取2%更新一次
             current_point++;
-            if (total_points > 0 && current_point % (total_points / 50 + 1) == 0){
-                emit progress((int)(current_point * 100 / total_points));
+            // 进度条映射到5-90范围
+            if (total_points > 0 && current_point % step == 0){
+                int p = 5 + (int)(current_point * 85 / total_points);
+                emit progress(p);
             }
 
             PointXYZRGBN p;
             p.x = lasreader->point.get_x();
             p.y = lasreader->point.get_y();
             p.z = lasreader->point.get_z();
+
+            if(has_shift) {
+                p.x += shiftX;
+                p.y += shiftY;
+                p.z += shiftZ;
+            }
 
             uint8_t r = 0, g = 0, b = 0;
             if (has_color) {
@@ -242,19 +334,13 @@ namespace ct
 
         lasreader->close();
         delete lasreader;
-
         // LAS 通常是 dense 的，除非有点在无穷远，这里设为 true
         cloud->is_dense = true;
-
-        emit progress(100);
 
         return true;
     }
 
     bool FileIO::loadPLY_PCD(const QString &filename, Cloud::Ptr &cloud) {
-        m_is_canceled = false;
-        emit progress(0);
-
         // 注意：pcl::io::loadPLYFile 这是一个阻塞函数，PCL内部不支持进度回调。
         // 所以加载 Blob 的阶段，进度条只能卡在 0 或者给一个假进度 (或者设为繁忙模式)。
         // 只有到了后面的“手动提取”阶段，我们才能控制进度。
@@ -268,8 +354,6 @@ namespace ct
 
         if (res == -1) return false;
 
-        emit progress(20);
-
         // 准备字段信息
         QList<ct::FieldInfo> fields_info;
         for (const auto &f: blob.fields) {
@@ -282,13 +366,52 @@ namespace ct
 
         if (mapping_result.isEmpty()) return false; // 用户取消
 
+        Eigen::Vector3d first_point(0, 0, 0);
+        bool found_xyz = false;
+
+        int x_off = -1, y_off = -1, z_off = -1;
+        for (const auto& f : blob.fields){
+            if (f.name == "x") x_off = f.offset;
+            if (f.name == "y") y_off = f.offset;
+            if (f.name == "z") z_off = f.offset;
+        }
+
+        if (x_off >= 0 && y_off >= 0 && z_off >= 0 && blob.data.size() >= blob.point_step){
+            const uint8_t* ptr = blob.data.data();
+
+            float x = *reinterpret_cast<const float*>(ptr + x_off);
+            float y = *reinterpret_cast<const float*>(ptr + y_off);
+            float z = *reinterpret_cast<const float*>(ptr + z_off);
+            first_point = Eigen::Vector3d(x, y, z);
+
+            const double THRESHOLD_XY = 10000.0;
+            const double THRESHOLD_Z = 100000.0;
+            if (std::abs(x) > THRESHOLD_XY || std::abs(y) > THRESHOLD_XY || std::abs(z) > THRESHOLD_Z){
+                double shiftX = (std::abs(x) > THRESHOLD_XY) ? -std::floor(x / 1000.0) * 1000.0 : 0.0;
+                double shiftY = (std::abs(y) > THRESHOLD_XY) ? -std::floor(y / 1000.0) * 1000.0 : 0.0;
+                double shiftZ = (std::abs(z) > THRESHOLD_Z) ? -std::floor(z / 1000.0) * 1000.0 : 0.0;
+
+                Eigen::Vector3d suggested_shift(shiftX, shiftY, shiftZ);
+                bool skipped = false;
+
+                emit requestGlobalShift(first_point, suggested_shift, skipped);
+                if (!skipped) cloud->setGlobalShift(-suggested_shift);
+            }
+        }
+        emit progress(5);
+
         // 基础转换，XYZRGBN信息会自动读取到cloud中
         pcl::fromPCLPointCloud2(blob, *cloud);
-
         emit progress(40);
 
         // 提取自定义字段
-        size_t num_points = blob.width * blob.height;
+        size_t num_points = cloud->size();
+
+        Eigen::Vector3d shift = -cloud->getGlobalShift();
+        bool has_shift = (shift != Eigen::Vector3d::Zero());
+        float shift_x = static_cast<float>(shift.x());
+        float shift_y = static_cast<float>(shift.y());
+        float shift_z = static_cast<float>(shift.z());
 
         struct ExtractInfo {
             QString targetType; // "Scalar", "ColorPacked", "NormalX"...
@@ -324,9 +447,15 @@ namespace ct
         for (size_t i = 0; i < num_points; i++){
             if (m_is_canceled) return false;
 
-            if (num_points > 0 && i % (num_points / 50 + 1) == 0){
-                int p = 40 + (int)(i * 60 / num_points);
+            if (i % (num_points / 50 + 1) == 0){
+                int p = 40 + (int)(i * 50 / num_points);
                 emit progress(p);
+            }
+
+            if (has_shift){
+                cloud->points[i].x += shift_x;
+                cloud->points[i].y += shift_y;
+                cloud->points[i].z += shift_z;
             }
 
             const uint8_t *point_ptr = &blob.data[i * blob.point_step];
@@ -371,9 +500,6 @@ namespace ct
     }
 
     bool FileIO::loadTXT(const QString &filename, Cloud::Ptr &cloud) {
-        m_is_canceled = false;
-        emit progress(0);
-
         std::ifstream file(filename.toLocal8Bit().constData());
         if (!file.is_open()) return false;
 
@@ -381,7 +507,6 @@ namespace ct
         file.seekg(0, std::ios::end);
         long long file_size = file.tellg();
         file.seekg(0, std::ios::beg);
-        long long read_bytes = 0;
 
         // 预读
         QStringList preview_lines;
@@ -393,7 +518,6 @@ namespace ct
                 preview_count++;
             }
         }
-
         file.clear();
         file.seekg(0);
 
@@ -413,6 +537,52 @@ namespace ct
         // 解析
         for(int i=0; i<params.skip_lines; ++i) std::getline(file, line);
 
+        std::streampos  data_start_pos = file.tellg();
+
+        if (std::getline(file, line)){
+            // 解析第一行
+            QString qline = QString::fromStdString(line);
+            QStringList parts;
+            if (params.separator == ' ') parts = qline.simplified().split(' ', QString::SkipEmptyParts);
+            else parts = qline.split(params.separator);
+
+            double first_x = 0, first_y = 0, first_z = 0;
+            for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it){
+                if (it.key() < parts.size()){
+                    if (it.value() == "x") first_x = parts[it.key()].toDouble();
+                    if (it.value() == "y") first_y = parts[it.key()].toDouble();
+                    if (it.value() == "z") first_z = parts[it.key()].toDouble();
+                }
+            }
+
+            const double THRESHOLD_XY = 10000.0;
+            const double THRESHOLD_Z = 100000.0;
+            if(std::abs(first_x) > THRESHOLD_XY || std::abs(first_y) > THRESHOLD_XY || std::abs(first_z) > THRESHOLD_Z){
+                double shiftX = (std::abs(first_x) > THRESHOLD_XY) ? -std::floor(first_x / 1000.0) * 1000.0 : 0.0;
+                double shiftY = (std::abs(first_y) > THRESHOLD_XY) ? -std::floor(first_y / 1000.0) * 1000.0 : 0.0;
+                double shiftZ = (std::abs(first_z) > THRESHOLD_Z) ? -std::floor(first_z / 1000.0) * 1000.0 : 0.0;
+
+                Eigen::Vector3d first_point(first_x, first_y, first_z);
+                Eigen::Vector3d suggested_shift(shiftX, shiftY, shiftZ);
+                bool skipped = false;
+
+                emit requestGlobalShift(first_point, suggested_shift, skipped);
+
+                if (!skipped) cloud->setGlobalShift(-suggested_shift);
+            }
+        }
+        file.clear();
+        file.seekg(data_start_pos);
+
+        emit  progress(5);
+
+        long long read_bytes = 0;
+        Eigen::Vector3d shift = -cloud->getGlobalShift();
+        bool has_shift = (shift != Eigen::Vector3d::Zero());
+        float shift_x = (float)shift.x();
+        float shift_y = (float)shift.y();
+        float shift_z = (float)shift.z();
+
         QMap<QString, std::vector<float>> scalars;
         bool has_color = false;
 
@@ -425,7 +595,9 @@ namespace ct
             read_bytes += line.size() + 1;
             // 每1MB更新一次
             if (read_bytes % 102400 == 0){
-                emit progress((int)(read_bytes * 100 / file_size));
+                int p = 5 + (int)(read_bytes * 85 / file_size);
+                if (p > 90) p = 90;
+                emit progress(p);
             }
 
             if (line.empty()) continue;
@@ -456,6 +628,12 @@ namespace ct
                 }
             }
 
+            if (has_shift){
+                p.x += shift_x;
+                p.y += shift_y;
+                p.z += shift_z;
+            }
+
             std::uint32_t rgb_val = ((std::uint32_t)r << 16 | (std::uint32_t)g << 8 | (std::uint32_t)b);
             p.rgb = *reinterpret_cast<float*>(&rgb_val);
 
@@ -475,6 +653,8 @@ namespace ct
     }
 
     bool FileIO::loadGeneralPCL(const QString &filename, Cloud::Ptr &cloud) {
+        emit progress(5);
+
         int res = -1;
         if (filename.endsWith(".obj", Qt::CaseInsensitive))
             res = pcl::io::loadOBJFile(filename.toLocal8Bit().toStdString(), *cloud);
@@ -483,9 +663,47 @@ namespace ct
 
         if (res == -1) return false;
 
+        emit progress(50);
+
+        if (!cloud->empty()){
+            const auto& p0 = cloud->points[0];
+            const double THRESHOLD_XY = 10000.0;
+            const double THRESHOLD_Z = 100000.0;
+
+            if (std::abs(p0.x) > THRESHOLD_XY || std::abs(p0.y) > THRESHOLD_XY || std::abs(p0.z) > THRESHOLD_Z){
+                double shiftX = (std::abs(p0.x) > THRESHOLD_XY) ? -std::floor(p0.x / 1000.0) * 1000.0 : 0.0;
+                double shiftY = (std::abs(p0.y) > THRESHOLD_XY) ? -std::floor(p0.y / 1000.0) * 1000.0 : 0.0;
+                double shiftZ = (std::abs(p0.z) > THRESHOLD_Z) ? -std::floor(p0.z / 1000.0) * 1000.0 : 0.0;
+
+                Eigen::Vector3d first_point(p0.x, p0.y, p0.z);
+                Eigen::Vector3d suggested_shift(shiftX, shiftY, shiftZ);
+                bool skipped = false;
+
+                emit requestGlobalShift(first_point, suggested_shift, skipped);
+
+                if (!skipped) {
+                    cloud->setGlobalShift(-suggested_shift);
+
+                    float shift_x = (float)suggested_shift.x();
+                    float shift_y = (float)suggested_shift.y();
+                    float shift_z = (float)suggested_shift.z();
+
+                    size_t n = cloud->size();
+#pragma omp parallel for
+                    for (int i = 0; i < static_cast<int>(n); i++){
+                        cloud->points[i].x += shift_x;
+                        cloud->points[i].y += shift_y;
+                        cloud->points[i].z += shift_z;
+                    }
+                }
+            }
+        }
         // 默认假设有颜色
         cloud->setHasRGB(true);
         cloud->is_dense = cloud->is_dense;
+
+        emit progress(80);
+
         return true;
     }
 

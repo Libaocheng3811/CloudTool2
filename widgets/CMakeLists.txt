@@ -10,8 +10,7 @@ target_link_libraries(ct_common_ui PUBLIC
 
 # 包含路径设置,  #include "common_ui/customdialog.h"
 target_include_directories(ct_common_ui PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/common_ui)
+        ${CMAKE_CURRENT_SOURCE_DIR})
 
 #target_compile_definitions(ct_common_ui PRIVATE CT_LIBRARY)
 
