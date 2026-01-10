@@ -203,11 +203,9 @@ namespace ct
         void saveCloudResult(bool success, const QString& path, float time);
 
         /**
-         * @brief 项目点击事件
-         * @note 函数重写（覆盖），重写基类CustomTree中的itemClickedEvent函数
-         *  在派生类中重写该槽函数，那么基类中的该槽函数是什么作用?
+         * @brief 处理复选框状态改变事件
          */
-        void itemClickedEvent(QTreeWidgetItem*, int);
+        void itemChangedEvent(QTreeWidgetItem* item, int column);
 
         /**
          * @brief 项目选中改变事件

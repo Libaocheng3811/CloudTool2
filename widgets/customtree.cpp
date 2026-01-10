@@ -221,9 +221,8 @@ namespace ct
 
     void CustomTree::itemSelectionChangedEvent()
     {
+        bool oldState = this->blockSignals(true);
         // 用于获取当前选择的项的列表
-        // selectedItems() 是 QTreeWidget 或 QListWidget 类的一个成员函数，用于返回当前选中的所有项的列表。
-        // 该函数返回一个 QList<QTreeWidgetItem*> 或 QList<QListWidgetItem*>，
         auto items = selectedItems();
         for (auto& item : items)
         {
@@ -242,6 +241,8 @@ namespace ct
                     item->parent()->setSelected(true);
             }
         }
+
+        this->blockSignals(oldState);
     }
 
     void CustomTree::itemClickedEvent(QTreeWidgetItem* item, int)

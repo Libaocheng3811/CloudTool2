@@ -49,7 +49,7 @@ namespace ct
         connect(m_fileio, &FileIO::saveCloudResult, this, &CloudTree::saveCloudResult);
         connect(this, &CloudTree::loadPointCloud, m_fileio, &FileIO::loadPointCloud);
         connect(this, &CloudTree::savePointCloud, m_fileio, &FileIO::savePointCloud);
-        connect(this, &CloudTree::itemClicked, this, &CloudTree::itemClickedEvent);
+        connect(this, &QTreeWidget::itemChanged, this, &CloudTree::itemChangedEvent);
         connect(this, &CloudTree::itemSelectionChanged, this, &CloudTree::itemSelectionChangedEvent);
         connect(m_fileio, &FileIO::requestFieldMapping, this, &CloudTree::onFieldMappingRequested, Qt::BlockingQueuedConnection);
         connect(m_fileio, &FileIO::requestTxtImportSetup, this, &CloudTree::onTxtImportRequested, Qt::BlockingQueuedConnection);
@@ -353,41 +353,64 @@ namespace ct
         closeProgress();
     }
 
-    void CloudTree::itemClickedEvent(QTreeWidgetItem *item, int)
-    {
-        // 获取点击节点的索引
-        std::vector<Index> index = getClickedIndexes(item);
-        for (auto &i : index)
-        {
+    void CloudTree::itemChangedEvent(QTreeWidgetItem *item, int column){
+        if (column == 0) return;
+
+        std::vector<Index> indexes = getClickedIndexes(item);
+
+        m_cloudview->setAutoRender(false);
+
+        for (auto &i : indexes){
             Cloud::Ptr cloud = getCloud(i);
-            // 如果节点复选框是选中状态，添加对应的点云数据和包围盒
-            if (item->checkState(0) == Qt::Checked)
-            {
-                m_cloudview->addPointCloud(cloud);
-                m_cloudview->addBox(cloud);
+            if (!cloud) continue;
+
+            bool isChecked = (item->checkState(0) == Qt::Checked);
+            bool isVisible = m_cloudview->contains(cloud->id());
+
+            if (isChecked){
+                // 只有当它"被勾选" 且 "当前未显示" 时，才去添加！
+                if (!isVisible){
+                    m_cloudview->addPointCloud(cloud);
+                    m_cloudview->addBox(cloud);
+                }
             }
-            // 如果节点复选框是未选中状态，移除对应的点云数据、包围盒、法线数据。
-            else
-            {
-                m_cloudview->removePointCloud(cloud->id());
-                m_cloudview->removeShape(cloud->boxId());
-                m_cloudview->removePointCloud(cloud->normalId());
+            else{
+                // 只有当它"未勾选" 且 "当前显示中" 时，才去移除
+                if (isVisible){
+                    m_cloudview->removePointCloud(cloud->id());
+                    m_cloudview->removeShape(cloud->boxId());
+                    m_cloudview->removePointCloud(cloud->normalId());
+                }
             }
         }
+        m_cloudview->setAutoRender(true);
+        m_cloudview->refresh();
     }
 
     void CloudTree::itemSelectionChangedEvent()
     {
+        m_cloudview->setAutoRender(false);
+
         std::vector<Index> all = getAllIndexes();
         std::vector<Index> indexes = getSelectedIndexes();
         for (auto& i : all)
         {
-            std::vector<Index>::const_iterator it = std::find(indexes.begin(), indexes.end(), i);
+            bool is_selected = false;
+            for (const auto& sel : indexes){
+                if (sel == i) { is_selected = true; break; }
+            }
+
             Cloud::Ptr cloud = getCloud(i);
-            if (it != indexes.end())
-                m_cloudview->addBox(cloud);
-            else
-                m_cloudview->removeShape(cloud->boxId());
+            bool has_box = m_cloudview->contains(cloud->boxId());
+
+            if (is_selected){
+                // 只有当“被选中”且“还没显示包围盒”时，才调用 addBox
+                if (!has_box) m_cloudview->addBox(cloud);
+            }
+            else{
+                // 只有当“未选中”且“已显示包围盒”时，才调用 removeBox
+                if (has_box) m_cloudview->removeShape(cloud->boxId());
+            }
         }
 
         // update table
@@ -512,7 +535,6 @@ namespace ct
                 }
             });
 
-//            m_table->setItem(COLOR_MODE_ROW, 0, new QTableWidgetItem("Color Mode"));
             m_table->setCellWidget(COLOR_MODE_ROW, 1, color_mode);
 
         }
@@ -520,6 +542,8 @@ namespace ct
         m_table->setItem(1, 1, new QTableWidgetItem(type));
         m_table->setItem(2, 1, new QTableWidgetItem(size_str));
         m_table->setItem(3, 1, new QTableWidgetItem(resolution_str));
+        m_cloudview->setAutoRender(true);
+        m_cloudview->refresh();
     }
 
     void CloudTree::showProgress(const QString &message) {

@@ -64,6 +64,36 @@ namespace ct
         // 设置渲染窗口背景颜色
         m_viewer->setBackgroundColor((double )150.0 / 255.0, (double )150.0 / 255.0, (double )150.0 / 255.0 );
 
+        connect(this, &CloudView::sizeChanged, [this](QSize size){
+            if (m_show_id && !m_current_id.isEmpty()) {
+                // 重新计算位置并更新
+                m_viewer->updateText(m_current_id.toStdString(),
+                                     size.width() - m_current_id.length() * 6 - 20,
+                                     size.height() - 25,
+                                     12, 1, 1, 1, INFO_CLOUD_ID);
+            }
+        });
+
+        connect(this, &CloudView::sizeChanged, [this](QSize size){
+            // 遍历所有当前活跃的 Info
+            QMap<int, InfoData>::iterator i;
+            for (i = m_active_infos.begin(); i != m_active_infos.end(); ++i) {
+                int level = i.key();
+                const InfoData& data = i.value();
+                std::string id = INFO_TEXT + std::to_string(level);
+
+                // 重新计算 Y 轴位置 (this->height() 改为 size.height())
+                int y_pos = size.height() - 25 * level;
+
+                // 更新文本位置
+                m_viewer->updateText(data.text.toStdString(),
+                                     10, y_pos,
+                                     12,
+                                     data.rgb.rf(), data.rgb.gf(), data.rgb.bf(),
+                                     id);
+            }
+        });
+
         // 创建和配置一个坐标轴（Axes）对象，通常用于在三维可视化场景中显示一个坐标系
         vtkSmartPointer<vtkAxesActor> actor =vtkSmartPointer<vtkAxesActor>::New();
         m_axes->SetOutlineColor(0.9300, 0.5700, 0.1300);
@@ -102,9 +132,6 @@ namespace ct
             m_viewer->updatePointCloud<PointXYZRGBN>(cloud, rgb_handler, cloud->id().toStdString());
         }
 
-        m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
-                                                   pcl::visualization::PCL_VISUALIZER_SHADING_FLAT, cloud->id().toStdString());
-
         if (cloud->pointSize() != 1)
             m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
                                                        cloud->pointSize(), cloud->id().toStdString());
@@ -112,7 +139,7 @@ namespace ct
         if (cloud->opacity() != 1)
             m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY,
                                                        cloud->opacity(), cloud->id().toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addPointCloudFromRangeImage(const pcl::RangeImage::Ptr &image, const QString &id, const ct::RGB &rgb)
@@ -126,32 +153,28 @@ namespace ct
         else
             m_viewer->updatePointCloud(image, range_image_color, id.toStdString());
         // 刷新窗口
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addBox(const Cloud::Ptr& cloud)
     {
-
-        if (!m_viewer->contains(cloud->boxId().toStdString()))
+        std::string id = cloud->boxId().toStdString();
+        if (!m_viewer->contains(id))
         {
             m_viewer->addCube(cloud->box().translation, cloud->box().rotation,
                               cloud->box().width, cloud->box().height,
                               cloud->box().depth, cloud->boxId().toStdString());
+
+            m_viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
+                                                  pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME,
+                                                  id);
         }
         else
-        {
-            m_viewer->removeShape(cloud->boxId().toStdString());
-            m_viewer->addCube(cloud->box().translation, cloud->box().rotation,
-                              cloud->box().width, cloud->box().height,
-                              cloud->box().depth, cloud->boxId().toStdString());
-        }
-        m_viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
-                                              pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME,
-                                              cloud->boxId().toStdString());
+        {}
 
         m_viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, cloud->boxColor().rf(),
-                                              cloud->boxColor().gf(), cloud->boxColor().bf(), cloud->boxId().toStdString());
-        m_viewer->getRenderWindow()->Render();
+                                              cloud->boxColor().gf(), cloud->boxColor().bf(), id);
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addPointCloudNormals(const Cloud::Ptr &cloud, int level, float scale)
@@ -167,7 +190,7 @@ namespace ct
         m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR,
                                                    cloud->normalColor().rf(), cloud->normalColor().gf(),
                                                    cloud->normalColor().bf(), cloud->normalId().toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addCorrespondences(const Cloud::Ptr &source_points, const Cloud::Ptr &target_points,
@@ -177,7 +200,7 @@ namespace ct
             m_viewer->addCorrespondences<PointXYZRGBN>(source_points, target_points, *correspondences, id.toStdString());
         else
             m_viewer->updateCorrespondences<PointXYZRGBN>(source_points, target_points, *correspondences, id.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addPolygon(const Cloud::Ptr &cloud, const QString &id, const ct::RGB &rgb)
@@ -189,7 +212,7 @@ namespace ct
             m_viewer->removeShape(id.toStdString());
             m_viewer->addPolygon<PointXYZRGBN>(cloud, rgb.rf(), rgb.gf(), rgb.bf(), id.toStdString());
         }
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addArrow(const ct::PointXYZRGBN &pt1, const ct::PointXYZRGBN &pt2, const QString &id, bool display_length, const ct::RGB &rgb)
@@ -200,7 +223,7 @@ namespace ct
         {
             m_viewer->removeShape(id.toStdString());
             m_viewer->addArrow(pt1, pt2, rgb.rf(), rgb.gf(), rgb.bf(), display_length, id.toStdString());
-            m_viewer->getRenderWindow()->Render();
+            if (m_auto_render) m_viewer->getRenderWindow()->Render();
         }
     }
 
@@ -213,7 +236,7 @@ namespace ct
             m_viewer->removeShape(id.toStdString());
             m_viewer->addCube(*coefficients, id.toStdString());
         }
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addCube(const ct::PointXYZRGBN &min, ct::PointXYZRGBN &max, const QString &id, const ct::RGB &rgb)
@@ -225,7 +248,7 @@ namespace ct
             m_viewer->removeShape(id.toStdString());
             m_viewer->addCube(min.x, max.x, min.y, max.y, min.z, max.z, rgb.rf(), rgb.gf(), rgb.bf(), id.toStdString());
         }
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addCube(const ct::Box &box, const QString &id)
@@ -237,7 +260,7 @@ namespace ct
             m_viewer->removeShape(id.toStdString());
             m_viewer->addCube(box.translation, box.rotation, box.width, box.height, box.depth, id.toStdString());
         }
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     PointXYZRGBN CloudView::displayToWorld(const PointXY &pos)
@@ -343,20 +366,23 @@ namespace ct
 
         // 移除点云数据，并重新渲染窗口
         m_viewer->removePointCloud(id.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::removeShape(const QString& id)
     {
+        std::string std_id = id.toStdString();
         // 移除包围盒模型
-        m_viewer->removeShape(id.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_viewer->contains(std_id)){
+            m_viewer->removeShape(std_id);
+            if (m_auto_render) m_viewer->getRenderWindow()->Render();
+        }
     }
 
     void CloudView::removeCorrespondences(const QString &id)
     {
         m_viewer->removeCorrespondences(id.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::removeAllPointClouds()
@@ -364,13 +390,13 @@ namespace ct
         m_visible_clouds.clear();
 
         m_viewer->removeAllPointClouds();
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::removeAllShapes()
     {
         m_viewer->removeAllShapes();
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const RGB& rgb)
@@ -379,7 +405,7 @@ namespace ct
         pcl::visualization::PointCloudColorHandlerCustom<PointXYZRGBN> color(cloud, rgb.r, rgb.g, rgb.b);
         // updatePointCloud 方法用于更新可视化窗口中显示的点云。
         m_viewer->updatePointCloud(cloud, color, cloud->id().toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setPointCloudColor(const QString &id, const RGB &rgb)
@@ -387,7 +413,7 @@ namespace ct
         m_viewer->setPointCloudRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_COLOR, rgb.rf(), rgb.gf(), rgb.bf(), id.toStdString()
                 );
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const QString& axis)
@@ -396,7 +422,7 @@ namespace ct
         pcl::visualization::PointCloudColorHandlerGenericField<PointXYZRGBN>
                 fieldcolor(cloud, axis.toStdString());
         m_viewer->updatePointCloud(cloud, fieldcolor, cloud->id().toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::resetPointCloudColor(const Cloud::Ptr &cloud)
@@ -405,7 +431,7 @@ namespace ct
 
         pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb_handler(cloud);
         m_viewer->updatePointCloud(cloud, rgb_handler, cloud->id().toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setPointCloudSize(const QString &id, float size)
@@ -413,61 +439,61 @@ namespace ct
         // setPointCloudRenderingProperties是PCLVisualizer类的一个成员函数，用于设置点云的渲染属性。size表示点的大小，id是点云标识符，0是视口索引
         m_viewer->setPointCloudRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_POINT_SIZE, size, id.toStdString(), 0);
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setPointCloudOpacity(const QString &id, float value)
     {
         m_viewer->setPointCloudRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_OPACITY, value, id.toStdString(), 0);
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setBackgroundColor(const ct::RGB &rgb)
     {
         m_viewer->setBackgroundColor(rgb.rf(), rgb.gf(), rgb.bf());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::resetBackgroundColor()
     {
         m_viewer->setBackgroundColor((double)150.0 / 255.0, (double)150.0 / 255.0, (double)150.0 / 255.0);
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setShapeColor(const QString &shapeid, const RGB &rgb)
     {
         m_viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR,
                                               rgb.rf(), rgb.gf(), rgb.bf(), shapeid.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setShapeSize(const QString& shapeid, float size)
     {
         m_viewer->setShapeRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_POINT_SIZE, size, shapeid.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setShapeOpacity(const QString& shapeid, float value)
     {
         m_viewer->setShapeRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_OPACITY, value, shapeid.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setShapeLineWidth(const QString &shapeid, float value)
     {
         m_viewer->setShapeRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, value, shapeid.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setShapeFontSize(const QString &shapeid, float value)
     {
         m_viewer->setShapeRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_FONT_SIZE, value, shapeid.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setShapeRepersentation(const QString &shapeid, int type)
@@ -475,13 +501,15 @@ namespace ct
         // 设置模型表示类型
         m_viewer->setShapeRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_REPRESENTATION, type, shapeid.toStdString());
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::showInfo(const QString &text, int level, const RGB &rgb)
     {
         // 比较获取优先级，维护最大的信息级别
         m_info_level = std::max(m_info_level, level);
+        m_active_infos[level] = {text, rgb};
+
         std::string id = INFO_TEXT + std::to_string(level);
         // 设置视图器中的显示信息
         if (!m_viewer->contains(id))
@@ -489,26 +517,29 @@ namespace ct
         else
             m_viewer->updateText(text.toStdString(), 10, this->height() - 25 * level, 12, rgb.rf(), rgb.gf(), rgb.bf(), id);
         // 当视图器大小改变时，同步改变信息位置
-        connect(this, &CloudView::sizeChanged, [=](QSize size)
-                { m_viewer->updateText(text.toStdString(), 10, this->height() - 25 * level, 12, rgb.rf(), rgb.gf(), rgb.bf(), id); });
-        m_viewer->getRenderWindow()->Render();
+
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::clearInfo()
     {
         for (int i = 0; i < m_info_level; i++)
         {
-            if (m_viewer->contains(INFO_TEXT + std::to_string(i + 1)))
+            std::string id = INFO_TEXT + std::to_string(i + 1);
+            if (m_viewer->contains(id))
             {
-                m_viewer->removeShape(INFO_TEXT + std::to_string(i + 1));
+                m_viewer->removeShape(id);
             }
         }
-        m_viewer->getRenderWindow()->Render();
+        m_active_infos.clear();
+        m_info_level = 0;
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::showCloudId (const QString& id)
     {
         m_last_id = id;
+        m_current_id = id;
         if (!m_show_id)
         {
             return;
@@ -518,10 +549,8 @@ namespace ct
             m_viewer->addText(id.toStdString(), this->width() - id.length() * 6 - 20, this->height() - 25, 12, 1, 1, 1, INFO_CLOUD_ID);
         else
             m_viewer->updateText(id.toStdString(), this->width() - id.length() *6 - 20, this->height() -25, 12, 1, 1, 1, INFO_CLOUD_ID);
-        connect(this, &CloudView::sizeChanged, [=](QSize size)
-                {m_viewer->updateText(id.toStdString(), size.width() - id.length() * 6 - 20, size.height() - 25, 12, 1, 1, 1, INFO_CLOUD_ID); });
-        m_viewer->getRenderWindow()->Render();
 
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setShowId(const bool &enable)
@@ -532,7 +561,7 @@ namespace ct
         else
             // 调用m_viewer的removeShape函数来移除显示的形状
             m_viewer->removeShape(INFO_CLOUD_ID);
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setInteractorEnable(const bool &enable)
@@ -555,7 +584,7 @@ namespace ct
             vtkNew<pcl::visualization::PCLVisualizerInteractorStyle> style;
             m_renderwindow->GetInteractor()->SetInteractorStyle(style);
         }
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     ///////////////////////////////////////////////////////////////////
@@ -583,7 +612,7 @@ namespace ct
                 up.x(), up.y(), up.z() // Up (头顶朝向)
                 );
 
-        m_viewer->getRenderWindow()->Render();
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setTopView() {
@@ -635,8 +664,8 @@ namespace ct
                     pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb_handler(cloud->getPreviewCloud());
                     m_viewer->addPointCloud<PointXYZRGBN>(cloud->getPreviewCloud(), rgb_handler, prev_id);
 
-                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
-                                                               pcl::visualization::PCL_VISUALIZER_SHADING_FLAT, prev_id);
+//                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
+//                                                               pcl::visualization::PCL_VISUALIZER_SHADING_FLAT, prev_id);
 
                     //同步点的大小
                     m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
@@ -656,7 +685,7 @@ namespace ct
             }
             need_render = true;
         }
-        if (need_render) m_viewer->getRenderWindow()->Render();
+        if (need_render && m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::mousePressEvent(QMouseEvent *event)

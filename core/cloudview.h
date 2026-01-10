@@ -10,6 +10,8 @@
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkOrientationMarkerWidget.h>
 
+#include <QMap>
+
 namespace ct {
 
     struct PointXY
@@ -330,6 +332,16 @@ namespace ct {
          */
         void setInteractiveMode(bool activate);
 
+        /**
+         * @brief 是否启用自动渲染
+         * @param enable true=自动渲染，false=手动渲染
+         */
+        void setAutoRender(bool enable) { m_auto_render = enable; }
+
+        /**
+         * @brief 手动刷新渲染窗口
+         */
+        void refresh(){ m_viewer->getRenderWindow()->Render(); }
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -356,10 +368,19 @@ namespace ct {
         void setView(const Eigen::Vector3f& direction, const Eigen::Vector3f& up);
 
     private:
+        struct InfoData{
+            QString text;
+            RGB rgb;
+        };
+        // Key = Level (int), Value = InfoData
+        QMap<int, InfoData> m_active_infos;
+
+    private:
         Q_DISABLE_COPY(CloudView);
         bool m_show_id;
         int m_info_level;
         QString m_last_id;
+        QString m_current_id; // 用于记录当前显示的ID字符串
         pcl::visualization::PCLVisualizer::Ptr m_viewer;
         vtkSmartPointer<vtkRenderer> m_render;
         vtkSmartPointer<vtkGenericOpenGLRenderWindow> m_renderwindow;
@@ -367,6 +388,7 @@ namespace ct {
 
         // 维护一个正在显示的Cloud::Ptr列表，方便进行预览模式切换
         std::vector<Cloud::Ptr> m_visible_clouds;
+        bool m_auto_render = true; //默认开启自动渲染
 
     };
 } // namespace ct
