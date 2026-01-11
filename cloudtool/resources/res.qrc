@@ -13,6 +13,8 @@
         <file>images/CSF_pp.png</file>
         <file>images/vegetation.png</file>
         <file>images/terrain.png</file>
+        <file>images/pickSinglePoint.png</file>
+        <file>images/PointPicking.png</file>
         <file>icon/action-unavailable-symbolic.svg</file>
         <file>icon/add.svg</file>
         <file>icon/adjustcurves.svg</file>

@@ -9,6 +9,9 @@
 #include <pcl/range_image/range_image.h>
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkOrientationMarkerWidget.h>
+#include <vtkCaptionActor2D.h>
+#include <vtkTextProperty.h>
+#include <vtkSmartPointer.h>
 
 #include <QMap>
 
@@ -90,6 +93,16 @@ namespace ct {
          */
         void addCube(const Box& box, const QString& id = "cube");
 
+        /**
+         * @brief 添加 3D 文本标签 (带引线和背景框)
+         * @param pos 3D坐标点
+         * @param text 显示的文本
+         * @param id 标签的ID
+         * @param r, g, b 文本颜色 (0-1.0)
+         */
+        void add3DLabel(const PointXYZRGBN& pos, const QString& text, const QString& id,
+                        double r = 1.0, double g = 1.0, double b = 0.0);
+
         ////////////////////////////////////////////////////////
         // 2D->3D(display to world)
 
@@ -113,7 +126,7 @@ namespace ct {
          * @return int 选中点云的点索引
          * 主要是实现鼠标点击操作选点的功能
          */
-        int singlePick(const PointXY& p);
+        int singlePick(const PointXY& p, const QString& target_cloud_id = "");
 
         /**
          * @brief 多边形选取,确定哪些点位于指定的多边形区域内或外

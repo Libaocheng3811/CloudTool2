@@ -8,12 +8,20 @@
 #include "widgets/customdialog.h"
 #include "core/common.h"
 
+#include <QDateTime>
+
 QT_BEGIN_NAMESPACE
 namespace Ui
 {
     class PickPoints;
 }
 QT_END_NAMESPACE
+
+enum PickMode{
+    PICK_SINGLE = 0, // 单点选取
+    PICK_PAIR = 1,   // 两点（显示距离）
+    PICK_MULTI = 2   // 多点（多边形）
+};
 
 class PickPoints : public ct::CustomDialog
 {
@@ -35,6 +43,7 @@ public:
 
 private:
     void updateInfo(int index);
+    void updatePanelInfo(int index, const ct::PointXYZRGBN& pt, const ct::Cloud::Ptr& cloud);
 
 public slots:
     void mouseLeftPressed(const ct::PointXY& pt);
@@ -48,8 +57,7 @@ private:
     bool pick_start;
     // 选中的点云
     ct::Cloud::Ptr m_selected_cloud;
-    // 存储已经选择的点
-    ct::Cloud::Ptr m_pick_cloud;
+    ct::Cloud::Ptr m_pick_cloud; // 临时显示的红色选点
     // 拾取的点
     ct::PointXY m_pick_point;
 };

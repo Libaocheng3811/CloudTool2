@@ -7,10 +7,11 @@ VTK_MODULE_INIT(vtkInteractionStyle)
 VTK_MODULE_INIT(vtkRenderingVolumeOpenGL2)
 VTK_MODULE_INIT(vtkRenderingFreeType)
 
-#include <pcl/geometry/planar_polygon.h>
 #include <vtkAxesActor.h>
 #include <vtkPointPicker.h>
 #include <vtkCamera.h>
+#include <vtkProperty2D.h>
+#include <vtkTextActor.h>
 
 #include <QDropEvent>
 #include <QMimeData>
@@ -51,17 +52,11 @@ namespace ct
         m_renderwindow(vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New()),
         m_axes(vtkSmartPointer<vtkOrientationMarkerWidget>::New())
     {
-        // 将一个渲染器 (vtkRenderer) 添加到渲染窗口 (vtkRenderWindow) 中
         m_renderwindow->AddRenderer(m_render);
-
-        // 分配智能指针指向的对象为一个新构建的对象，接受四个参数，vtkRenderer渲染器对象、vtkRenderWindow渲染窗口对象，可视化窗口名称、bool值是否在启动时自动旋转
         m_viewer.reset(new pcl::visualization::PCLVisualizer(m_render, m_renderwindow, "viewer", false));
+        this->setRenderWindow(m_renderwindow);
 
-        this->setRenderWindow(m_viewer->getRenderWindow());
-
-        // 配置渲染器和交互器，将这两个组件关联起来，这样交互器就可以知道在哪个渲染窗口上监听和响应用户的输入事件
-        m_viewer->setupInteractor(this->GetInteractor(), this->GetRenderWindow());
-        // 设置渲染窗口背景颜色
+        m_viewer->setupInteractor(this->interactor(), this->renderWindow());
         m_viewer->setBackgroundColor((double )150.0 / 255.0, (double )150.0 / 255.0, (double )150.0 / 255.0 );
 
         connect(this, &CloudView::sizeChanged, [this](QSize size){
@@ -94,11 +89,12 @@ namespace ct
             }
         });
 
-        // 创建和配置一个坐标轴（Axes）对象，通常用于在三维可视化场景中显示一个坐标系
-        vtkSmartPointer<vtkAxesActor> actor =vtkSmartPointer<vtkAxesActor>::New();
+//        vtkSmartPointer<vtkAxesActor> actor =vtkSmartPointer<vtkAxesActor>::New();
+        vtkNew<vtkAxesActor> actor;
         m_axes->SetOutlineColor(0.9300, 0.5700, 0.1300);
         m_axes->SetOrientationMarker(actor);
-        m_axes->SetInteractor(m_viewer->getRenderWindow()->GetInteractor());
+
+        m_axes->SetInteractor(this->interactor());
         m_axes->SetViewport(0.9, 0, 1, 0.15);
         m_axes->SetEnabled(true);
         m_axes->InteractiveOn();
@@ -179,7 +175,6 @@ namespace ct
 
     void CloudView::addPointCloudNormals(const Cloud::Ptr &cloud, int level, float scale)
     {
-        // 如果视图器中没有这个点云id的法线，就添加法线;
         if (!m_viewer->contains(cloud->normalId().toStdString()))
             m_viewer->addPointCloudNormals<PointXYZRGBN >(cloud, level, scale, cloud->normalId().toStdString());
         else
@@ -205,13 +200,19 @@ namespace ct
 
     void CloudView::addPolygon(const Cloud::Ptr &cloud, const QString &id, const ct::RGB &rgb)
     {
-        if (!m_viewer->contains(id.toStdString()))
-            m_viewer->addPolygon<PointXYZRGBN>(cloud, rgb.rf(), rgb.gf(), rgb.bf(), id.toStdString());
+        std::string std_id = id.toStdString();
+
+        if (!m_viewer->contains(std_id))
+            m_viewer->addPolygon<PointXYZRGBN>(cloud, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
         else
         {
-            m_viewer->removeShape(id.toStdString());
-            m_viewer->addPolygon<PointXYZRGBN>(cloud, rgb.rf(), rgb.gf(), rgb.bf(), id.toStdString());
+            m_viewer->removeShape(std_id);
+            m_viewer->addPolygon<PointXYZRGBN>(cloud, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
         }
+        m_viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
+                                              pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME,
+                                              std_id);
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -287,26 +288,29 @@ namespace ct
     }
 
     // point pick
-    int CloudView::singlePick(const ct::PointXY &pos)
+    int CloudView::singlePick(const ct::PointXY &pos, const QString& target_cloud_id)
     {
-        vtkSmartPointer<vtkPointPicker> m_point_picker = vtkSmartPointer<vtkPointPicker>::New();
-        m_renderwindow->GetInteractor()->SetPicker(m_point_picker);
-        if (!m_point_picker)
-            return -1;
+        vtkSmartPointer<vtkPointPicker> picker = vtkSmartPointer<vtkPointPicker>::New();
+        vtkRenderer* ren = m_viewer->getRenderWindow()->GetRenderers()->GetFirstRenderer();
 
-        m_renderwindow->GetInteractor()->StartPickCallback();
+        if (!target_cloud_id.isEmpty()){
+            std::string id = target_cloud_id.toStdString();
+            auto cloud_actor_map = m_viewer->getCloudActorMap();
 
-        vtkRenderer* ren = this->GetInteractor()->FindPokedRenderer(pos.x, pos.y);
-        /**
-         * @brief 拾取三维场景中的点
-         * @param Pick 是 vtkPointPicker 的核心方法，用于执行点的拾取操作。
-         * @param pos.x pos.y 表示鼠标点击的屏幕坐标
-         * @param 0.0 表示拾取的深度值
-         * @param ren 鼠标点击位置对应的渲染器对象
-         */
-        m_point_picker->Pick(pos.x, pos.y, 0.0, ren);
+            if (cloud_actor_map->find(id) != cloud_actor_map->end()){
+                vtkProp* actor = cloud_actor_map->at(id).actor;
 
-        return (static_cast<int>(m_point_picker->GetPointId()));
+                picker->InitializePickList();
+                picker->AddPickList(actor);
+                picker->PickFromListOn();
+            }
+        }
+
+        picker->Pick(pos.x, pos.y, 0.0, ren);
+        int idx = static_cast<int>(picker->GetPointId());
+        picker->PickFromListOff();
+
+        return idx;
     }
 
     std::vector<int> CloudView::areaPick(const std::vector<PointXY> &points, const Cloud::Ptr &cloud, bool in_out)
@@ -401,9 +405,7 @@ namespace ct
 
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const RGB& rgb)
     {
-        // 使用 pcl::visualization::PointCloudColorHandlerCustom 创建一个颜色处理器，
         pcl::visualization::PointCloudColorHandlerCustom<PointXYZRGBN> color(cloud, rgb.r, rgb.g, rgb.b);
-        // updatePointCloud 方法用于更新可视化窗口中显示的点云。
         m_viewer->updatePointCloud(cloud, color, cloud->id().toStdString());
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
@@ -418,7 +420,6 @@ namespace ct
 
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const QString& axis)
     {
-        // 使用了 pcl::visualization::PointCloudColorHandlerGenericField 类，这个类可以基于点云中的特定字段（如某个坐标轴的值）创建颜色处理器。
         pcl::visualization::PointCloudColorHandlerGenericField<PointXYZRGBN>
                 fieldcolor(cloud, axis.toStdString());
         m_viewer->updatePointCloud(cloud, fieldcolor, cloud->id().toStdString());
@@ -573,9 +574,7 @@ namespace ct
         // 禁用交互器
         if (!enable)
         {
-            // 创建一个PCLDisableInteractorStyle类对象style，
             vtkNew<PCLDisableInteractorStyle> style;
-            // 将当前渲染窗口的交互器对象样式设置为style，从而实现禁用交互器
             m_renderwindow->GetInteractor()->SetInteractorStyle(style);
         }
         // 启用交互器
@@ -691,18 +690,18 @@ namespace ct
     void CloudView::mousePressEvent(QMouseEvent *event)
     {
         setInteractiveMode(true);
-        // button()是QMouseEvent的一个成员函数，返回一个 Qt::MouseButton 枚举值，表示哪个按键触发的事件
+
         if (event->button() == Qt::LeftButton)
         {
-            emit mouseLeftPressed(PointXY(m_renderwindow->GetInteractor()->GetEventPosition()[0],
-                                          m_renderwindow->GetInteractor()->GetEventPosition()[1]));
+            emit mouseLeftPressed(PointXY(this->interactor()->GetEventPosition()[0],
+                                          this->interactor()->GetEventPosition()[1]));
         }
         else if (event->button() == Qt::RightButton)
         {
-            emit mouseRightPressed(PointXY(m_renderwindow->GetInteractor()->GetEventPosition()[0],
-                                           m_renderwindow->GetInteractor()->GetEventPosition()[1]));
+            emit mouseRightPressed(PointXY(this->interactor()->GetEventPosition()[0],
+                                           this->interactor()->GetEventPosition()[1]));
         }
-        return QVTKOpenGLNativeWidget::mousePressEvent(event);
+//        return QVTKOpenGLNativeWidget::mousePressEvent(event);
     }
 
     void CloudView::mouseReleaseEvent(QMouseEvent *event)
@@ -713,21 +712,21 @@ namespace ct
         {
             // getViewerPose() 是 PCLVisualizer 类中的一个成员函数。它返回当前视图器的视角或位置的描述，例如相机的位置和方向。
             emit viewerPose(m_viewer->getViewerPose());
-            emit mouseLeftReleased(PointXY(m_renderwindow->GetInteractor()->GetEventPosition()[0],
-                                           m_renderwindow->GetInteractor()->GetEventPosition()[1]));
+            emit mouseLeftReleased(PointXY(this->interactor()->GetEventPosition()[0],
+                                           this->interactor()->GetEventPosition()[1]));
         }
         else if (event->button() == Qt::RightButton)
         {
-            emit mouseRightReleased(PointXY(m_renderwindow->GetInteractor()->GetEventPosition()[0],
-                                            m_renderwindow->GetInteractor()->GetEventPosition()[1]));
+            emit mouseRightReleased(PointXY(this->interactor()->GetEventPosition()[0],
+                                            this->interactor()->GetEventPosition()[1]));
         }
-        return QVTKOpenGLNativeWidget::mouseReleaseEvent(event);
+//        return QVTKOpenGLNativeWidget::mouseReleaseEvent(event);
     }
 
     void CloudView::mouseMoveEvent(QMouseEvent *event)
     {
-        emit mouseMoved(PointXY(m_renderwindow->GetInteractor()->GetEventPosition()[0],
-                                m_renderwindow->GetInteractor()->GetEventPosition()[1]));
-        return QVTKOpenGLNativeWidget::mouseMoveEvent(event);
+        emit mouseMoved(PointXY(this->interactor()->GetEventPosition()[0],
+                                this->interactor()->GetEventPosition()[1]));
+//        return QVTKOpenGLNativeWidget::mouseMoveEvent(event);
     }
 }
