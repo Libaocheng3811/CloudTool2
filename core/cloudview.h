@@ -354,7 +354,9 @@ namespace ct {
         /**
          * @brief 手动刷新渲染窗口
          */
-        void refresh(){ m_viewer->getRenderWindow()->Render(); }
+        void refresh(){
+            m_render->ResetCameraClippingRange();
+            m_viewer->getRenderWindow()->Render(); }
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 

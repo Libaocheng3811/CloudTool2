@@ -53,11 +53,15 @@ namespace ct
         m_axes(vtkSmartPointer<vtkOrientationMarkerWidget>::New())
     {
         m_renderwindow->AddRenderer(m_render);
+        m_render->GetActiveCamera()->SetClippingRange(0.01, 10000.0);
         m_viewer.reset(new pcl::visualization::PCLVisualizer(m_render, m_renderwindow, "viewer", false));
         this->setRenderWindow(m_renderwindow);
 
         m_viewer->setupInteractor(this->interactor(), this->renderWindow());
-        m_viewer->setBackgroundColor((double )150.0 / 255.0, (double )150.0 / 255.0, (double )150.0 / 255.0 );
+        m_render->GradientBackgroundOn();
+        m_render->SetBackground2(0.05, 0.4, 0.6);
+        m_render->SetBackground(0.00, 0.05, 0.08);
+//        m_viewer->setBackgroundColor((double )150.0 / 255.0, (double )150.0 / 255.0, (double )150.0 / 255.0 );
 
         connect(this, &CloudView::sizeChanged, [this](QSize size){
             if (m_show_id && !m_current_id.isEmpty()) {
@@ -70,17 +74,14 @@ namespace ct
         });
 
         connect(this, &CloudView::sizeChanged, [this](QSize size){
-            // 遍历所有当前活跃的 Info
             QMap<int, InfoData>::iterator i;
             for (i = m_active_infos.begin(); i != m_active_infos.end(); ++i) {
                 int level = i.key();
                 const InfoData& data = i.value();
                 std::string id = INFO_TEXT + std::to_string(level);
 
-                // 重新计算 Y 轴位置 (this->height() 改为 size.height())
                 int y_pos = size.height() - 25 * level;
 
-                // 更新文本位置
                 m_viewer->updateText(data.text.toStdString(),
                                      10, y_pos,
                                      12,
@@ -89,7 +90,6 @@ namespace ct
             }
         });
 
-//        vtkSmartPointer<vtkAxesActor> actor =vtkSmartPointer<vtkAxesActor>::New();
         vtkNew<vtkAxesActor> actor;
         m_axes->SetOutlineColor(0.9300, 0.5700, 0.1300);
         m_axes->SetOrientationMarker(actor);
@@ -452,13 +452,17 @@ namespace ct
 
     void CloudView::setBackgroundColor(const ct::RGB &rgb)
     {
+        m_render->GradientBackgroundOff();
         m_viewer->setBackgroundColor(rgb.rf(), rgb.gf(), rgb.bf());
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::resetBackgroundColor()
     {
-        m_viewer->setBackgroundColor((double)150.0 / 255.0, (double)150.0 / 255.0, (double)150.0 / 255.0);
+        // 恢复渐变背景
+        m_render->GradientBackgroundOn();
+        m_render->SetBackground2(0.05, 0.4, 0.6);
+        m_render->SetBackground(0.0, 0.05, 0.08);
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
