@@ -111,8 +111,11 @@ void PickPoints::add()
     }
 
     ct::Cloud::Ptr new_cloud = m_pick_cloud->makeShared();
+    new_cloud->setPointSize(10);
+    new_cloud->setCloudColor(ct::Color::Red);
+
     // 在视图中移除当前的点云，以避免视觉上重复显示点云
-    m_cloudview->removePointCloud(new_cloud->id());
+//    m_cloudview->removePointCloud(new_cloud->id());
     QString unique_suffix = QString::number(QDateTime::currentMSecsSinceEpoch() % 10000);
     QString new_id = QString("pciked-%1-%2").arg(m_selected_cloud->id()).arg(unique_suffix);
 
@@ -122,6 +125,7 @@ void PickPoints::add()
     // 将新点云追加到点云树中，便于管理使用
     m_cloudtree->appendCloud(m_selected_cloud, new_cloud, true);
 
+    m_cloudview->removePointCloud(m_pick_cloud->id());
     m_pick_cloud->clear();
     m_cloudview->removeShape(ARROW_ID);
     m_cloudview->removeShape(POLYGONAL_ID);
@@ -139,7 +143,10 @@ void PickPoints::reset()
 {
     if (is_picking) this->start();
     pick_start = false;
-    m_pick_cloud->clear();
+    if (!m_pick_cloud->empty()){
+        m_cloudview->removePointCloud(m_pick_cloud->id());
+        m_pick_cloud->clear();
+    }
     m_selected_cloud = nullptr;
 
     // 移除形状，也就是视图中绘制的形状，例如箭头和矩形框
