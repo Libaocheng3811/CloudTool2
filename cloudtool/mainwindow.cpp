@@ -65,7 +65,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionColors, &QAction::triggered, [=] {this->createLeftDock<Color>("Color"); });
 
     // view
-    connect(ui->actionResetcamera, &QAction::triggered, ui->cloudview, &ct::CloudView::resetCamera);
+    connect(ui->actionResetcamera, &QAction::triggered, ui->cloudtree, &ct::CloudTree::zoomToSelected);
     connect(ui->actionTopView, &QAction::triggered, ui->cloudview, &ct::CloudView::setTopView);
     connect(ui->actionFrontView, &QAction::triggered, ui->cloudview, &ct::CloudView::setFrontView);
     connect(ui->actionLeftSideView, &QAction::triggered, ui->cloudview, &ct::CloudView::setLeftSideView);

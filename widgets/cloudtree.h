@@ -120,6 +120,13 @@ namespace ct
          */
         void addResultGroup(const Cloud::Ptr& originCloud, const std::vector<Cloud::Ptr>& results, const QString& groupName);
 
+        /**
+         * @brief 聚焦视图到选中点云
+         * 如果有选中项 -> 聚焦选中项的并集
+         * 如果无选中项 -> 聚焦所有可见点云
+         */
+        void zoomToSelected();
+
     protected:
         /**
         * @brief 移除指定节点及其数据 (递归删除子节点)

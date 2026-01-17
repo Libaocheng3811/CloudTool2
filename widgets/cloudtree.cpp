@@ -6,7 +6,7 @@
 #include "common_ui/txtimportdialog.h"
 #include "common_ui/txtexportdialog.h"
 
-#include <stack>
+#include <cfloat>
 
 #include <QCheckBox>
 #include <QFileDialog>
@@ -731,6 +731,46 @@ namespace ct
         m_cloudview->refresh();
 
         printI(QString("Add results to group [%1] done.").arg(groupName));
+    }
+
+    void CloudTree::zoomToSelected() {
+        std::vector<Cloud::Ptr> targets;
+        std::vector<Cloud::Ptr> selected = getSelectedClouds();
+
+        if (!selected.empty()){
+            targets = selected;
+        }
+
+        if (targets.empty()){
+            // 场景为空
+            m_cloudview->resetCamera();
+            return;
+        }
+
+        Eigen::Vector3f global_min(FLT_MAX, FLT_MAX, FLT_MAX);
+        Eigen::Vector3f global_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+        bool valid = false;
+        for (const auto& cloud : targets) {
+            if (cloud->empty()) continue;
+
+            Eigen::Vector3f c_min = cloud->min().getVector3fMap();
+            Eigen::Vector3f c_max = cloud->max().getVector3fMap();
+
+            // 更新全局最小值
+            global_min = global_min.cwiseMin(c_min);
+            // 更新全局最大值
+            global_max = global_max.cwiseMax(c_max);
+
+            valid = true;
+        }
+
+        if (valid) {
+            m_cloudview->zoomToBounds(global_min, global_max);
+            printI("Zoom to fit selected/visible objects.");
+        } else {
+            m_cloudview->resetCamera();
+        }
     }
 
     void CloudTree::onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result)

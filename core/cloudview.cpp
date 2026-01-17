@@ -677,6 +677,17 @@ namespace ct
         setView(Eigen::Vector3f(1, 0, 0), Eigen::Vector3f(0, 0, 1));
     }
 
+    void CloudView::zoomToBounds(const Eigen::Vector3f& min_pt, const Eigen::Vector3f& max_pt){
+        double bounds[6] = {
+                (double)min_pt.x(), (double)max_pt.x(),
+                (double)min_pt.y(), (double)max_pt.y(),
+                (double)min_pt.z(), (double)max_pt.z()
+        };
+        m_render->ResetCamera(bounds);
+        m_render->ResetCameraClippingRange();
+        m_viewer->getRenderWindow()->Render();
+    }
+
     void CloudView::setInteractiveMode(bool activate) {
         bool need_render = false;
 

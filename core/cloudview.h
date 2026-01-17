@@ -348,6 +348,13 @@ namespace ct {
         void setRightSideView();
 
         /**
+         * @brief 聚集到指定的包围盒
+         *  @param min_pt 最小点 (x, y, z)
+         *  @param max_pt 最大点 (x, y, z)
+         */
+        void zoomToBounds(const Eigen::Vector3f& min_pt, const Eigen::Vector3f& max_pt);
+
+        /**
          * @brief 设置交互模式(LOD切换)
          * @param activate true=正在交互(显示稀疏)， false=静止(显示稠密)
          */
