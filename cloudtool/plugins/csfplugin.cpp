@@ -91,10 +91,12 @@ void CSFPlugin::onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud
         off_ground_cloud->setCloudColor(ct::RGB{255, 0, 0}); // Red
     }
 
-    m_cloudtree->setCloudChecked(m_cloud, false);
+    std::vector<ct::Cloud::Ptr> results;
+    results.push_back(ground_cloud);
+    results.push_back(off_ground_cloud);
 
-    m_cloudtree->appendCloud(m_cloud, ground_cloud);
-    m_cloudtree->appendCloud(m_cloud, off_ground_cloud);
+    QString groupName = m_cloud->id() + "_CSF";
+    m_cloudtree->addResultGroup(m_cloud, results, groupName);
 
     this->accept();
 }

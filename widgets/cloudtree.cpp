@@ -6,6 +6,8 @@
 #include "common_ui/txtimportdialog.h"
 #include "common_ui/txtexportdialog.h"
 
+#include <stack>
+
 #include <QCheckBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -21,6 +23,7 @@
 #include <QUrl>
 #include <QComboBox>
 #include <QApplication>
+#include <QTime>
 
 namespace ct
 {
@@ -42,15 +45,16 @@ namespace ct
 
         // move to thread
         m_fileio = new FileIO;
-        // 将m_fileio对象移动到m_thread线程中
         m_fileio->moveToThread(&m_thread);
         connect(&m_thread, &QThread::finished, m_fileio, &QObject::deleteLater);
         connect(m_fileio, &FileIO::loadCloudResult, this, &CloudTree::loadCloudResult);
         connect(m_fileio, &FileIO::saveCloudResult, this, &CloudTree::saveCloudResult);
+
         connect(this, &CloudTree::loadPointCloud, m_fileio, &FileIO::loadPointCloud);
         connect(this, &CloudTree::savePointCloud, m_fileio, &FileIO::savePointCloud);
         connect(this, &QTreeWidget::itemChanged, this, &CloudTree::itemChangedEvent);
         connect(this, &CloudTree::itemSelectionChanged, this, &CloudTree::itemSelectionChangedEvent);
+
         connect(m_fileio, &FileIO::requestFieldMapping, this, &CloudTree::onFieldMappingRequested, Qt::BlockingQueuedConnection);
         connect(m_fileio, &FileIO::requestTxtImportSetup, this, &CloudTree::onTxtImportRequested, Qt::BlockingQueuedConnection);
         connect(m_fileio, &FileIO::requestTxtExportSetup, this, &CloudTree::onTxtExportRequested, Qt::BlockingQueuedConnection);
@@ -69,6 +73,11 @@ namespace ct
             m_thread.terminate();
             m_thread.wait();
         }
+        m_cloud_map.clear();
+    }
+
+    Cloud::Ptr CloudTree::getCloud(QTreeWidgetItem *item) {
+        return m_cloud_map.value(item, nullptr);
     }
 
     void CloudTree::addCloud()
@@ -93,10 +102,22 @@ namespace ct
             emit loadPointCloud(i);
     }
 
-    void CloudTree::insertCloud(const ct::Index &index, const Cloud::Ptr &cloud, bool selected)
+    QTreeWidgetItem* CloudTree::getItemById(const QString &id) {
+        for (auto it = m_cloud_map.begin(); it != m_cloud_map.end(); ++it){
+            if (it.value()->id() == id)
+                return it.key();
+        }
+        return nullptr;
+    }
+
+
+    void CloudTree::insertCloud(const Cloud::Ptr& cloud, QTreeWidgetItem* parentItem, bool selected)
     {
         // check cloud id
         if (cloud == nullptr) return;
+
+        cloud->update();
+
         if (m_cloudview->contains(cloud->id()))
         {
             int k = QMessageBox::warning(this, "WARNING", "Rename the exists id?", QMessageBox::Yes, QMessageBox::Cancel);
@@ -126,98 +147,105 @@ namespace ct
             }
         }
 
-        // update cloud_vec
-        /**
-         * @brief 结构树索引说明
-         * 1、当index.row 小于或等于 -1 或大于顶级项的数量时，意味着没有有效的行索引。m_cloud_vec 的末尾添加一个新的内部向量，并把点云 cloud 添加到这个新的向量中
-         *    这通常意味着在树的根级别创建一个新的节点。
-         * 2、当 index.row 有效时，会检查 index.col 是否有效。如果 index.col 在有效范围内，会在 m_cloud_vec[index.row] 的指定列位置插入点云 cloud
-         *    这通常意味着在树的某个特定节点下插入一个新的子节点。
-         * 3、如果 index.col 不在有效范围内，代码会将点云 cloud 添加到 m_cloud_vec[index.row] 的末尾。
-         *    这通常意味着在树的某个节点下追加一个新的子节点。
-         */
-        // 行索引无效，在根级别插入新节点
-        if (index.row <= -1 || index.row > topLevelItemCount())
-        {
-            std::vector<Cloud::Ptr> temp;
-            temp.push_back(cloud);
-            m_cloud_vec.push_back(temp);
+        // 创建节点
+        // 如果 parentItem 不为空，说明我们要在这个点云下创建子节点（比如选点结果）
+        // 如果为空，说明是新加载的根点云，我们按逻辑可能需要创建一个"文件夹"作为根，或者直接作为根
+        // 这里简化：直接作为 parentItem 的子节点，如果 parentItem 空，则作为 TopLevel
+        QTreeWidgetItem* newItem = addItem(parentItem, cloud->id(), selected);
+
+        m_cloud_map.insert(newItem, cloud);
+        m_cloudview->addPointCloud(cloud); // 渲染
+
+        // [关键] 根据点云类型决定显示属性
+        // 假设我们通过 Cloud 对象的一个属性或者简单的 ID 规则来区分类型
+        // 如果是 PickPoints 生成的，我们在 add() 时会设置好属性
+        // TODO:这里根据大小来判断设置属性合理吗？
+        if (cloud->pointSize() > 1) {
+            m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize());
+            if (cloud->id().contains("picked-")) m_cloudview->setPointCloudColor(cloud, ct::Color::Red); // 目前设定选点显示总为红色
         }
-        // 行索引有效，检查列索引
-        else
-        {
-            // 列索引有效，在row节点下的第col列插入cloud， topLevelItem返回row行的顶层节点，childCount()返回该节点下的子节点数量
-            if ((index.col > -1) && (index.col < topLevelItem(index.row)->childCount()))
-                m_cloud_vec[index.row].insert(m_cloud_vec[index.row].begin() + index.col, cloud);
-            // 列索引无效，在row节点下的最后插入cloud
-            else
-                m_cloud_vec[index.row].push_back(cloud);
+
+        if (selected && cloud->pointSize() > 100){
+            m_cloudview->addBox(cloud);
         }
-        // add treewidget item
-        addItem(index, cloud->info().absolutePath(), cloud->id(), selected);
-        m_cloudview->addPointCloud(cloud);
-        m_cloudview->resetCamera();
+
+        m_cloudview->resetCamera(); // 可选
         printI(QString("Add cloud[id:%1] done.").arg(cloud->id()));
     }
 
     void CloudTree::updateCloud(const Cloud::Ptr &cloud, const Cloud::Ptr &new_cloud, bool update_name)
     {
-        if (cloud == nullptr || new_cloud == nullptr)
-            return;
+        if (cloud == nullptr || new_cloud == nullptr) return;
         // 如果cloud和new_cloud不是同一个对象，交换他们的内容
-        if (cloud != new_cloud)
-            cloud->swap(*new_cloud);
+        if (cloud != new_cloud) cloud->swap(*new_cloud);
         // 更新点云
         cloud->update();
-        // 根据ID获取点云在文件树中的索引
-        Index i = index(cloud->id());
-        if (update_name)
-            // 将点云名称更新为new_cloud的ID
-            renameCloud(i, new_cloud->id());
+
+        if (update_name){
+            QTreeWidgetItem* item = getItemById(cloud->id());
+            if (item) renameCloudItem(item, new_cloud->id());
+        }
         m_cloudview->addPointCloud(cloud);
-        // 如果item(i)返回为nullptr, 再访问它的成员函数isSelected()，不会报错吗？访问了空指针的成员函数
-        if (item(i)->isSelected())
+
+        QTreeWidgetItem* item = getItemById(cloud->id());
+        if (item && item->isSelected()){
             m_cloudview->addBox(cloud);
+        }
         printI(QString("Update cloud[id:%1, size:%2] to new cloud[id:%3, size:%4] done.")
                 .arg(cloud->id()).arg(cloud->size()).arg(new_cloud->id()).arg(new_cloud->size()));
     }
 
-    void CloudTree::removeCloud(const ct::Index &index)
+    void CloudTree::removeCloudItem(QTreeWidgetItem *item)
     {
-        Cloud::Ptr cloud = getCloud(index);
-        emit removedCloudId(cloud->id());
-        // 移除点云，法线和包围盒
-        m_cloudview->removePointCloud(cloud->id());
-        m_cloudview->removeShape(cloud->id());
-        m_cloudview->removePointCloud(cloud->normalId());
-        // 移除项
-        removeItem(index);
-        // 如果索引行只有一个点云对象，则移除整行
-        if (m_cloud_vec[index.row].size() == 1)
-            m_cloud_vec.erase(m_cloud_vec.begin() + index.row);
-        // 否则，移除指定列的点云对象，
-        else
-            m_cloud_vec[index.row].erase(m_cloud_vec[index.row].begin() + index.col);
-        printI(QString("Remove cloud[id:%1] done.").arg(cloud->id()));
+        if (!item) return;
 
+        // 级联删除，在删除父项前先删除其所有子项
+        QList<QTreeWidgetItem*> allChildren;
+        getAllChildItems(item, allChildren);
+        allChildren.append(item);
+
+        m_cloudview->setAutoRender(false);
+
+        for (QTreeWidgetItem* c : allChildren){
+            Cloud::Ptr cloud = getCloud(c);
+            if (cloud) {
+                emit removedCloudId(cloud->id());
+                m_cloudview->removePointCloud(cloud->id());
+                m_cloudview->removeShape(cloud->boxId());
+                m_cloudview->removePointCloud(cloud->normalId());
+                m_cloud_map.remove(c);
+            }
+        }
+
+        m_cloudview->setAutoRender(true);
+        m_cloudview->refresh();
+
+        removeItem(item);
+        printI(QString("Remove cloud[id:%1] done."));
     }
 
     void CloudTree::removeAllClouds()
     {
-        for (auto i : m_cloud_vec)
-            for (auto j : i)
-                emit removedCloudId(j->id());
+        m_cloudview->setAutoRender(false);
+
+        // 遍历所有 TopLevel Items 并移除
+        while (this->topLevelItemCount() > 0){
+            removeCloudItem(this->topLevelItem(0));
+        }
+
         m_cloudview->removeAllPointClouds();
         m_cloudview->removeAllShapes();
-        this->clear();
-        this->m_cloud_vec.clear();
-        std::vector<std::vector<Cloud::Ptr>>().swap(m_cloud_vec);
+        m_cloud_map.clear();
+
+        m_cloudview->setAutoRender(true);
+        m_cloudview->refresh();
         printI("remove all clouds done.");
     }
 
-    void CloudTree::saveCloud(const ct::Index &index)
-    {
-        Cloud::Ptr cloud = getCloud(index);
+    void CloudTree::saveCloudItem(QTreeWidgetItem *item) {
+        Cloud::Ptr cloud = getCloud(item);
+        if (!cloud) return; // 如果是文件夹，不保存，返回空
+
         QString filter = "PLY(*.ply);;PCD(*.pcd);;LAS(*.las);;TXT(*.txt)";
         QString filepath = QFileDialog::getSaveFileName(this, tr("Save cloud file"), cloud->id(), filter);
         if (filepath.isEmpty()) return;
@@ -240,6 +268,63 @@ namespace ct
         emit savePointCloud(cloud, filepath, k);
     }
 
+    void CloudTree::renameCloudItem(QTreeWidgetItem *item, const QString &name) {
+        Cloud::Ptr cloud = getCloud(item);
+        if (!cloud) {
+            item->setText(0, name);
+            return;
+        }
+
+        if (m_cloudview->contains(name)){
+            printW(QString("Cloud[id:%1] already exists, please rename it.").arg(name));
+            return;
+        }
+
+        item->setText(0, name);
+        // TODO:为什么这里是移除点云？
+        m_cloudview->removePointCloud(cloud->id());
+        m_cloudview->removePointCloud(cloud->normalId());
+        m_cloudview->removeShape(cloud->boxId());
+
+        cloud->setId(name);
+        printI(QString("Rename done."));
+    }
+
+    std::vector<Cloud::Ptr> CloudTree::getSelectedClouds()
+    {
+        std::vector<Cloud::Ptr> clouds;
+        QList<QTreeWidgetItem*> items = this->getSelectedItems();
+
+        for (auto item : items){
+            Cloud::Ptr c = getCloud(item);
+            if (c) clouds.push_back(c);
+        }
+        return clouds;
+    }
+
+    std::vector<Cloud::Ptr> CloudTree::getAllClouds()
+    {
+        std::vector<Cloud::Ptr> clouds;
+        QList<Cloud::Ptr> values = m_cloud_map.values();
+
+        for (const auto& c : values) clouds.push_back(c);
+        return clouds;
+    }
+
+    void CloudTree::removeSelectedClouds() {
+        QList<QTreeWidgetItem*> items = getSelectedItems();
+        //
+        for (auto item : items){
+            // 检查是否挂在树上
+            if (item->treeWidget() == this) removeCloudItem(item);
+        }
+    }
+
+    void CloudTree::saveSelectedClouds(){
+        QList<QTreeWidgetItem*> items = getSelectedItems();
+        for (auto item : items) saveCloudItem(item);
+    }
+
     void CloudTree::mergeSelectedClouds()
     {
         std::vector<Cloud::Ptr> clouds = getSelectedClouds();
@@ -249,81 +334,60 @@ namespace ct
             printW("The number of clouds to merge is not enough!");
             return;
         }
-        // 新创建点云对象merge_cloud，循环通过重载运算符将点云合并到merge_cloud中
         Cloud::Ptr merge_cloud(new Cloud);
-        for (auto& i : clouds)
+        for (auto& i : clouds) {
             *merge_cloud += *i;
+
+        }
         merge_cloud->setId(MERGE_ADD_FLAG + clouds.front()->id());
         merge_cloud->setInfo(clouds.front()->info());
         merge_cloud->update();
-        // 将合并后的点云添加到视图中
-        appendCloud(merge_cloud);
+
+        QString merge_id = clouds[0]->id() + QTime::currentTime().toString();
+        QTreeWidgetItem* groupItem = addItem(nullptr, "Merged_" + merge_id);
+        // 合并点云默认作为根节点添加
+        insertCloud(merge_cloud, groupItem, true);
         printI(QString("Merge clouds to new cloud[id:%1] done.").arg(merge_cloud->id()));
+    }
+
+    void CloudTree::cloneSelectedClouds(){
+        QList<QTreeWidgetItem*> items = getSelectedItems();
+        for (auto item : items) cloneCloudItem(item);
+    }
+
+    void CloudTree::cloneCloudItem(QTreeWidgetItem *item){
+        Cloud::Ptr cloud = getCloud(item);
+        if (!cloud) return;
+
+        Cloud::Ptr clone = cloud->makeShared();
+        clone->setId(CLONE_ADD_FLAG + cloud->id());
+        clone->setInfo(cloud->info());
+
+        // 克隆点云加到同级点云节点
+        insertCloud(clone, item->parent(), true);
     }
 
     void CloudTree::setCloudChecked(const Cloud::Ptr &cloud, bool checked)
     {
-        if (cloud == nullptr)
+        if (!cloud) return;
+
+        QTreeWidgetItem* item = getItemById(cloud->id());
+        if (!item) return;
+
+        if ((checked && item->checkState(0) == Qt::Checked) || (!checked && item->checkState(0) == Qt::Unchecked)){
             return;
-        Index i = index(cloud->id());
-        // 如果当前状态与要设置的状态一致，则直接返回，不做任何操作
-        if (checked && (item(i)->checkState(0) == Qt::Checked))
-            return;
-        if ((!checked) && (item(i)->checkState(0) == Qt::Unchecked))
-            return;
-        // 否则，根据传入的目标状态设置选中状态
-        this->setItemChecked(i, checked);
-        // 如果是选中，则添加点云和包围盒，否则移除点云、包围盒、法线
-        if (checked)
-        {
-            m_cloudview->addPointCloud(cloud);
-            m_cloudview->addBox(cloud);
         }
-        else
-        {
-            m_cloudview->removePointCloud(cloud->id());
-            m_cloudview->removeShape(cloud->boxId());
-            m_cloudview->removePointCloud(cloud->normalId());
-        }
+
+        item->setCheckState(0, checked ? Qt::Checked : Qt::Unchecked);
     }
 
     void CloudTree::setCloudSelected(const Cloud::Ptr &cloud, bool selected)
     {
-        if (cloud == nullptr)
-            return;
-        Index i = index(cloud->id());
-        item(i)->setSelected(selected);
-    }
+        if (!cloud) return;
 
-    void CloudTree::cloneCloud(const Index& index)
-    {
-        Cloud::Ptr clone_cloud = getCloud(index)->makeShared();
-        clone_cloud->setId(CLONE_ADD_FLAG + clone_cloud->id());
-        clone_cloud->setInfo(clone_cloud->info());
-        // 在克隆时不需要调用update方法，因为创建一个已有点云的精确副本，而这个副本在创建时已经包含了所有原始点云的状态，包括任何必要的信息和数据。
-        appendCloud(clone_cloud);
-        printI(QString("Clone cloud [id:%1] done.").arg(clone_cloud->id()));
-    }
-
-    void CloudTree::renameCloud(const ct::Index &index, const QString &name)
-    {
-        // 获取当前索引点云对象
-        Cloud::Ptr cloud = getCloud(index);
-        // 检查是否已经存在新的点云ID
-        if (m_cloudview->contains(name))
-        {
-            printW(QString("The Cloud already id[%1] exists!").arg(name));
-            return;
-        }
-        // 设置文件树中新名称
-        item(index)->setText(0, name);
-
-        m_cloudview->removePointCloud(cloud->id());
-        m_cloudview->removePointCloud(cloud->normalId());
-        m_cloudview->removeShape(cloud->boxId());
-        // 更新点云ID
-        cloud->setId(name);
-        printI(QString("Rename cloud [id:%1] to new name[id:%2] done. ").arg(cloud->id()).arg(name));
+        QTreeWidgetItem* item = getItemById(cloud->id());
+        if (!item) return;
+        item->setSelected(selected);
     }
 
     void CloudTree::loadCloudResult(bool success, const Cloud::Ptr &cloud, float time)
@@ -334,9 +398,11 @@ namespace ct
         {
             printI(QString("Load the file [path:%1] done, take time %2 ms.").arg(cloud->info().absoluteFilePath()).arg(time));
             m_path = cloud->info().path();
-            appendCloud(cloud);
-        }
 
+            QString folderName = cloud->info().fileName();
+            QTreeWidgetItem* groupItem = addItem(nullptr, folderName);
+            insertCloud(cloud, groupItem, true);
+        }
         closeProgress();
     }
 
@@ -353,195 +419,235 @@ namespace ct
         closeProgress();
     }
 
+    // TODO: 对于文件树的修改，目前只验证了添加点云、选点、CSF和植被滤波功能，其他功能还未验证是否正常
     void CloudTree::itemChangedEvent(QTreeWidgetItem *item, int column){
-        if (column == 0) return;
+        if (column != 0) return;
 
-        std::vector<Index> indexes = getClickedIndexes(item);
+        const bool wasBlocked = this->blockSignals(true);
+        bool isChecked = (item->checkState(0) == Qt::Checked);
+
+        // 级联设置子节点勾选状态,向下递归，父->子
+        setItemAndChildrenCheckState(item, isChecked ? Qt::Checked : Qt::Unchecked);
+
+        // 向上递归，子->父
+        QTreeWidgetItem* parent = item->parent();
+        while (parent){
+            // 如果父节点是点云节点，则跳过
+            if (getCloud(parent) != nullptr){
+                parent = parent->parent();
+                continue;
+            }
+
+            // 针对纯文件夹节点逻辑
+            bool allChecked = true;
+            bool anyChecked = false;
+            for (int i = 0; i < parent->childCount(); ++i){
+                if (parent->child(i)->checkState(0) == Qt::Checked) anyChecked = true;
+                else if (parent->child(i)->checkState(0) == Qt::Unchecked) allChecked = false;
+                else { anyChecked = true; allChecked = false;}
+            }
+            if (allChecked) parent->setCheckState(0, Qt::Checked);
+            else if (anyChecked) parent->setCheckState(0, Qt::PartiallyChecked);
+            else parent->setCheckState(0, Qt::Unchecked);
+
+            parent = parent->parent();
+        }
 
         m_cloudview->setAutoRender(false);
 
-        for (auto &i : indexes){
-            Cloud::Ptr cloud = getCloud(i);
-            if (!cloud) continue;
+        // 获取所有受影响节点 (自己 + 所有子孙 + 所有祖先)
+        QList<QTreeWidgetItem*> affectedItems;
+        affectedItems.append(item);
+        getAllChildItems(item, affectedItems);
 
-            bool isChecked = (item->checkState(0) == Qt::Checked);
-            bool isVisible = m_cloudview->contains(cloud->id());
+        QTreeWidgetItem* p = item->parent();
+        while (p){
+            affectedItems.append(p);
+            p = p->parent();
+        }
 
-            if (isChecked){
-                // 只有当它"被勾选" 且 "当前未显示" 时，才去添加！
-                if (!isVisible){
-                    m_cloudview->addPointCloud(cloud);
-                    m_cloudview->addBox(cloud);
+        for (QTreeWidgetItem* it : affectedItems){
+            Cloud::Ptr cloud = getCloud(it);
+            if (!cloud) continue; // 如果是纯文件夹，跳过
+
+            // 只要不是 Unchecked，就显示 (Checked/Partially)
+            bool shouldShow = (it->checkState(0) != Qt::Unchecked);
+            bool exists = m_cloudview->contains(cloud->id());
+
+            if(shouldShow){
+                if (exists){
+                    // 若点云已经存在，设为可见
+                    m_cloudview->setPointCloudVisibility(cloud->id(), true);
                 }
+                else {
+                    // 不存在，首次加载
+                    m_cloudview->addPointCloud(cloud);
+                    // 恢复属性
+                    if (cloud->pointSize() > 1){
+                        m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize());
+                        if (cloud->id().contains("picked-"))
+                            m_cloudview->setPointCloudColor(cloud, ct::Color::Red);
+                    }
+                }
+                if (it->isSelected() && cloud->size() > 100)
+                    m_cloudview->addBox(cloud);
             }
             else{
-                // 只有当它"未勾选" 且 "当前显示中" 时，才去移除
-                if (isVisible){
-                    m_cloudview->removePointCloud(cloud->id());
-                    m_cloudview->removeShape(cloud->boxId());
-                    m_cloudview->removePointCloud(cloud->normalId());
+                if (exists){
+                    // 不移除点云，设为隐藏
+                    m_cloudview->setPointCloudVisibility(cloud->id(), false);
                 }
             }
         }
         m_cloudview->setAutoRender(true);
         m_cloudview->refresh();
+        this->blockSignals(wasBlocked);
     }
 
     void CloudTree::itemSelectionChangedEvent()
     {
         m_cloudview->setAutoRender(false);
 
-        std::vector<Index> all = getAllIndexes();
-        std::vector<Index> indexes = getSelectedIndexes();
-        for (auto& i : all)
-        {
-            bool is_selected = false;
-            for (const auto& sel : indexes){
-                if (sel == i) { is_selected = true; break; }
-            }
+        // 获取所有节点和被选中的节点
+        QList<QTreeWidgetItem*> allItems = m_cloud_map.keys();
+        QList<QTreeWidgetItem*> selectedItems = getSelectedItems();
 
-            Cloud::Ptr cloud = getCloud(i);
-            bool has_box = m_cloudview->contains(cloud->boxId());
+        // 更新3D视图中的包围盒
+        for (QTreeWidgetItem* item : allItems){
+            Cloud::Ptr cloud = m_cloud_map.value(item);
+            if (!cloud) continue;
 
-            if (is_selected){
-                // 只有当“被选中”且“还没显示包围盒”时，才调用 addBox
-                if (!has_box) m_cloudview->addBox(cloud);
+            bool isSelected = selectedItems.contains(item);
+            bool isVisible = m_cloudview->contains(cloud->id()); // 点云是否在视图中显示，只有显示的点云才绘制包围盒
+            bool hasBox = m_cloudview->contains(cloud->boxId());
+
+            if (isSelected && isVisible){
+                // 只有当：被选中 + 已显示 + 是原始点云(点数多) 时，才显示包围盒
+                if (!hasBox && cloud->size() > 100)
+                    m_cloudview->addBox(cloud);
             }
             else{
-                // 只有当“未选中”且“已显示包围盒”时，才调用 removeBox
-                if (has_box) m_cloudview->removeShape(cloud->boxId());
+                // 未选中，或者云本身都没显示，肯定要移除盒子
+                if (hasBox) m_cloudview->removeShape(cloud->boxId());
             }
         }
 
-        // update table
-        if (m_table == nullptr)
-            return;
+        //更新属性表,只显示第一个选中的
+        if (m_table && !selectedItems.isEmpty()){
+            // 清理旧控件
+            const int COLOR_MODE_ROW = 7;
+            m_table->removeCellWidget(4, 1); // point size
+            m_table->removeCellWidget(5, 1); // Opacity
+            m_table->removeCellWidget(6, 1); // Normal Checkbox
+            m_table->removeCellWidget(COLOR_MODE_ROW, 1); // Color Mode
 
-        QString id, type, size_str, resolution_str;
+            if (!selectedItems.isEmpty()){
+                // 只显示第一个选中的点云
+                QTreeWidgetItem* firstItem = selectedItems.first();
+                Cloud::Ptr update_cloud = getCloud(firstItem);
 
-        const int COLOR_MODE_ROW = 7;
+                if (update_cloud){
+                    // 基础文本信息
+                    m_table->setItem(0, 1, new QTableWidgetItem(update_cloud->id()));
+                    m_table->setItem(1, 1, new QTableWidgetItem(update_cloud->type()));
+                    m_table->setItem(2, 1, new QTableWidgetItem(QString::number(update_cloud->size())));
+                    m_table->setItem(3, 1, new QTableWidgetItem(QString::number(update_cloud->resolution())));
 
-        m_table->removeCellWidget(4, 1);
-        m_table->removeCellWidget(5, 1);
-        m_table->removeCellWidget(6, 1);
-        m_table->removeCellWidget(COLOR_MODE_ROW, 1);
-        if (indexes.size() == 0)
-        {
-            id = type = size_str = resolution_str = "";
-            // 在渲染窗口中显示点云id
+                    // 在视图左下角显示 ID
+                    m_cloudview->showCloudId(update_cloud->id());
+
+                    // Point Size (SpinBox)
+                    QSpinBox *point_size = new QSpinBox;
+                    point_size->setRange(1, 99);
+                    point_size->setValue(update_cloud->pointSize());
+                    connect(point_size, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+                            [=](int value){
+                                update_cloud->setPointSize(value);
+                                m_cloudview->setPointCloudSize(update_cloud->id(), value);
+                            });
+                    m_table->setCellWidget(4, 1, point_size);
+
+                    // Opacity (DoubleSpinBox)
+                    QDoubleSpinBox* opacity = new QDoubleSpinBox;
+                    opacity->setSingleStep(0.1);
+                    opacity->setRange(0, 1);
+                    opacity->setValue(update_cloud->opacity());
+                    connect(opacity, static_cast<void (QDoubleSpinBox::*)(double )>(&QDoubleSpinBox::valueChanged),
+                            [=](double value){
+                                update_cloud->setOpacity(value);
+                                m_cloudview->setPointCloudOpacity(update_cloud->id(), value);
+                            });
+                    m_table->setCellWidget(5, 1, opacity);
+
+                    // Normals (Checkbox + Scale)
+                    QWidget* normals_widget = new QWidget;
+                    QHBoxLayout* layout = new QHBoxLayout(normals_widget);
+                    layout->setMargin(0);
+
+                    QCheckBox* show_normals = new QCheckBox;
+                    QDoubleSpinBox* scale = new QDoubleSpinBox;
+                    scale->setSingleStep(0.01);
+                    scale->setRange(0, 9999);
+                    scale->setValue(0.05); // 默认法线长度
+
+                    show_normals->setEnabled(update_cloud->hasNormals());
+
+                    // 连接信号
+                    connect(scale, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+                            [=](double value){
+                                if (update_cloud->hasNormals() && show_normals->isChecked())
+                                    m_cloudview->addPointCloudNormals(update_cloud, 1, value);
+                            });
+                    connect(show_normals, &QCheckBox::stateChanged,
+                            [=](int state){
+                                if (state) m_cloudview->addPointCloudNormals(update_cloud, 1, scale->value());
+                                else m_cloudview->removeShape(update_cloud->normalId());
+                            });
+
+                    layout->addWidget(show_normals);
+                    layout->addWidget(scale);
+                    layout->addStretch();
+                    m_table->setCellWidget(6, 1, normals_widget);
+
+                    // Color Mode (ComboBox)
+                    if (m_table->rowCount() <= COLOR_MODE_ROW) m_table->setRowCount(COLOR_MODE_ROW + 1);
+
+                    QComboBox* color_mode = new QComboBox;
+                    color_mode->addItem("RGB (Default)");
+                    color_mode->addItem("x");
+                    color_mode->addItem("y");
+                    color_mode->addItem("z");
+
+                    // 添加标量场字段
+                    QStringList fields = update_cloud->getScalarFieldNames();
+                    for (const QString& f : fields) color_mode->addItem(f);
+
+                    connect(color_mode, &QComboBox::currentTextChanged,
+                            [=](const QString& text){
+                                if (text == "RGB (Default)") {
+                                    m_cloudview->resetPointCloudColor(update_cloud);
+                                } else if (text == "x" || text == "y" || text == "z") {
+                                    update_cloud->setCloudColor(text.toLower());
+                                    m_cloudview->addPointCloud(update_cloud);
+                                } else {
+                                    update_cloud->updateColorByField(text);
+                                    m_cloudview->addPointCloud(update_cloud);
+                                }
+                            });
+                    m_table->setCellWidget(COLOR_MODE_ROW, 1, color_mode);
+                }
+            }
+            else {
+                // 如果没有选中点云，则清空属性表
+                for(int i=0; i<4; ++i) m_table->setItem(i, 1, new QTableWidgetItem(""));
+                m_cloudview->showCloudId("");
+            }
+        }
+        else if (m_table){
+            for (int i = 0; i < 4; ++i) m_table->setItem(i, 1, new QTableWidgetItem(""));
             m_cloudview->showCloudId("");
         }
-        else
-        {
-            // 有选中点云的情况下，属性表显示第一个索引的点云信息
-            Cloud::Ptr update_cloud = getCloud(indexes.front());
-            id = update_cloud->id();
-            type = update_cloud->type();
-            resolution_str = QString::number(update_cloud->resolution());
-            size_str = QString::number(update_cloud->size());
-            m_cloudview->showCloudId(update_cloud->id());
 
-            // point_size
-            // 添加一个QSpinBox控件用于设置点云点的大小
-            QSpinBox *point_size = new QSpinBox;
-            point_size->setRange(1, 99);
-            point_size->setValue(update_cloud->pointSize());
-            connect(point_size, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), [=](int value)
-                    {
-                        // 更新点的大小
-                        update_cloud->setPointSize(value);
-                        // 更新点云视图大小
-                        m_cloudview->setPointCloudSize(update_cloud->id(), value);
-                    });
-            m_table->setCellWidget(4, 1, point_size);
-
-            // opacity
-            QDoubleSpinBox* opacity = new QDoubleSpinBox;
-            opacity->setSingleStep(0.1);
-            opacity->setRange(0, 1);
-            opacity->setValue(update_cloud->opacity());
-            connect(opacity, static_cast<void (QDoubleSpinBox::*)(double )>(&QDoubleSpinBox::valueChanged), [=](double value)
-                    {
-                        update_cloud->setOpacity(value);
-                        m_cloudview->setPointCloudOpacity(update_cloud->id(), value);
-                    });
-            m_table->setCellWidget(5, 1, opacity);
-
-            // has normals
-            QCheckBox* show_normals = new QCheckBox;
-            QDoubleSpinBox* scale = new QDoubleSpinBox;
-            scale->setSingleStep(0.01);
-            scale->setRange(0, 9999);
-            scale->setValue(0.01);
-
-            // 如果点云有法线，设置法线复选框状态为可选
-            if (update_cloud->hasNormals())
-                show_normals->setEnabled(true);
-            else
-                show_normals->setEnabled(false);
-
-            connect(scale, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), [=](double value )
-                    {
-                        // 当前点云有法线并且复选框被选中时，添加点云法线
-                        if (update_cloud->hasNormals() && show_normals->isChecked())
-                            m_cloudview->addPointCloudNormals(update_cloud, 1, value);
-                    });
-            connect(show_normals, &QCheckBox::stateChanged, [=](int state)
-                    {
-                        // 如果复选框状态为选中，添加点云法线； 否则，删除点云法线
-                        if (state) m_cloudview->addPointCloudNormals(update_cloud, 1, scale->value());
-                        else m_cloudview->removeShape(update_cloud->normalId());
-                    });
-
-            QHBoxLayout* layout = new QHBoxLayout;
-            layout->addWidget(show_normals);
-            layout->addWidget(scale);
-            // 使用 addStretch() 方法可以在布局中插入一段可伸缩的空间，这段空间可以根据窗口大小的变化而调整。
-            layout->addStretch();
-            QWidget* normals_widget = new QWidget;
-            normals_widget->setLayout(layout);
-            normals_widget->layout()->setMargin(0);
-            m_table->setCellWidget(6, 1, normals_widget);
-
-            if (m_table->rowCount() <= COLOR_MODE_ROW) m_table->setRowCount(COLOR_MODE_ROW + 1);
-
-            QComboBox* color_mode = new QComboBox;
-            color_mode->addItem("RGB (Default)"); // 恢复原始 RGB 或默认黑色
-            color_mode->addItem("x");
-            color_mode->addItem("y");
-            color_mode->addItem("z");
-
-            // 动态添加自定义字段 (如 Intensity)
-            QStringList fields = update_cloud->getScalarFieldNames();
-            for (const QString& f : fields) {
-                color_mode->addItem(f);
-            }
-
-            connect(color_mode, &QComboBox::currentTextChanged, [=](const QString& text)
-            {
-                if (text == "RGB (Default)") {
-                    // 调用 CloudView 的重置函数，它会内部调用 cloud->restoreColors()
-                    m_cloudview->resetPointCloudColor(update_cloud);
-                }
-                else if (text == "x" || text == "y" || text == "z") {
-                    // cloud->setCloudColor(axis) 内部会先 backupColors()
-                    update_cloud->setCloudColor(text.toLower());
-                    m_cloudview->addPointCloud(update_cloud); // 刷新显示
-                }
-                else {
-                    // 自定义字段着色（Cloud::updateColorByField 内部会先 backupColors()）
-                    update_cloud->updateColorByField(text);
-                    m_cloudview->addPointCloud(update_cloud); // 刷新显示
-                }
-            });
-
-            m_table->setCellWidget(COLOR_MODE_ROW, 1, color_mode);
-
-        }
-        m_table->setItem(0, 1, new QTableWidgetItem(id));
-        m_table->setItem(1, 1, new QTableWidgetItem(type));
-        m_table->setItem(2, 1, new QTableWidgetItem(size_str));
-        m_table->setItem(3, 1, new QTableWidgetItem(resolution_str));
         m_cloudview->setAutoRender(true);
         m_cloudview->refresh();
     }
@@ -578,6 +684,53 @@ namespace ct
         connect(m_processing_dialog, SIGNAL(cancelRequested()), worker, SLOT(cancel()), Qt::DirectConnection);
 
         connect(m_processing_dialog, &ProcessingDialog::cancelRequested, this, &CloudTree::closeProgress);
+    }
+
+    void CloudTree::addResultGroup(const Cloud::Ptr &originCloud, const std::vector<Cloud::Ptr> &results,
+                                   const QString &groupName) {
+        if (!originCloud) return;
+
+        QTreeWidgetItem* originItem = getItemById(originCloud->id());
+        if (!originItem){
+            // 如果原始点云被删除了，尝试将结果点云添加到根目录
+            printW(QString("Origin cloud [%1] item not found, add results to root.").arg(originCloud->id()));
+            QTreeWidgetItem* rootGroup = addItem(nullptr, groupName);
+            for (const auto& cloud : results){
+                insertCloud(cloud, rootGroup, true);
+            }
+            return;
+        }
+
+        QTreeWidgetItem* parentFolder = originItem->parent();
+        // 创建结果组文件夹
+        QTreeWidgetItem* groupItem = addItem(parentFolder, groupName);
+
+        groupItem->setExpanded(true);
+        if (parentFolder) parentFolder->setExpanded(true);
+
+        m_cloudview->setAutoRender(false);
+
+        for (const auto& cloud : results){
+            if (!cloud) continue;
+            insertCloud(cloud, groupItem, true);
+            m_cloudview->setPointCloudVisibility(cloud->id(), true);
+        }
+
+        // 自动隐藏原始点云
+        const bool wasBlocked = this->blockSignals(true);
+        if (originItem->checkState(0) == Qt::Checked){
+            originItem->setCheckState(0, Qt::Unchecked);
+            m_cloudview->removePointCloud(originCloud->id());
+            m_cloudview->removeShape(originCloud->id());
+            m_cloudview->removePointCloud(originCloud->normalId());
+        }
+        this->blockSignals(wasBlocked);
+
+        m_cloudview->setAutoRender(true);
+        m_cloudview->resetCamera();
+        m_cloudview->refresh();
+
+        printI(QString("Add results to group [%1] done.").arg(groupName));
     }
 
     void CloudTree::onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result)

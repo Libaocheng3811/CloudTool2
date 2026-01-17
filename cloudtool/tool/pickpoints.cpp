@@ -122,8 +122,9 @@ void PickPoints::add()
     new_cloud->setId(new_id);
     new_cloud->setInfo(m_selected_cloud->info());
 
+    QTreeWidgetItem* item = m_cloudtree->getItemById(m_selected_cloud->id());
     // 将新点云追加到点云树中，便于管理使用
-    m_cloudtree->appendCloud(m_selected_cloud, new_cloud, true);
+    m_cloudtree->insertCloud(new_cloud, item, true);
 
     m_cloudview->removePointCloud(m_pick_cloud->id());
     m_pick_cloud->clear();

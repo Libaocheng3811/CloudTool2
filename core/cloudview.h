@@ -240,6 +240,13 @@ namespace ct {
          */
         void setShapeRepersentation(const QString& shapeid, int type);
 
+        /**
+         * @brief 设置点云可见性
+         * @param id 点云ID
+         * @param visible 是否可见
+         */
+        void setPointCloudVisibility(const QString& id, bool visible);
+
         ///////////////////////////////////////////////////////////
         // camera
         /**
@@ -248,6 +255,7 @@ namespace ct {
          void resetCamera()
         {
              m_viewer->resetCamera();
+             m_render->ResetCameraClippingRange();
              m_viewer->getRenderWindow()->Render();
         }
 

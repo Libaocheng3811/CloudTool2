@@ -7,6 +7,7 @@
 #include "core/fileio.h"
 
 #include <QMenu>
+#include <QMap>
 #include <QInputDialog>
 #include <QThread>
 
@@ -29,78 +30,52 @@ namespace ct
         void addCloud();
 
         /**
-         * @brief 更新点云
-         */
+        * @brief 更新点云数据
+        */
         void updateCloud(const Cloud::Ptr& cloud, const Cloud::Ptr& new_cloud, bool update_name = false);
 
         /**
-         * @brief 追加点云到同一层
+         * @brief 获取Item对应的Cloud
          */
-        void appendCloud(const Cloud::Ptr& cloud, const Cloud::Ptr& new_cloud, bool selected = false)
-        {
-            new_cloud->update();
-            Index i(index(cloud->id()).row, -1);
-            insertCloud(i, new_cloud, selected);
-        }
+        Cloud::Ptr getCloud(QTreeWidgetItem* item);
 
         /**
-         * @brief 追加点云到新一层
+         * @brief 根据ID获取Item
          */
-        void appendCloud(const Cloud::Ptr& new_cloud, bool selected = false)
-        {
-            insertCloud(Index(-1,-1), new_cloud, selected);
-        }
+        QTreeWidgetItem* getItemById(const QString& id);
 
         /**
-         * @brief 获取选中的点云
-         */
-        std::vector<Cloud::Ptr> getSelectedClouds()
-        {
-            std::vector<Cloud::Ptr> clouds;
-            for (auto& index : getSelectedIndexes())
-                clouds.push_back(getCloud(index));
-            return clouds;
-        }
+        * @brief 插入点云到树中 (核心函数)
+        * @param cloud 点云对象
+        * @param parentItem 父节点项。如果为 nullptr，则作为根节点(或文件夹下的子节点)
+        * @param selected 是否选中新节点
+        */
+        void insertCloud(const Cloud::Ptr& cloud, QTreeWidgetItem* parent = nullptr, bool selected = false);
 
         /**
-         * @brief 获取所有点云
+         * @brief 获取选中的所有点云对象
          */
-        std::vector<Cloud::Ptr> getAllClouds()
-        {
-            std::vector<Cloud::Ptr> clouds;
-            for (auto& index : getAllIndexes())
-            {
-                clouds.push_back(getCloud(index));
-            }
-            return clouds;
-        }
+        std::vector<Cloud::Ptr> getSelectedClouds();
 
         /**
-         * @brief 删除选中的点云
+         * @brief 获取所有点云对象
          */
-        void removeSelectedClouds()
-        {
-            /**
-             * @brief 使用降序排列是为了确保在删除点云时不会影响后续的删除操作,
-             * 如果采用升序排列，那么在删除某个索引后，其后的索引会发生变化，这可能导致一些点云无法被正确删除。
-             */
-            for (auto& index : getSortedIndexes(DESCENDING, getSelectedIndexes()))
-                removeCloud(index);
-        }
+        std::vector<Cloud::Ptr> getAllClouds();
 
         /**
-         * @brief 删除所有点云
+         * @brief 移除选中的点云
+         */
+        void removeSelectedClouds();
+
+        /**
+         * @@brief 移除所有点云
          */
         void removeAllClouds();
 
         /**
-         * @brief 保存选中的点云
+         * @@brief 保存选中的点云
          */
-        void saveSelectedClouds()
-        {
-            for (auto& index : getSelectedIndexes())
-                saveCloud(index);
-        }
+        void saveSelectedClouds();
 
         /**
          * @brief 合并选中的点云项目
@@ -110,11 +85,7 @@ namespace ct
         /**
          * @brief 克隆选中的点云项目
          */
-        void cloneSelectedClouds()
-        {
-            for (auto& index : getSelectedIndexes())
-                cloneCloud(index);
-        }
+        void cloneSelectedClouds();
 
         /**
          * @brief 设置勾选点云,设置点云的选中状态
@@ -141,39 +112,34 @@ namespace ct
          */
         void bindWorker(QObject* worker);
 
+        /**
+         * @brief 添加点云处理后，得到的新结果数据项
+         * @param originCloud 原始数据
+         * @param results 新结果数据
+         * @param groupName 新结果数据项的组名
+         */
+        void addResultGroup(const Cloud::Ptr& originCloud, const std::vector<Cloud::Ptr>& results, const QString& groupName);
+
     protected:
         /**
-         * @brief 插入点云
-         */
-        void insertCloud(const Index& index, const Cloud::Ptr& cloud, bool selected = false);
-
-        /**
-         * @brief 移除该索引的点云
-         */
-        void removeCloud(const Index& index);
-
-        /**
-         * @brief 保存该索引的点云
-         */
-        void saveCloud(const Index& index);
-
-        /**
-         * @brief 克隆该索引的点云
-         */
-        void cloneCloud(const Index& index);
-
-        /**
-         * @brief 重命名该索引的点云
-         */
-        void renameCloud(const Index& index, const QString& name);
-
-        /**
-        * @brief 返回该索引的点云
+        * @brief 移除指定节点及其数据 (递归删除子节点)
         */
-        Cloud::Ptr getCloud(const Index &index) {
-            // 返回该索引对应的点云
-            return m_cloud_vec[index.row][index.col];
-        }
+        void removeCloudItem(QTreeWidgetItem* item);
+
+        /**
+         * @brief 保存指定节点的数据
+         */
+        void saveCloudItem(QTreeWidgetItem* item);
+
+        /**
+         * @brief 克隆指定节点
+         */
+        void cloneCloudItem(QTreeWidgetItem* item);
+
+        /**
+         * @brief 重命名
+         */
+        void renameCloudItem(QTreeWidgetItem* item, const QString& name);
 
     signals:
         /**
@@ -229,13 +195,12 @@ namespace ct
 
 
     private:
+        QMap<QTreeWidgetItem*, Cloud::Ptr> m_cloud_map;
         QString m_path;
         QThread m_thread;
         FileIO* m_fileio;
         QMenu* m_tree_menu;
         ProcessingDialog* m_processing_dialog = nullptr;
-        // 使用Cloud类型的智能指针的二维向量来实现树形结构
-        std::vector<std::vector<Cloud::Ptr >> m_cloud_vec;
     };
 }
 

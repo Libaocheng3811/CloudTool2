@@ -330,7 +330,9 @@ void Filters::add()
         // 为过滤后的点云设置新的ID
         new_cloud->setId(FILTER_ADD_FLAG + cloud->id());
         // 将点云添加到文件树中
-        m_cloudtree->appendCloud(cloud, new_cloud, true);
+        QTreeWidgetItem * item = m_cloudtree->getItemById(cloud->id());
+        m_cloudtree->insertCloud(new_cloud, item, true);
+
         m_filter_map.erase(cloud->id());
         printI(QString("Add filtered cloud[id:1%] done.").arg(new_cloud->id()));
     }

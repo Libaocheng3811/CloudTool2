@@ -68,7 +68,9 @@ void Cutting::add()
         m_cloudview->removePointCloud(new_cloud->id());
         m_cloudview->removeShape(new_cloud->boxId());
         new_cloud->setId(CUTTING_ADD_FLAG + cloud->id());
-        m_cloudtree->appendCloud(cloud, new_cloud, true);
+        QTreeWidgetItem* item = m_cloudtree->getItemById(cloud->id());
+        m_cloudtree->insertCloud(new_cloud, item, true);
+
         m_cutting_map.erase(cloud->id());
         printI(QString("Add cutted cloud[id:%1] done.").arg(new_cloud->id()));
     }

@@ -107,9 +107,12 @@ void VegPlugin::onFilterDone(const ct::Cloud::Ptr &veg_cloud, const ct::Cloud::P
     m_cloudtree->closeProgress();
     printI(QString("Vegetation Filter Finished in %1 s").arg(time));
 
-    m_cloudtree->appendCloud(m_cloud, veg_cloud);
-    m_cloudtree->appendCloud(m_cloud, non_veg_cloud);
-    m_cloudtree->setCloudChecked(m_cloud, false);
+    std::vector<ct::Cloud::Ptr> results;
+    results.push_back(veg_cloud);
+    results.push_back(non_veg_cloud);
+
+    QString groupName = m_cloud->id() + "_Vegetation";
+    m_cloudtree->addResultGroup(m_cloud, results, groupName);
 
     this->accept();
 }

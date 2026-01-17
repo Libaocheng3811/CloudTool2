@@ -592,7 +592,9 @@ void Registration::add()
     ct::Cloud::Ptr new_cloud = m_reg_map.find(m_source_cloud->id() + m_target_cloud->id())->second;
     m_cloudview->removePointCloud(new_cloud->id());
     new_cloud->setId(REG_ALIGN_ADD_FLAG + m_source_cloud->id());
-    m_cloudtree->appendCloud(m_source_cloud, new_cloud, true);
+    QTreeWidgetItem *item = m_cloudtree->getItemById(m_source_cloud->id());
+    m_cloudtree->insertCloud(new_cloud, item, true);
+
     m_reg_map.erase(m_source_cloud->id() + m_target_cloud->id());
     printI(QString("Add registrated cloud[id:%1] done.").arg(new_cloud->id()));
     m_cloudview->clearInfo();

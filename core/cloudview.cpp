@@ -154,6 +154,9 @@ namespace ct
 
     void CloudView::addBox(const Cloud::Ptr& cloud)
     {
+        if (cloud->volume() <= 0.0f || cloud->box().width <= 0.0f){
+            return;
+        }
         std::string id = cloud->boxId().toStdString();
         if (!m_viewer->contains(id))
         {
@@ -506,6 +509,31 @@ namespace ct
         // 设置模型表示类型
         m_viewer->setShapeRenderingProperties(
                 pcl::visualization::PCL_VISUALIZER_REPRESENTATION, type, shapeid.toStdString());
+        if (m_auto_render) m_viewer->getRenderWindow()->Render();
+    }
+
+    void CloudView::setPointCloudVisibility(const QString &id, bool visible) {
+        std::string std_id = id.toStdString();
+
+        auto cloud_map = m_viewer->getCloudActorMap();
+        auto it = cloud_map->find(std_id);
+        if (it != cloud_map->end()){
+            it->second.actor->SetVisibility(visible ? 1 : 0);
+        }
+
+        std::string normal_id = id.toStdString() + "-normals";
+        auto it_normal = cloud_map->find(normal_id);
+        if (it_normal != cloud_map->end()){
+            it_normal->second.actor->SetVisibility(visible ? 1 : 0);
+        }
+
+        std::string box_id = id.toStdString() + "-box";
+        auto shape_map = m_viewer->getShapeActorMap();
+        auto it_box = shape_map->find(box_id);
+        if (it_box != shape_map->end()){
+            it_box->second->SetVisibility(visible ? 1 : 0);
+        }
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
