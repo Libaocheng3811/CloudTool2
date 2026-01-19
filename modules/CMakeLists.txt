@@ -5,7 +5,8 @@ set(LibSrcs
         registration.cpp
         csffilter.cpp
         vegfilter.cpp
-        )
+        distancecalculator.cpp
+)
 set(LibHdrs
         features.h
         filters.h
@@ -13,7 +14,9 @@ set(LibHdrs
         registration.h
         csffilter.h
         vegfilter.h
-        utils.h)
+        utils.h
+        distancecalculator.h
+)
 
 add_library(ct_modules SHARED ${LibSrcs} ${LibHdrs})
 

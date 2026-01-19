@@ -42,6 +42,29 @@ namespace ct
         QMap<int, QString> col_map; // 列索引->属性名
     };
 
+    // 距离计算参数
+    struct DistanceParams {
+        enum Method{
+            C2C_NEAREST = 0,    // 最近邻距离
+            C2C_KNN_MEAN = 1,   // K近邻平均距离
+            C2C_RADIUS_MEAN = 2,// 半径内平均距离
+            C2M_SIGNED = 3,     // 点到网格有符号距离 (预留)
+            M3C2 = 4            // M3C2 算法 (预留)
+        };
+        Method method;
+
+        // C2C_KNN_MEAN 参数
+        int k_knn = 6;
+
+        // C2C_RADIUS_MEAN 参数
+        double radius = 0.5;
+
+        // C2M 参数 (预留)
+        bool flip_normals = false;
+
+        // M3C2 参数 (预留)
+    };
+
     /**
      * @brief 将颜色从HSV格式转换为RGB格式
      * 在HSV模型中，颜色是通过三个分量表示的：色调（Hue），饱和度（Saturation）和明度（Value）

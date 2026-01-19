@@ -179,6 +179,7 @@
     </property>
     <addaction name="actionCSF"/>
     <addaction name="actionVegetation_Filters"/>
+    <addaction name="actionChange_Detection"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -1056,6 +1057,15 @@ QScrollBar::sub-line:horizontal {
    </property>
    <property name="text">
     <string>Vegetation Filters</string>
+   </property>
+  </action>
+  <action name="actionChange_Detection">
+   <property name="icon">
+    <iconset resource="resources/res.qrc">
+     <normaloff>:/res/images/changeDetection.png</normaloff>:/res/images/changeDetection.png</iconset>
+   </property>
+   <property name="text">
+    <string>Change Detection</string>
    </property>
   </action>
  </widget>

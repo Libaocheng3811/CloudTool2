@@ -159,7 +159,7 @@ namespace ct
         // [关键] 根据点云类型决定显示属性
         // 假设我们通过 Cloud 对象的一个属性或者简单的 ID 规则来区分类型
         // 如果是 PickPoints 生成的，我们在 add() 时会设置好属性
-        // TODO:这里根据大小来判断设置属性合理吗？
+        // TODO:这里根据大小来判断设置属性合理吗？仅仅针对选单点的功能
         if (cloud->pointSize() > 1) {
             m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize());
             if (cloud->id().contains("picked-")) m_cloudview->setPointCloudColor(cloud, ct::Color::Red); // 目前设定选点显示总为红色

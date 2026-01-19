@@ -15,6 +15,7 @@
 
 #include "plugins/csfplugin.h"
 #include "plugins/vegplugin.h"
+#include "plugins/changedetectplugin.h"
 
 #include <QDesktopWidget>
 #include <QDebug>
@@ -101,6 +102,10 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(ui->actionVegetation_Filters, &QAction::triggered, [=] {
         this->createModalDialog<VegPlugin>("Vegetation Filters");
+    });
+
+    connect(ui->actionChange_Detection, &QAction::triggered, [=] {
+        this->createModalDialog<ChangeDetectPlugin>("Change Detection");
     });
 
 }
