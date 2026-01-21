@@ -808,10 +808,12 @@ namespace ct
 
     void CloudTree::onGlobalFilterRequested(const Eigen::Vector3d &min_pt, Eigen::Vector3d &suggested_shift,
                                             bool &skipped) {
-        GlobalShiftDialog dlg(min_pt, suggested_shift, this->window());
+        GlobalShiftDialog dlg(min_pt, suggested_shift, m_last_shift, m_hasLastShift, this->window());
 
         if (dlg.exec() == QDialog::Accepted){
             suggested_shift = dlg.getShiftValue();
+            m_last_shift = suggested_shift;
+            m_hasLastShift = true;
             skipped = false;
         }
         else{

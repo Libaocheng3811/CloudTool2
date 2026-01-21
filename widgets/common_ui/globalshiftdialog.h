@@ -23,6 +23,8 @@ public:
     */
     explicit GlobalShiftDialog(Eigen::Vector3d  original_min,
                                const Eigen::Vector3d& suggested_shift,
+                               const Eigen::Vector3d& last_shift,
+                               bool hasLast,
                                QWidget *parent = nullptr);
 
     ~GlobalShiftDialog() override;
@@ -33,14 +35,22 @@ public:
     bool isSkipped() const;
 
 private slots:
+    void onProfileChanged(int index);
     void onShiftChanged();
 
     void onBtnOKClicked();
     void onBtnCancelClicked();
 
 private:
+    void updatePreviewText();
+private:
     Ui::GlobalShiftDialog *ui;
     Eigen::Vector3d m_original_point;
+
+    Eigen::Vector3d m_suggested_shift;
+    Eigen::Vector3d m_last_shift;
+    bool m_has_last;
+
     bool m_skipped = false;
 };
 

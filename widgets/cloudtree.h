@@ -208,6 +208,9 @@ namespace ct
         FileIO* m_fileio;
         QMenu* m_tree_menu;
         ProcessingDialog* m_processing_dialog = nullptr;
+
+        Eigen::Vector3d m_last_shift = Eigen::Vector3d::Zero();
+        bool m_hasLastShift = false;
     };
 }
 
