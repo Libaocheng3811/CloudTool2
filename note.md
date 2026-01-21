@@ -147,3 +147,6 @@ Level 2: ct_widget, ct_common_ui
 Level 3: cloudtool 
 定位：高级业务组件库。将数据与 UI 结合的复杂控件。
 依赖：ct_core (数据), ct_widget (弹窗)。
+
+# 七、UI设计中的问题
+- 如果空间之间无法对齐，尝试添加一个弹簧控件
