@@ -150,3 +150,29 @@ Level 3: cloudtool
 
 # 七、UI设计中的问题
 - 如果空间之间无法对齐，尝试添加一个弹簧控件
+
+# 八、git提交规范
+一个标准的约定式提交格式通常如下：
+```
+<类型>(<作用域>): <描述>
+```
+
+| 前缀类型 | 英文全称       | 含义         | 对应场景举例 |
+|----------|----------------|--------------|--------------|
+| feat     | Feature        | 新功能       | 增加了一个按钮；添加了一个新的 API 接口 |
+| fix      | Fix            | 修复 Bug     | 修复了点击按钮没反应的问题；修复了空指针报错 |
+| docs     | Documentation  | 文档变动     | 仅修改了 README.md；修改了代码注释（不改逻辑） |
+| style    | Style          | 代码格式     | 修改缩进、空格、分号；重命名变量（不影响代码运行逻辑） |
+| refactor | Refactor       | 重构         | 代码重构，既不修 bug 也不加功能，只是优化代码结构 |
+| perf     | Performance    | 性能优化     | 优化了算法，提升了页面加载速度 |
+| test     | Test           | 测试         | 增加测试用例，或者修改现有的测试代码 |
+| chore    | Chore          | 杂务 / 构建  | 修改构建流程（如 CMakeLists、package.json），更新依赖库 |
+| revert   | Revert         | 回滚         | 撤销某次之前的提交 |
+
+例如规范使用
+```test
+feat(ui): add export button
+fix(core): fix null pointer crash
+chore(build): update cmake version
+```
+
