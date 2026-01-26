@@ -198,13 +198,13 @@ void ChangeDetectPlugin::onFilterDone(const std::vector<float>& distances, float
         if (std::isnan(d)) continue;
 
         if (d > m_threshold) {
-            changed->push_back(m_compCloud->points[i]);
+            changed->push_back(m_compCloud->getPoint(i));
             changed_dists.push_back(d);
         } else {
             // <= 阈值 -> 未变化点
             // 只有当用户勾选导出时才保存，节省内存
             if (ui->chk_export->isChecked()) {
-                unchanged->push_back(m_compCloud->points[i]);
+                unchanged->push_back(m_compCloud->getPoint(i));
                 unchanged_dists.push_back(d);
             }
         }

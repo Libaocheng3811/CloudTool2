@@ -70,8 +70,9 @@ void RangeImage::updateRangeImage(Eigen::Affine3f viewer_pose)
     /**
      * @brief 从点云数据生成范围图像（深度图像）
      */
-     // createFromPointCloud是pcl::RangeImage 类的一个成员函数，用于从点云创建范围图像。
-    m_range_image->createFromPointCloud(*m_cloud, pcl::deg2rad(0.5f), pcl::deg2rad(360.0f), pcl::deg2rad(180.0f), viewer_pose);
+    // createFromPointCloud是pcl::RangeImage 类的一个成员函数，用于从点云创建范围图像。
+    // 需要将Cloud转换为PCL点云
+    m_range_image->createFromPointCloud(*m_cloud->toPCL_XYZRGBN(), pcl::deg2rad(0.5f), pcl::deg2rad(360.0f), pcl::deg2rad(180.0f), viewer_pose);
     // 返回一个指向范围图像中所有距离值的数组的指针。每个距离值表示从相机到对应像素点的距离。
     float* ranges_array = m_range_image->getRangesArray();
     // getVisualImage是 pcl::visualization::FloatImageUtils 类的一个静态方法，用于将距离值数组转换为可视化的RGB图像。
@@ -84,10 +85,7 @@ void RangeImage::updateRangeImage(Eigen::Affine3f viewer_pose)
     m_image_data->AllocateScalars(VTK_UNSIGNED_CHAR, 3);
     // 设置图像数据的标量数组
     m_image_data->GetPointData()->GetScalars()->SetVoidArray(data, 3 * m_range_image->width * m_range_image->height, 1);
-    // 避免手动 delete[]：移除 ranges_array 和 rgbImage 的 delete[]，因为它们是由 pcl::RangeImage 和 FloatImageUtils 管理的内存。
-    // delete[] ranges_array;
-    // delete[] rgbImage;
-    // 设置图像数据到VTK演员对象
+
     m_actor->SetInputData(m_image_data);
     m_actor->Update();
     m_ren->AddActor(m_actor);

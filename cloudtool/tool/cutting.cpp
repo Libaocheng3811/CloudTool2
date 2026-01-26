@@ -6,6 +6,9 @@
 
 #include "cutting.h"
 #include "ui_Cutting.h"
+#include "core/cloud.h"
+
+#include <pcl/filters/extract_indices.h>
 
 #define CUT_TYPE_RECTANGULAR    0
 #define CUT_TYPE_POLYGONAL      1
@@ -232,8 +235,22 @@ void Cutting::cuttingCloud(bool select_in)
     for (auto& cloud : selected_clouds)
     {
         std::vector<int> indices = m_cloudview->areaPick(m_pick_points, cloud, select_in);
-        ct::Cloud::Ptr cut_cloud = cloud->makeShared();
-        pcl::copyPointCloud(*cloud, indices, *cut_cloud);
+
+        // 使用PCL ExtractIndices提取点
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
+        pcl::PointIndices::Ptr pcl_indices(new pcl::PointIndices);
+        pcl_indices->indices = indices;
+
+        pcl::ExtractIndices<ct::PointXYZRGBN> extract;
+        extract.setInputCloud(pcl_cloud);
+        extract.setIndices(pcl_indices);
+        extract.setNegative(false);
+
+        pcl::PointCloud<ct::PointXYZRGBN>::Ptr pcl_cut_cloud(new pcl::PointCloud<ct::PointXYZRGBN>);
+        extract.filter(*pcl_cut_cloud);
+
+        // 从PCL点云创建Cloud对象
+        ct::Cloud::Ptr cut_cloud = ct::Cloud::fromPCL_XYZRGBN(*pcl_cut_cloud);
         cut_cloud->setId(cloud->id() + CUTTING_PRE_FLAG);
         cut_cloud->update();
         m_cloudview->addPointCloud(cut_cloud);

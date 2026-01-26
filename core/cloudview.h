@@ -355,12 +355,6 @@ namespace ct {
         void zoomToBounds(const Eigen::Vector3f& min_pt, const Eigen::Vector3f& max_pt);
 
         /**
-         * @brief 设置交互模式(LOD切换)
-         * @param activate true=正在交互(显示稀疏)， false=静止(显示稠密)
-         */
-        void setInteractiveMode(bool activate);
-
-        /**
          * @brief 是否启用自动渲染
          * @param enable true=自动渲染，false=手动渲染
          */

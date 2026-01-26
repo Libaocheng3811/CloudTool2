@@ -110,7 +110,7 @@ void PickPoints::add()
         return;
     }
 
-    ct::Cloud::Ptr new_cloud = m_pick_cloud->makeShared();
+    ct::Cloud::Ptr new_cloud = m_pick_cloud->clone();
     new_cloud->setPointSize(10);
     new_cloud->setCloudColor(ct::Color::Red);
 
@@ -256,7 +256,7 @@ void PickPoints::mouseLeftPressed(const ct::PointXY &pt)
     int index = m_cloudview->singlePick(pt, m_selected_cloud->id());
     if (index < 0) return;
 
-    ct::PointXYZRGBN  current_pt = m_selected_cloud->points[index];
+    ct::PointXYZRGBN  current_pt = m_selected_cloud->getPoint(index);
     int mode = ui->cbox_type->currentIndex();
 
     if (mode == PICK_SINGLE){
@@ -328,7 +328,7 @@ void PickPoints::mouseLeftReleased(const ct::PointXY &pt)
         int index = m_cloudview->singlePick(pt, m_selected_cloud->id());
         if (index < 0) return;
 
-        ct::PointXYZRGBN end_pt = m_selected_cloud->points[index];
+        ct::PointXYZRGBN end_pt = m_selected_cloud->getPoint(index);
         m_pick_cloud->push_back(end_pt);
 
         //画线
@@ -337,7 +337,7 @@ void PickPoints::mouseLeftReleased(const ct::PointXY &pt)
         m_cloudview->addPointCloud(m_pick_cloud);
         m_cloudview->setPointCloudColor(m_pick_cloud, ct::Color::Red);
 
-        ct::PointXYZRGBN start_pt = m_pick_cloud->points.front();
+        ct::PointXYZRGBN start_pt = m_pick_cloud->getPoint(0);
         m_cloudview->addArrow(end_pt, start_pt, ARROW_ID, true, ct::Color::Green);
 
         float distance = (start_pt.getVector3fMap() - end_pt.getVector3fMap()).norm();
@@ -380,18 +380,20 @@ void PickPoints::mouseMoved(const ct::PointXY &pt)
         return;
     }
 
-    ct::PointXYZRGBN  current_hover_pt = m_selected_cloud->points[tmp];
+    ct::PointXYZRGBN  current_hover_pt = m_selected_cloud->getPoint(tmp);
     int mode = ui->cbox_type->currentIndex();
 
     if (mode == PICK_PAIR){
         if (m_pick_cloud->empty()) return;
 
-        ct::PointXYZRGBN start_pt = m_pick_cloud->points[0];
+        ct::PointXYZRGBN start_pt = m_pick_cloud->getPoint(0);
         m_cloudview->addArrow(current_hover_pt, start_pt, ARROW_ID, true, ct::Color::Green);
     }
     else if (mode == PICK_MULTI){
-        ct::Cloud::Ptr tmp_cloud = m_pick_cloud->makeShared();
-        tmp_cloud->push_back(current_hover_pt);
+        // 创建临时点云用于显示多边形
+        ct::Cloud::Ptr tmp_cloud = std::make_shared<ct::Cloud>();
+        tmp_cloud->addPoint(current_hover_pt.x, current_hover_pt.y, current_hover_pt.z,
+                          current_hover_pt.r, current_hover_pt.g, current_hover_pt.b);
 
         m_cloudview->addPolygon(tmp_cloud, POLYGONAL_ID, ct::Color::Green);
     }

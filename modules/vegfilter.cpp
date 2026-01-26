@@ -76,7 +76,9 @@ namespace ct{
 
         TicToc time; time.tic();
 
-        size_t num = m_cloud->size();
+        auto pcl_cloud = m_cloud->toPCL_XYZRGB();
+
+        size_t num = pcl_cloud->size();
         std::vector<int> veg_indices, non_veg_indices;
         std::vector<float> index_values(num);
 
@@ -88,7 +90,7 @@ namespace ct{
         for (int i = 0; i < static_cast<int>(num); ++i){
             if (m_is_canceled) continue;
 
-            const auto& p = m_cloud->points[i];
+            const auto& p = pcl_cloud->points[i];
 
             //归一化
             float R = p.r, G = p.g, B = p.b;
@@ -152,32 +154,40 @@ namespace ct{
         if (m_is_canceled) return;
         emit progress(60);
 
+        // 使用 PCL ExtractIndices 提取点
+        auto pcl_cloud_xyzrgbn = m_cloud->toPCL_XYZRGBN();
         pcl::ExtractIndices<PointXYZRGBN> extract;
-        extract.setInputCloud(m_cloud);
+        extract.setInputCloud(pcl_cloud_xyzrgbn);
 
-        //提取植被点
+        // 提取植被点
         ct::Cloud::Ptr veg_cloud(new Cloud);
         veg_cloud->setId(m_cloud->id() + "_veg");
         if (!veg_indices.empty()){
+            pcl::PointCloud<PointXYZRGBN>::Ptr pcl_veg(new pcl::PointCloud<PointXYZRGBN>);
             pcl::PointIndices::Ptr v_idx_ptr(new pcl::PointIndices);
             v_idx_ptr->indices = veg_indices;
             extract.setIndices(v_idx_ptr);
-            extract.filter(*veg_cloud);
-            //同步自定义字段
+            extract.setNegative(false);
+            extract.filter(*pcl_veg);
+            veg_cloud = Cloud::fromPCL_XYZRGBN(*pcl_veg);
+            // 同步自定义字段
             syncAllScalarFields(m_cloud, veg_cloud, veg_indices);
         }
 
         if (m_is_canceled) return;
         emit progress(80);
 
-        //提取非植被点
+        // 提取非植被点
         ct::Cloud::Ptr non_veg_cloud(new Cloud);
         non_veg_cloud->setId(m_cloud->id() + "_non_veg");
         if (!non_veg_indices.empty()) {
+            pcl::PointCloud<PointXYZRGBN>::Ptr pcl_non_veg(new pcl::PointCloud<PointXYZRGBN>);
             pcl::PointIndices::Ptr nv_idx_ptr(new pcl::PointIndices);
             nv_idx_ptr->indices = non_veg_indices;
             extract.setIndices(nv_idx_ptr);
-            extract.filter(*non_veg_cloud);
+            extract.setNegative(false);
+            extract.filter(*pcl_non_veg);
+            non_veg_cloud = Cloud::fromPCL_XYZRGBN(*pcl_non_veg);
             // 同步所有自定义字段
             syncAllScalarFields(m_cloud, non_veg_cloud, non_veg_indices);
         }

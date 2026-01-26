@@ -58,15 +58,18 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
         // 创建反向投影对应关系估计对象，用于估计源点云和目标点云之间的对应关系
         pcl::registration::CorrespondenceEstimationBackProjection<PointXYZRGBN, PointXYZRGBN, PointXYZRGBN>::Ptr cebp
                 (new pcl::registration::CorrespondenceEstimationBackProjection<PointXYZRGBN, PointXYZRGBN, PointXYZRGBN>);
-        cebp->setInputTarget(target_cloud_);
-        cebp->setInputSource(source_cloud_);
+        cebp->setInputTarget(target_pcl);
+        cebp->setInputSource(source_pcl);
         cebp->setSearchMethodTarget(target_tree);
         cebp->setSearchMethodSource(source_tree);
-        cebp->setSourceNormals(source_cloud_);
-        cebp->setTargetNormals(target_cloud_);
+        cebp->setSourceNormals(source_pcl);
+        cebp->setTargetNormals(target_pcl);
         cebp->setKSearch(k);
 
         if (m_is_canceled) return;
@@ -95,11 +98,14 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
         pcl::registration::CorrespondenceEstimationNormalShooting<PointXYZRGBN, PointXYZRGBN, PointXYZRGBN>::Ptr cens
                 (new pcl::registration::CorrespondenceEstimationNormalShooting<PointXYZRGBN, PointXYZRGBN, PointXYZRGBN>);
-        cens->setInputTarget(target_cloud_);
-        cens->setInputSource(source_cloud_);
-        cens->setSourceNormals(source_cloud_);
+        cens->setInputTarget(target_pcl);
+        cens->setInputSource(source_pcl);
+        cens->setSourceNormals(source_pcl);
         cens->setSearchMethodTarget(target_tree);
         cens->setSearchMethodSource(source_tree);
         cens->setKSearch(k);
@@ -130,10 +136,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
         pcl::registration::CorrespondenceEstimationOrganizedProjection<PointXYZRGBN, PointXYZRGBN>::Ptr ceop
                 (new pcl::registration::CorrespondenceEstimationOrganizedProjection<PointXYZRGBN, PointXYZRGBN>);
-        ceop->setInputTarget(target_cloud_);
-        ceop->setInputSource(source_cloud_);
+        ceop->setInputTarget(target_pcl);
+        ceop->setInputSource(source_pcl);
         ceop->setSearchMethodTarget(target_tree);
         ceop->setSearchMethodSource(source_tree);
         ceop->setFocalLengths(fx, fy);
@@ -159,12 +168,15 @@ namespace ct
     {
         pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
         pcl::registration::DataContainer<PointXYZRGBN, PointXYZRGBN> dc;
-        dc.setInputTarget(target_cloud_);
-        dc.setInputSource(source_cloud_);
-        dc.setTargetNormals(target_cloud_);
+        dc.setInputTarget(target_pcl);
+        dc.setInputSource(source_pcl);
+        dc.setTargetNormals(target_pcl);
         dc.setSearchMethodTarget(target_tree);
-        dc.setInputNormals(source_cloud_);
+        dc.setInputNormals(source_pcl);
         if (from_normals)
             return dc.getCorrespondenceScoreFromNormals(corr);
         else
@@ -184,9 +196,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
         pcl::registration::CorrespondenceRejectorDistance::Ptr cj(new pcl::registration::CorrespondenceRejectorDistance);
-        cj->setInputTarget<PointXYZRGBN>(target_cloud_);
-        cj->setInputSource<PointXYZRGBN>(source_cloud_);
+        cj->setInputTarget<PointXYZRGBN>(target_pcl);
+        cj->setInputSource<PointXYZRGBN>(source_pcl);
         cj->setSearchMethodTarget<PointXYZRGBN>(target_tree);
         cj->setInputCorrespondences(corr_);
         cj->setMaximumDistance(distance);
@@ -215,9 +230,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
         pcl::registration::CorrespondenceRejectorMedianDistance::Ptr cj(new pcl::registration::CorrespondenceRejectorMedianDistance);
-        cj->setInputTarget<PointXYZRGBN>(target_cloud_);
-        cj->setInputSource<PointXYZRGBN>(source_cloud_);
+        cj->setInputTarget<PointXYZRGBN>(target_pcl);
+        cj->setInputSource<PointXYZRGBN>(source_pcl);
         cj->setSearchMethodTarget<PointXYZRGBN>(target_tree);
         cj->setInputCorrespondences(corr_);
         cj->setMedianFactor(factor);
@@ -274,8 +292,11 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        cj.setInputTarget<PointXYZRGBN>(target_cloud_);
-        cj.setInputSource<PointXYZRGBN>(source_cloud_);
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        cj.setInputTarget<PointXYZRGBN>(target_pcl);
+        cj.setInputSource<PointXYZRGBN>(source_pcl);
         cj.setNumberOfBoundaryNaNs(val);
         cj.setInputCorrespondences(corr_);
 
@@ -300,8 +321,12 @@ namespace ct
 
         pcl::CorrespondencesPtr corr(new pcl::Correspondences);
         pcl::registration::CorrespondenceRejectorPoly<PointXYZRGBN, PointXYZRGBN>::Ptr cj(new pcl::registration::CorrespondenceRejectorPoly<PointXYZRGBN, PointXYZRGBN>);
-        cj->setInputTarget(target_cloud_);
-        cj->setInputSource(source_cloud_);
+
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        cj->setInputTarget(target_pcl);
+        cj->setInputSource(source_pcl);
 
         if (m_is_canceled) return;
         emit progress(10);
@@ -332,8 +357,12 @@ namespace ct
 
         pcl::CorrespondencesPtr corr(new pcl::Correspondences);
         pcl::registration::CorrespondenceRejectorSampleConsensus<PointXYZRGBN>::Ptr cj(new pcl::registration::CorrespondenceRejectorSampleConsensus<PointXYZRGBN>);
-        cj->setInputTarget(target_cloud_);
-        cj->setInputSource(source_cloud_);
+
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        cj->setInputTarget(target_pcl);
+        cj->setInputSource(source_pcl);
 
         if (m_is_canceled) return;
         emit progress(10);
@@ -368,9 +397,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
         pcl::registration::CorrespondenceRejectorSurfaceNormal::Ptr cj(new pcl::registration::CorrespondenceRejectorSurfaceNormal);
-        cj->setInputTarget<PointXYZRGBN>(target_cloud_);
-        cj->setInputSource<PointXYZRGBN>(source_cloud_);
+        cj->setInputTarget<PointXYZRGBN>(target_pcl);
+        cj->setInputSource<PointXYZRGBN>(source_pcl);
         cj->setSearchMethodTarget<PointXYZRGBN>(target_tree);
         cj->setThreshold(threshold);
         cj->setInputCorrespondences(corr_);
@@ -425,9 +457,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
         pcl::registration::CorrespondenceRejectorVarTrimmed::Ptr cj(new pcl::registration::CorrespondenceRejectorVarTrimmed);
-        cj->setInputTarget<PointXYZRGBN>(target_cloud_);
-        cj->setInputSource<PointXYZRGBN>(source_cloud_);
+        cj->setInputTarget<PointXYZRGBN>(target_pcl);
+        cj->setInputSource<PointXYZRGBN>(source_pcl);
         // cj->setSourceNormals(source_cloud_);
         // cj->setTargetNormals(target_cloud_);
         cj->setSearchMethodTarget<PointXYZRGBN>(target_tree);
@@ -454,16 +489,19 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr ail_cloud(new Cloud);
         pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr ail_pcl(new pcl::PointCloud<PointXYZRGBN>);
         pcl::GeneralizedIterativeClosestPoint<PointXYZRGBN, PointXYZRGBN> reg;
-        reg.setInputTarget(target_cloud_);
-        reg.setInputSource(source_cloud_);
+        reg.setInputTarget(target_pcl);
+        reg.setInputSource(source_pcl);
         reg.setSearchMethodTarget(target_tree);
         reg.setSearchMethodSource(source_tree);
         if(te_!=nullptr) reg.setTransformationEstimation(te_);
@@ -489,11 +527,12 @@ namespace ct
         reg.setTranslationGradientTolerance(tra_tolerance);
         reg.setRotationGradientTolerance(rol_tolerance);
         reg.setUseReciprocalCorrespondences(use_recip_corre);
-        reg.align(*ail_cloud);
+        reg.align(*ail_pcl);
 
         if (m_is_canceled) return;
         emit progress(100);
 
+        Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*ail_pcl);
         emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                 reg.getFinalTransformation().cast<float>(), time.toc());
     }
@@ -507,18 +546,21 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr ail_cloud(new Cloud);
         pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr ail_pcl(new pcl::PointCloud<PointXYZRGBN>);
         pcl::registration::FPCSInitialAlignment<PointXYZRGBN, PointXYZRGBN, PointXYZRGBN>reg;
-        reg.setInputTarget(target_cloud_);
-        reg.setInputSource(source_cloud_);
-        reg.setSourceNormals(source_cloud_);
-        reg.setTargetNormals(target_cloud_);
+        reg.setInputTarget(target_pcl);
+        reg.setInputSource(source_pcl);
+        reg.setSourceNormals(source_pcl);
+        reg.setTargetNormals(target_pcl);
         reg.setSearchMethodTarget(target_tree);
         reg.setSearchMethodSource(source_tree);
         if(te_!=nullptr) reg.setTransformationEstimation(te_);
@@ -547,11 +589,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(40);
 
-        reg.align(*ail_cloud);
+        reg.align(*ail_pcl);
 
         if (m_is_canceled) return;
         emit progress(100);
 
+        Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*ail_pcl);
         emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                 reg.getFinalTransformation().cast<float>(), time.toc());
     }
@@ -564,18 +607,21 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr ail_cloud(new Cloud);
         pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr ail_pcl(new pcl::PointCloud<PointXYZRGBN>);
         pcl::registration::KFPCSInitialAlignment<PointXYZRGBN, PointXYZRGBN, PointXYZRGBN> reg;
-        reg.setInputTarget(target_cloud_);
-        reg.setInputSource(source_cloud_);
-        reg.setSourceNormals(source_cloud_);
-        reg.setTargetNormals(target_cloud_);
+        reg.setInputTarget(target_pcl);
+        reg.setInputSource(source_pcl);
+        reg.setSourceNormals(source_pcl);
+        reg.setTargetNormals(target_pcl);
         reg.setSearchMethodTarget(target_tree);
         reg.setSearchMethodSource(source_tree);
         if(te_!=nullptr) reg.setTransformationEstimation(te_);
@@ -607,11 +653,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(40);
 
-        reg.align(*ail_cloud);
+        reg.align(*ail_pcl);
 
         if (m_is_canceled) return;
         emit progress(100);
 
+        Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*ail_pcl);
         emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                 reg.getFinalTransformation().cast<float>(), time.toc());
     }
@@ -622,16 +669,19 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr ail_cloud(new Cloud);
         pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr ail_pcl(new pcl::PointCloud<PointXYZRGBN>);
         pcl::IterativeClosestPoint<PointXYZRGBN, PointXYZRGBN> reg;
-        reg.setInputTarget(target_cloud_);
-        reg.setInputSource(source_cloud_);
+        reg.setInputTarget(target_pcl);
+        reg.setInputSource(source_pcl);
         reg.setSearchMethodTarget(target_tree);
         reg.setSearchMethodSource(source_tree);
         if(te_!=nullptr) reg.setTransformationEstimation(te_);
@@ -654,11 +704,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(30);
 
-        reg.align(*ail_cloud);
+        reg.align(*ail_pcl);
 
         if (m_is_canceled) return;
         emit progress(100);
 
+        Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*ail_pcl);
         emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                 reg.getFinalTransformation().cast<float>(), time.toc());
     }
@@ -670,16 +721,19 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr ail_cloud(new Cloud);
         pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr ail_pcl(new pcl::PointCloud<PointXYZRGBN>);
         pcl::IterativeClosestPointWithNormals<PointXYZRGBN, PointXYZRGBN> reg;
-        reg.setInputTarget(target_cloud_);
-        reg.setInputSource(source_cloud_);
+        reg.setInputTarget(target_pcl);
+        reg.setInputSource(source_pcl);
         reg.setSearchMethodTarget(target_tree);
         reg.setSearchMethodSource(source_tree);
         if(te_!=nullptr) reg.setTransformationEstimation(te_);
@@ -704,11 +758,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(30);
 
-        reg.align(*ail_cloud);
+        reg.align(*ail_pcl);
 
         if (m_is_canceled) return;
         emit progress(100);
 
+        Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*ail_pcl);
         emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                 reg.getFinalTransformation().cast<float>(), time.toc());
     }
@@ -719,16 +774,19 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr ail_cloud(new Cloud);
         pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr ail_pcl(new pcl::PointCloud<PointXYZRGBN>);
         pcl::IterativeClosestPointNonLinear<PointXYZRGBN, PointXYZRGBN> reg;
-        reg.setInputTarget(target_cloud_);
-        reg.setInputSource(source_cloud_);
+        reg.setInputTarget(target_pcl);
+        reg.setInputSource(source_pcl);
         reg.setSearchMethodTarget(target_tree);
         reg.setSearchMethodSource(source_tree);
         if(te_!=nullptr) reg.setTransformationEstimation(te_);
@@ -751,11 +809,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(40);
 
-        reg.align(*ail_cloud);
+        reg.align(*ail_pcl);
 
         if (m_is_canceled) return;
         emit progress(100);
 
+        Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*ail_pcl);
         emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                 reg.getFinalTransformation().cast<float>(), time.toc());
     }
@@ -768,16 +827,19 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr ail_cloud(new Cloud);
         pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr ail_pcl(new pcl::PointCloud<PointXYZRGBN>);
         pcl::NormalDistributionsTransform<PointXYZRGBN, PointXYZRGBN> reg;
-        reg.setInputTarget(target_cloud_);
-        reg.setInputSource(source_cloud_);
+        reg.setInputTarget(target_pcl);
+        reg.setInputSource(source_pcl);
         reg.setSearchMethodTarget(target_tree);
         reg.setSearchMethodSource(source_tree);
         if(te_!=nullptr) reg.setTransformationEstimation(te_);
@@ -802,11 +864,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(40);
 
-        reg.align(*ail_cloud);
+        reg.align(*ail_pcl);
 
         if (m_is_canceled) return;
         emit progress(100);
 
+        Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*ail_pcl);
         emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                 reg.getFinalTransformation().cast<float>(), time.toc());
     }
@@ -823,7 +886,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -843,7 +909,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -863,7 +932,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -883,7 +955,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -903,7 +978,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -923,7 +1001,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -943,7 +1024,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -963,7 +1047,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -983,7 +1070,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -1003,8 +1093,11 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
         te.setEnforceSameDirectionNormals(enforce_same_direction_normals);
-        te.estimateRigidTransformation(*source_cloud_, *target_cloud_, matrix);
+        te.estimateRigidTransformation(*source_pcl, *target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);
@@ -1024,7 +1117,10 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
-        te.validateTransformation(source_cloud_, target_cloud_, matrix);
+        auto source_pcl = source_cloud_->toPCL_XYZRGBN();
+        auto target_pcl = target_cloud_->toPCL_XYZRGBN();
+
+        te.validateTransformation(source_pcl, target_pcl, matrix);
 
         if (m_is_canceled) return;
         emit progress(100);

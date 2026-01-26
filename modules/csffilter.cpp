@@ -16,14 +16,16 @@ namespace ct{
         time.tic();
 
         // 数据转换 PCL Point -> CSF Point
+        auto pclCloud = cloud_->toPCL_XYZ();
         std::vector<csf::Point> csf_points;
-        csf_points.reserve(cloud_->size());
-        for(const auto& p : cloud_->points){
-            csf::Point pt;
-            pt.x = p.x;
-            pt.y = p.y;
-            pt.z = p.z;
-            csf_points.emplace_back(pt);
+        csf_points.resize(pclCloud->size());  // 使用 resize 而不是 reserve
+
+#pragma omp parallel for
+        for (int i = 0; i < static_cast<int>(pclCloud->size()); ++i) {
+            const auto& p = pclCloud->points[i];
+            csf_points[i].x = p.x;
+            csf_points[i].y = p.y;
+            csf_points[i].z = p.z;
         }
 
         if (m_is_canceled) return;
@@ -48,42 +50,41 @@ namespace ct{
         if (m_is_canceled) return;
         emit progress(60);
 
-        // 将结果转换PCL Cloud
-        pcl::PointIndices::Ptr ground_indices(new pcl::PointIndices);
-        ground_indices->indices = groundIndexes;
+        // 使用 fromPCL 方法从 PCL 点云构造 Cloud
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_ground(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_off_ground(new pcl::PointCloud<PointXYZRGBN>);
 
-        pcl::PointIndices::Ptr off_ground_indices(new pcl::PointIndices);
-        off_ground_indices->indices = offGroundIndexes;
+        pcl_ground->resize(groundIndexes.size());
+        pcl_off_ground->resize(offGroundIndexes.size());
 
-        pcl::ExtractIndices<PointXYZRGBN> extract;
-        extract.setInputCloud(cloud_);
+        auto pcl_cloud_xyzrgbn = cloud_->toPCL_XYZRGBN();
 
-        if (m_is_canceled) return;
+#pragma omp parallel for
+        for (size_t i = 0; i < groundIndexes.size(); ++i) {
+            if (groundIndexes[i] >= 0 && groundIndexes[i] < pcl_cloud_xyzrgbn->size()) {
+                pcl_ground->points[i] = pcl_cloud_xyzrgbn->points[groundIndexes[i]];
+            }
+        }
 
-        // 提取地面点
-        ct::Cloud::Ptr ground_cloud(new Cloud);
-        ground_cloud->setId(cloud_->id() + "_ground");
-        extract.setIndices(ground_indices);
-        extract.setNegative(false);
-        extract.filter(*ground_cloud);
-
-        if (m_is_canceled) return;
-
-        syncAllScalarFields(cloud_, ground_cloud, groundIndexes);
+#pragma omp parallel for
+        for (size_t i = 0; i < offGroundIndexes.size(); ++i) {
+            if (offGroundIndexes[i] >= 0 && offGroundIndexes[i] < pcl_cloud_xyzrgbn->size()) {
+                pcl_off_ground->points[i] = pcl_cloud_xyzrgbn->points[offGroundIndexes[i]];
+            }
+        }
 
         if (m_is_canceled) return;
         emit progress(80);
 
-        // 提取非地面点
-        ct::Cloud::Ptr off_ground_cloud(new Cloud);
+        ct::Cloud::Ptr ground_cloud = Cloud::fromPCL_XYZRGBN(*pcl_ground);
+        ground_cloud->setId(cloud_->id() + "_ground");
+        syncAllScalarFields(cloud_, ground_cloud, groundIndexes);
+
+        if (m_is_canceled) return;
+        emit progress(90);
+
+        ct::Cloud::Ptr off_ground_cloud = Cloud::fromPCL_XYZRGBN(*pcl_off_ground);
         off_ground_cloud->setId(cloud_->id() + "_off_ground");
-        extract.setIndices(off_ground_indices);
-        extract.setNegative(false);
-        if (m_is_canceled) return;
-        extract.filter(*off_ground_cloud);
-
-        if (m_is_canceled) return;
-
         syncAllScalarFields(cloud_, off_ground_cloud, offGroundIndexes);
 
         if (m_is_canceled) return;

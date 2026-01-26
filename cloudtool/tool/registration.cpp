@@ -4,6 +4,7 @@
 
 #include "registration.h"
 #include "ui_registration.h"
+#include "core/cloud.h"
 
 #define REG_TYPE_CorrespondenceEstimation               (0)
 #define REG_TYPE_CorrespondenceRejector                 (1)
@@ -283,7 +284,8 @@ void Registration::preview()
                     {
                         case REG_TYPE_PointCloud:
                             m_cloudview->showInfo("Estimation Type: PointCloud", 4);
-                            m_reg->CorrespondenceEstimation<ct::PointXYZRGBN>(m_source_cloud, m_target_cloud);
+                            m_reg->CorrespondenceEstimation<ct::PointXYZRGBN>(m_source_cloud->toPCL_XYZRGBN(),
+                                                                           m_target_cloud->toPCL_XYZRGBN());
                             break;
                         case REG_TYPE_PFHFeature:
                             m_cloudview->showInfo("Estimation Type: PFHFeature", 4);
@@ -669,8 +671,12 @@ void Registration::transformationEstimationResult(const Eigen::Matrix4f& matrix,
 {
     m_cloudtree->closeProgress();
     printI(QString("Estimate target cloud[id:%1] and source cloud[id:%2] transformation done, take time %3 ms.").arg(m_target_cloud->id()).arg(m_source_cloud->id()).arg(time));
-    ct::Cloud::Ptr cloud(new ct::Cloud);
-    pcl::transformPointCloud(*m_source_cloud, *cloud, matrix);
+
+    // 使用PCL transformPointCloud进行变换
+    pcl::PointCloud<ct::PointXYZRGBN>::Ptr pcl_transformed(new pcl::PointCloud<ct::PointXYZRGBN>);
+    pcl::transformPointCloud(*m_source_cloud->toPCL_XYZRGBN(), *pcl_transformed, matrix);
+
+    ct::Cloud::Ptr cloud = ct::Cloud::fromPCL_XYZRGBN(*pcl_transformed);
     cloud->setId(m_source_cloud->id() + REG_TRANS_PRE_FLAG);
     m_cloudview->addPointCloud(cloud);
     m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize() + 2);

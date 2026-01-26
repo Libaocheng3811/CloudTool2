@@ -31,8 +31,9 @@ namespace ct
 {
     Box Features::boundingBoxAABB(const Cloud::Ptr& cloud)
     {
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
         PointXYZRGBN min, max;
-        pcl::getMinMax3D(*cloud, min, max);
+        pcl::getMinMax3D(*pcl_cloud, min, max);
         Eigen::Vector3f cloud_center =
                 0.5f * (min.getVector3fMap() + max.getVector3fMap());
         Eigen::Vector3f whd;
@@ -45,12 +46,14 @@ namespace ct
 
     Box Features::boundingBoxOBB(const Cloud::Ptr& cloud)
     {
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
+
         // 质心
         Eigen::Vector4f pcaCentroid;
-        pcl::compute3DCentroid(*cloud, pcaCentroid);
+        pcl::compute3DCentroid(*pcl_cloud, pcaCentroid);
         // 协方差
         Eigen::Matrix3f covariance;
-        pcl::computeCovarianceMatrixNormalized(*cloud, pcaCentroid, covariance);
+        pcl::computeCovarianceMatrixNormalized(*pcl_cloud, pcaCentroid, covariance);
         Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver(covariance, Eigen::ComputeEigenvectors);
         Eigen::Matrix3f eigenVectorsPCA = eigen_solver.eigenvectors(); // feature vector
         eigenVectorsPCA.col(2) = eigenVectorsPCA.col(0).cross(eigenVectorsPCA.col(1));
@@ -61,8 +64,10 @@ namespace ct
         transform.block<3, 3>(0, 0) = eigenVectorsPCA.transpose();
         transform.block<3, 1>(0, 3) = -1.0f * (eigenVectorsPCA.transpose()) * (pcaCentroid.head<3>());
         transform_inv = transform.inverse();
-        Cloud::Ptr transformedCloud(new Cloud);
-        transformPointCloud(*cloud, *transformedCloud, transform);
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr transformedCloud(new pcl::PointCloud<PointXYZRGBN>);
+        transformPointCloud(*pcl_cloud, *transformedCloud, transform);
+
         PointXYZRGBN min, max;
         Eigen::Vector3f cloud_center, tcloud_center;
         pcl::getMinMax3D(*transformedCloud, min, max);
@@ -77,14 +82,18 @@ namespace ct
 
     Box Features::boundingBoxAdjust(const Cloud::Ptr& cloud, const Eigen::Affine3f &t)
     {
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
+
         Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
         // 将t表示的仿射变换转换为标准的矩阵形式
         transform = t.matrix();
         Eigen::Matrix4f transform_inv = Eigen::Matrix4f::Identity();
         // 计算transform矩阵的逆矩阵
         transform_inv = transform.inverse();
-        Cloud::Ptr transformedCloud(new Cloud);
-        transformPointCloud(*cloud, *transformedCloud, transform);
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr transformedCloud(new pcl::PointCloud<PointXYZRGBN>);
+        transformPointCloud(*pcl_cloud, *transformedCloud, transform);
+
         PointXYZRGBN min, max;
         Eigen::Vector3f cloud_center, tcloud_center;
         pcl::getMinMax3D(*transformedCloud, min, max);
@@ -108,12 +117,15 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::PFHEstimation<PointXYZRGBN, PointXYZRGBN, pcl::PFHSignature125> pfh;
         pfh.setSearchMethod(tree);
-        pfh.setSearchSurface(surface_);
-        pfh.setInputCloud(cloud_);
-        pfh.setInputNormals(cloud_);
+        pfh.setSearchSurface(pcl_surface);
+        pfh.setInputCloud(pcl_cloud);
+        pfh.setInputNormals(pcl_cloud);
         pfh.setKSearch(k_);
         pfh.setRadiusSearch(radius_);
 
@@ -141,11 +153,14 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::FPFHEstimationOMP<PointXYZRGBN, PointXYZRGBN, pcl::FPFHSignature33> fpfh;
         fpfh.setSearchMethod(tree);
-        fpfh.setInputCloud(cloud_);
-        fpfh.setInputNormals(cloud_);
-        fpfh.setSearchSurface(surface_);
+        fpfh.setInputCloud(pcl_cloud);
+        fpfh.setInputNormals(pcl_cloud);
+        fpfh.setSearchSurface(pcl_surface);
         fpfh.setKSearch(k_);
         fpfh.setRadiusSearch(radius_);
         fpfh.setNumberOfThreads(12);
@@ -174,11 +189,14 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::VFHEstimation<PointXYZRGBN , PointXYZRGBN , pcl::VFHSignature308> vfh;
         vfh.setSearchMethod(tree);
-        vfh.setInputCloud(cloud_);
-        vfh.setInputNormals(cloud_);
-        vfh.setSearchSurface(surface_);
+        vfh.setInputCloud(pcl_cloud);
+        vfh.setInputNormals(pcl_cloud);
+        vfh.setSearchSurface(pcl_surface);
         vfh.setKSearch(k_);
         vfh.setRadiusSearch(radius_);
         vfh.setViewPoint(dir[0], dir[1], dir[2]);
@@ -207,9 +225,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::ESFEstimation<PointXYZRGBN, pcl::ESFSignature640> est;
-        est.setInputCloud(cloud_);
-        est.setSearchSurface(surface_);
+        est.setInputCloud(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
@@ -238,10 +259,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::GASDEstimation<PointXYZRGBN, pcl::GASDSignature512> est;
         est.setSearchMethod(tree);
-        est.setInputCloud(cloud_);
-        est.setSearchSurface(surface_);
+        est.setInputCloud(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
         est.setViewDirection(dir);
@@ -273,9 +297,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::GASDColorEstimation<PointXYZRGBN , pcl::GASDSignature984> est;
-        est.setInputCloud(cloud_);
-        est.setSearchSurface(surface_);
+        est.setInputCloud(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
@@ -311,11 +338,14 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::RSDEstimation<PointXYZRGBN, PointXYZRGBN, pcl::PrincipalRadiiRSD> est;
         est.setSearchMethod(tree);
-        est.setInputCloud(cloud_);
-        est.setSearchSurface(surface_);
-        est.setInputNormals(cloud_);
+        est.setInputCloud(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
+        est.setInputNormals(pcl_cloud);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
         est.setNrSubdivisions(nr_subdiv);
@@ -345,10 +375,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::GRSDEstimation<PointXYZRGBN, PointXYZRGBN, pcl::GRSDSignature21> est;
-        est.setInputCloud(cloud_);
-        est.setInputNormals(cloud_);
-        est.setSearchSurface(surface_);
+        est.setInputCloud(pcl_cloud);
+        est.setInputNormals(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
@@ -377,10 +410,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::CRHEstimation<PointXYZRGBN, PointXYZRGBN, pcl::Histogram<90>> est;
-        est.setInputCloud(cloud_);
-        est.setSearchSurface(surface_);
-        est.setInputNormals(cloud_);
+        est.setInputCloud(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
+        est.setInputNormals(pcl_cloud);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
@@ -410,11 +446,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
         pcl::CVFHEstimation<PointXYZRGBN, PointXYZRGBN, pcl::VFHSignature308> est;
-        est.setInputCloud(cloud_);
+        est.setInputCloud(pcl_cloud);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
-        est.setInputNormals(cloud_);
+        est.setInputNormals(pcl_cloud);
         est.setRadiusSearch(radius_);
         est.setViewPoint(dir[0], dir[1], dir[2]);
         est.setRadiusNormals(radius_normals);
@@ -448,10 +486,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::ShapeContext3DEstimation<PointXYZRGBN, PointXYZRGBN, pcl::ShapeContext1980> est;
-        est.setInputCloud(cloud_);
-        est.setSearchSurface(surface_);
-        est.setInputNormals(cloud_);
+        est.setInputCloud(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
+        est.setInputNormals(pcl_cloud);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
@@ -479,14 +520,17 @@ namespace ct
         feature->shot.reset(new SHOTFeature );
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return
+        if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::SHOTEstimationOMP<PointXYZRGBN, PointXYZRGBN, pcl::SHOT352> shot;
-        shot.setInputCloud(cloud_);
-        shot.setInputNormals(cloud_);
+        shot.setInputCloud(pcl_cloud);
+        shot.setInputNormals(pcl_cloud);
         shot.setSearchMethod(tree);
-        shot.setSearchSurface(surface_);
+        shot.setSearchSurface(pcl_surface);
         shot.setKSearch(k_);
         shot.setRadiusSearch(radius_);
         shot.setNumberOfThreads(12);
@@ -517,11 +561,14 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::SHOTColorEstimationOMP<PointXYZRGBN, PointXYZRGBN, pcl::SHOT1344> shot;
         shot.setSearchMethod(tree);
-        shot.setSearchSurface(surface_);
-        shot.setInputCloud(cloud_);
-        shot.setInputNormals(cloud_);
+        shot.setSearchSurface(pcl_surface);
+        shot.setInputCloud(pcl_cloud);
+        shot.setInputNormals(pcl_cloud);
         shot.setKSearch(k_);
         shot.setRadiusSearch(radius_);
         shot.setNumberOfThreads(12);
@@ -553,10 +600,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::UniqueShapeContext<PointXYZRGBN, pcl::UniqueShapeContext1960, pcl::ReferenceFrame> est;
         est.setSearchMethod(tree);
-        est.setSearchSurface(surface_);
-        est.setInputCloud(cloud_);
+        est.setSearchSurface(pcl_surface);
+        est.setInputCloud(pcl_cloud);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
         est.setInputReferenceFrames(lrf);
@@ -588,10 +638,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::BOARDLocalReferenceFrameEstimation<PointXYZRGBN, PointXYZRGBN, pcl::ReferenceFrame> est;
-        est.setInputCloud(cloud_);
-        est.setSearchSurface(surface_);
-        est.setInputNormals(cloud_);
+        est.setInputCloud(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
+        est.setInputNormals(pcl_cloud);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
@@ -626,10 +679,13 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::FLARELocalReferenceFrameEstimation<PointXYZRGBN, PointXYZRGBN, pcl::ReferenceFrame> est;
-        est.setInputCloud(cloud_);
-        est.setInputNormals(cloud_);
-        est.setSearchSurface(surface_);
+        est.setInputCloud(pcl_cloud);
+        est.setInputNormals(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);
@@ -661,9 +717,12 @@ namespace ct
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+
         pcl::SHOTLocalReferenceFrameEstimationOMP<PointXYZRGBN, pcl::ReferenceFrame> est;
-        est.setInputCloud(cloud_);
-        est.setSearchSurface(surface_);
+        est.setInputCloud(pcl_cloud);
+        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
         est.setKSearch(k_);
         est.setRadiusSearch(radius_);

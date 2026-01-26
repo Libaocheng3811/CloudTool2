@@ -61,7 +61,6 @@ namespace ct
         m_render->GradientBackgroundOn();
         m_render->SetBackground2(0.05, 0.4, 0.6);
         m_render->SetBackground(0.00, 0.05, 0.08);
-//        m_viewer->setBackgroundColor((double )150.0 / 255.0, (double )150.0 / 255.0, (double )150.0 / 255.0 );
 
         connect(this, &CloudView::sizeChanged, [this](QSize size){
             if (m_show_id && !m_current_id.isEmpty()) {
@@ -115,26 +114,25 @@ namespace ct
         if (!found) m_visible_clouds.push_back(cloud);
 
         // 如果是大型点云，自动生成预览点云，只生成一次
-        if (cloud->size() > 30000000 && cloud->getPreviewCloud() == nullptr){
-            cloud->generatePreview();
-        }
+        auto renderCloud = cloud->getPreviewCloud();
+        std::string cloudId = cloud->id().toStdString();
 
-        if (!m_viewer->contains(cloud->id().toStdString()))
-            m_viewer->addPointCloud<PointXYZRGBN>(cloud, cloud->id().toStdString());
+        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_handler(renderCloud);
+
+        if (!m_viewer->contains(cloudId))
+            m_viewer->addPointCloud<PointXYZRGB>(renderCloud, rgb_handler, cloudId);
         else
         {
-            pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb_handler(cloud);
-            // 调用PCLVisualizer类的updatePointCloud函数，用于更新视图器m_viewer中显示的点云数据
-            m_viewer->updatePointCloud<PointXYZRGBN>(cloud, rgb_handler, cloud->id().toStdString());
+            m_viewer->updatePointCloud<pcl::PointXYZRGB>(renderCloud, rgb_handler, cloudId);
         }
 
         if (cloud->pointSize() != 1)
             m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
-                                                       cloud->pointSize(), cloud->id().toStdString());
+                                                       cloud->pointSize(), cloudId);
         // 设置点云透明度
         if (cloud->opacity() != 1)
             m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY,
-                                                       cloud->opacity(), cloud->id().toStdString());
+                                                       cloud->opacity(), cloudId);
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -178,26 +176,75 @@ namespace ct
 
     void CloudView::addPointCloudNormals(const Cloud::Ptr &cloud, int level, float scale)
     {
-        if (!m_viewer->contains(cloud->normalId().toStdString()))
-            m_viewer->addPointCloudNormals<PointXYZRGBN >(cloud, level, scale, cloud->normalId().toStdString());
-        else
-        {
-            m_viewer->removePointCloud(cloud->normalId().toStdString());
-            m_viewer->addPointCloudNormals<PointXYZRGBN>(cloud, level, scale, cloud->normalId().toStdString());
+        // TODO 既然只显示预览点云，法线是不是也应该只显示预览点云的法线呢
+        std::string id = cloud->normalId().toStdString();
+
+        if (!cloud->hasNormals()) return;
+
+        // 只显示预览点云的法线 (LOD)
+        // 我们需要按同样的步长抽取法线
+        auto previewXYZ = cloud->getPreviewCloud(); // PointXYZRGB
+        size_t previewSize = previewXYZ->size();
+        size_t fullSize = cloud->size();
+
+        // 计算步长 (假设是线性采样)
+        int step = (fullSize > 0 && previewSize > 0) ? (fullSize / previewSize) : 1;
+        if (step < 1) step = 1;
+
+        // 构建临时 PointXYZRGBNormal 用于显示法线
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr previewWithNormals(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        previewWithNormals->reserve(previewSize);
+
+        for (size_t i = 0; i < previewSize; ++i) {
+            const auto& p = previewXYZ->points[i];
+
+            // 回溯原始索引 (近似)
+            size_t originalIdx = i * step;
+            if (originalIdx >= fullSize) originalIdx = fullSize - 1;
+
+            pcl::PointXYZRGBNormal pn;
+            pn.x = p.x; pn.y = p.y; pn.z = p.z;
+            pn.rgb = p.rgb;
+
+            // 从全量法线中抽取
+            const auto* normals = cloud->getNormalsData();
+            if (normals && originalIdx < normals->size()) {
+                Eigen::Vector3f n = (*normals)[originalIdx].get();
+                pn.normal_x = n.x();
+                pn.normal_y = n.y();
+                pn.normal_z = n.z();
+            }
+            previewWithNormals->push_back(pn);
         }
+
+        if (!m_viewer->contains(id))
+            m_viewer->addPointCloudNormals<pcl::PointXYZRGBNormal>(previewWithNormals, level, scale, id);
+        else {
+            m_viewer->removePointCloud(id);
+            m_viewer->addPointCloudNormals<pcl::PointXYZRGBNormal>(previewWithNormals, level, scale, id);
+        }
+
+        // 设置颜色
         m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR,
                                                    cloud->normalColor().rf(), cloud->normalColor().gf(),
-                                                   cloud->normalColor().bf(), cloud->normalId().toStdString());
+                                                   cloud->normalColor().bf(), id);
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addCorrespondences(const Cloud::Ptr &source_points, const Cloud::Ptr &target_points,
                                        const pcl::CorrespondencesPtr &correspondences, const QString &id)
     {
-        if (!m_viewer->contains(id.toStdString()))
-            m_viewer->addCorrespondences<PointXYZRGBN>(source_points, target_points, *correspondences, id.toStdString());
+        auto srcPCL = source_points->getPreviewCloud();
+        auto tgtPCL = target_points->getPreviewCloud();
+
+        std::string std_id = id.toStdString();
+
+        if (!m_viewer->contains(std_id))
+            m_viewer->addCorrespondences<pcl::PointXYZRGB>(srcPCL, tgtPCL, *correspondences, std_id);
         else
-            m_viewer->updateCorrespondences<PointXYZRGBN>(source_points, target_points, *correspondences, id.toStdString());
+            m_viewer->updateCorrespondences<pcl::PointXYZRGB>(srcPCL, tgtPCL, *correspondences, std_id);
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -205,12 +252,14 @@ namespace ct
     {
         std::string std_id = id.toStdString();
 
+        auto pclCloud = cloud->toPCL_XYZRGB();
+
         if (!m_viewer->contains(std_id))
-            m_viewer->addPolygon<PointXYZRGBN>(cloud, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
+            m_viewer->addPolygon<PointXYZRGB>(pclCloud, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
         else
         {
             m_viewer->removeShape(std_id);
-            m_viewer->addPolygon<PointXYZRGBN>(cloud, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
+            m_viewer->addPolygon<PointXYZRGB>(pclCloud, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
         }
         m_viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
                                               pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME,
@@ -310,51 +359,86 @@ namespace ct
         }
 
         picker->Pick(pos.x, pos.y, 0.0, ren);
-        int idx = static_cast<int>(picker->GetPointId());
-        picker->PickFromListOff();
 
-        return idx;
+        int previewIdx = static_cast<int>(picker->GetPointId());
+        picker->PickFromListOff();
+        if (previewIdx < 0) return -1;
+
+        // 映射回原始索引
+        if (!target_cloud_id.isEmpty()) {
+            for(const auto& c : m_visible_clouds) {
+                if(c->id() == target_cloud_id) {
+                    size_t fullSize = c->size();
+                    size_t previewSize = c->getPreviewCloud()->size();
+
+                    if (previewSize > 0 && fullSize > previewSize) {
+                        size_t step = fullSize / previewSize;
+                        if (step < 1) step = 1;
+
+                        // 简单的线性映射
+                        size_t realIdx = previewIdx * step;
+                        if (realIdx >= fullSize) realIdx = fullSize - 1;
+
+                        return static_cast<int>(realIdx);
+                    }
+                    // 如果没有 LOD (previewSize == fullSize)，索引是一样的
+                    return previewIdx;
+                }
+            }
+        }
+        return previewIdx;
     }
 
-    std::vector<int> CloudView::areaPick(const std::vector<PointXY> &points, const Cloud::Ptr &cloud, bool in_out)
+    std::vector<int> CloudView::areaPick(const std::vector<PointXY> &poly_points, const Cloud::Ptr &cloud, bool in_out)
     {
         // 获取传入点集合的大小
-        int size = points.size();
-        float constant[99], multiple[99];
+        int size = poly_points.size();
+        if (size < 3) return {};
+
+        // 预计算多边形常数 (Point in Polygon 算法)
+        std::vector<float> constant(size);
+        std::vector<float> multiple(size);
         int i, j = size - 1;
-        for (i = 0; i < size; i++)
-        {
-            if (points[j].y == points[i].y)
-            {
-                constant[i] = points[i].x;
+        for (i = 0; i < size; i++) {
+            if (poly_points[j].y == poly_points[i].y) {
+                constant[i] = poly_points[i].x;
                 multiple[i] = 0;
-            }
-            else
-            {
-                constant[i] = points[i].x - (points[i].y * points[j].x) / (points[j].y - points[i].y) +
-                              (points[i].y * points[i].x) / (points[j].y - points[i].y);
-                multiple[i] = (points[j].x - points[i].x) / (points[j].y - points[i].y);
+            } else {
+                constant[i] = poly_points[i].x - (poly_points[i].y * poly_points[j].x) / (poly_points[j].y - poly_points[i].y) +
+                              (poly_points[i].y * poly_points[i].x) / (poly_points[j].y - poly_points[i].y);
+                multiple[i] = (poly_points[j].x - poly_points[i].x) / (poly_points[j].y - poly_points[i].y);
             }
             j = i;
         }
 
         std::vector<int> indices;
-        for (size_t i = 0; i < cloud->size(); i++)
-        {
-            m_render->SetWorldPoint(cloud->points[i].x, cloud->points[i].y, cloud->points[i].z, 1);
-            m_render->WorldToDisplay();
-            double p[3];
-            m_render->GetDisplayPoint(p);
+        size_t n_points = cloud->size();
 
-            bool oddNodes = in_out, current = points[size - 1].y > p[1], previous;
-            for (int m = 0; m < size; m++)
-            {
+        auto worldToDisplay = [&](const pcl::PointXYZ& pt, double out[3]) {
+            m_render->SetWorldPoint(pt.x, pt.y, pt.z, 1.0);
+            m_render->WorldToDisplay();
+            m_render->GetDisplayPoint(out);
+        };
+
+        for (size_t k = 0; k < n_points; k++)
+        {
+            // 获取全量点
+            const auto& pt = cloud->getXYZCloud()->points[k];
+
+            double p[3];
+            worldToDisplay(pt, p);
+
+            bool oddNodes = in_out;
+            bool current = poly_points[size - 1].y > p[1];
+            bool previous;
+
+            for (int m = 0; m < size; m++) {
                 previous = current;
-                current = points[m].y > p[1];
+                current = poly_points[m].y > p[1];
                 if (current != previous)
-                    oddNodes ^= p[1] * multiple[m] + constant[m] < p[0];
+                    oddNodes ^= (p[1] * multiple[m] + constant[m] < p[0]);
             }
-            if (oddNodes) indices.push_back(i);
+            if (oddNodes) indices.push_back(k);
         }
         return indices;
     }
@@ -408,8 +492,12 @@ namespace ct
 
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const RGB& rgb)
     {
-        pcl::visualization::PointCloudColorHandlerCustom<PointXYZRGBN> color(cloud, rgb.r, rgb.g, rgb.b);
-        m_viewer->updatePointCloud(cloud, color, cloud->id().toStdString());
+        cloud->setCloudColor(rgb);
+        auto renderCloud = cloud->getPreviewCloud();
+
+        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_handler(renderCloud);
+        m_viewer->updatePointCloud<pcl::PointXYZRGB>(renderCloud, rgb_handler, cloud->id().toStdString());
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -423,9 +511,10 @@ namespace ct
 
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const QString& axis)
     {
-        pcl::visualization::PointCloudColorHandlerGenericField<PointXYZRGBN>
-                fieldcolor(cloud, axis.toStdString());
-        m_viewer->updatePointCloud(cloud, fieldcolor, cloud->id().toStdString());
+        cloud->setCloudColor(axis);
+        auto renderCloud = cloud->getPreviewCloud();
+        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_handler(renderCloud);
+        m_viewer->updatePointCloud<pcl::PointXYZRGB>(renderCloud, rgb_handler, cloud->id().toStdString());
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -433,8 +522,10 @@ namespace ct
     {
         cloud->restoreColors();
 
-        pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb_handler(cloud);
-        m_viewer->updatePointCloud(cloud, rgb_handler, cloud->id().toStdString());
+        auto renderCloud = cloud->getPreviewCloud();
+        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_handler(renderCloud);
+        m_viewer->updatePointCloud<pcl::PointXYZRGB>(renderCloud, rgb_handler, cloud->id().toStdString());
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -688,52 +779,8 @@ namespace ct
         m_viewer->getRenderWindow()->Render();
     }
 
-    void CloudView::setInteractiveMode(bool activate) {
-        bool need_render = false;
-
-        for (const auto& cloud : m_visible_clouds){
-            //如果点云很小，不进行任何操作
-            if (cloud->getPreviewCloud() == nullptr) continue;
-
-            std::string full_id = cloud->id().toStdString();
-            std::string prev_id = cloud->getPreviewCloud()->id().toStdString();
-
-            if (activate){
-                // 动态模式，显示预览点云，隐藏原始点云
-                m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.0, full_id);
-                if (!m_viewer->contains(prev_id)){
-                    //如果是第一次显示预览，需要addPointCloud
-                    pcl::visualization::PointCloudColorHandlerRGBField<PointXYZRGBN> rgb_handler(cloud->getPreviewCloud());
-                    m_viewer->addPointCloud<PointXYZRGBN>(cloud->getPreviewCloud(), rgb_handler, prev_id);
-
-//                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
-//                                                               pcl::visualization::PCL_VISUALIZER_SHADING_FLAT, prev_id);
-
-                    //同步点的大小
-                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
-                                                               cloud->pointSize(), prev_id);
-                }
-                else {
-                    //如果已经存在，设置为可见
-                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 1.0, prev_id);
-                }
-            }
-            else{
-                //静态模式，隐藏预览点云，显示原始点云
-                if (m_viewer->contains(prev_id)){
-                    m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.0, prev_id);
-                }
-                m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, cloud->opacity(), full_id);
-            }
-            need_render = true;
-        }
-        if (need_render && m_auto_render) m_viewer->getRenderWindow()->Render();
-    }
-
     void CloudView::mousePressEvent(QMouseEvent *event)
     {
-        setInteractiveMode(true);
-
         if (event->button() == Qt::LeftButton)
         {
             emit mouseLeftPressed(PointXY(this->interactor()->GetEventPosition()[0],
@@ -749,8 +796,6 @@ namespace ct
 
     void CloudView::mouseReleaseEvent(QMouseEvent *event)
     {
-        setInteractiveMode(false);
-
         if (event->button() == Qt::LeftButton)
         {
             // getViewerPose() 是 PCLVisualizer 类中的一个成员函数。它返回当前视图器的视角或位置的描述，例如相机的位置和方向。

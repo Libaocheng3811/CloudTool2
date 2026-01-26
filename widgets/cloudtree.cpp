@@ -176,8 +176,13 @@ namespace ct
     void CloudTree::updateCloud(const Cloud::Ptr &cloud, const Cloud::Ptr &new_cloud, bool update_name)
     {
         if (cloud == nullptr || new_cloud == nullptr) return;
-        // 如果cloud和new_cloud不是同一个对象，交换他们的内容
-        if (cloud != new_cloud) cloud->swap(*new_cloud);
+
+        // 由于Cloud类现在不支持swap，我们需要使用移动赋值
+        // 如果cloud和new_cloud不是同一个对象，将new_cloud的内容移动到cloud中
+        if (cloud != new_cloud) {
+            // 使用移动赋值操作符将new_cloud的内容转移到cloud
+            *cloud = std::move(*new_cloud);
+        }
         // 更新点云
         cloud->update();
 
@@ -359,7 +364,7 @@ namespace ct
         Cloud::Ptr cloud = getCloud(item);
         if (!cloud) return;
 
-        Cloud::Ptr clone = cloud->makeShared();
+        Cloud::Ptr clone = cloud->clone();
         clone->setId(CLONE_ADD_FLAG + cloud->id());
         clone->setInfo(cloud->info());
 

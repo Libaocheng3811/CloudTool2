@@ -51,22 +51,25 @@ namespace ct
         TicToc time;
         time.tic();
 
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
-
         if (m_is_canceled) return;
         emit progress(10);
 
+        // 转换输入点云
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::PassThrough<PointXYZRGBN> pfilter;
-        pfilter.setInputCloud(cloud_);
+        pfilter.setInputCloud(pcl_cloud);
         pfilter.setFilterFieldName(field_name);
         pfilter.setFilterLimits(limit_min, limit_max);
         pfilter.setNegative(negative_);
-        pfilter.filter(*cloud_filtered);
+        pfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
+        // 从 PCL 结果构造 Cloud
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();
@@ -83,26 +86,28 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
         // 创建一个 VoxelGrid 滤波器对象
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::VoxelGrid<PointXYZRGBN> vfilter;
-        vfilter.setInputCloud(cloud_);
+        vfilter.setInputCloud(pcl_cloud);
         vfilter.setLeafSize(lx, ly, lz);
         vfilter.setFilterLimitsNegative(negative_);
 
         if (m_is_canceled) return;
         emit progress(20);
 
-        vfilter.filter(*cloud_filtered);
+        vfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();
@@ -119,30 +124,34 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::ApproximateVoxelGrid<PointXYZRGBN> avfilter;
-        avfilter.setInputCloud(cloud_);
+        avfilter.setInputCloud(pcl_cloud);
         avfilter.setLeafSize(lx, ly, lz);
-        avfilter.filter(*cloud_filtered);
+        avfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
         if (negative_)
         {
+            pcl::PointCloud<PointXYZRGBN>::Ptr pcl_neg_filtered(new pcl::PointCloud<PointXYZRGBN>);
             pcl::ExtractIndices<PointXYZRGBN> extract;
-            extract.setInputCloud(cloud_);
+            extract.setInputCloud(pcl_cloud);
             extract.setIndices(avfilter.getRemovedIndices());
-            extract.filter(*cloud_filtered);
+            extract.filter(*pcl_neg_filtered);
+            pcl_filtered = pcl_neg_filtered;
         }
 
         if (m_is_canceled) return;
 
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();
@@ -158,24 +167,24 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
 
         if (m_is_canceled) return;
         emit progress(10);
 
-        pcl::StatisticalOutlierRemoval<PointXYZRGBN > sfilter;
-        sfilter.setInputCloud(cloud_);
-        // 设置邻近点数量
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::StatisticalOutlierRemoval<PointXYZRGBN> sfilter;
+        sfilter.setInputCloud(pcl_cloud);
         sfilter.setMeanK(nr_k);
-        // 设置标准差的乘数阈值 stddev_mult，用于判断哪些点是离群点
         sfilter.setStddevMulThresh(stddev_mult);
         sfilter.setNegative(negative_);
-        sfilter.filter(*cloud_filtered);
+        sfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();
@@ -192,22 +201,24 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::RadiusOutlierRemoval<PointXYZRGBN> rfilter;
-        rfilter.setInputCloud(cloud_);
+        rfilter.setInputCloud(pcl_cloud);
         rfilter.setRadiusSearch(radius);
         rfilter.setMinNeighborsInRadius(min_pts);
         rfilter.setNegative(negative_);
-        rfilter.filter(*cloud_filtered);
+        rfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();
@@ -224,30 +235,34 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::ConditionalRemoval<PointXYZRGBN> bfilter;
-        bfilter.setInputCloud(cloud_);
+        bfilter.setInputCloud(pcl_cloud);
         bfilter.setCondition(con);
-        bfilter.filter(*cloud_filtered);
+        bfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
         if (negative_)
         {
-            pcl::ExtractIndices<PointXYZRGBN > extract;
-            extract.setInputCloud(cloud_);
+            pcl::PointCloud<PointXYZRGBN>::Ptr pcl_neg_filtered(new pcl::PointCloud<PointXYZRGBN>);
+            pcl::ExtractIndices<PointXYZRGBN> extract;
+            extract.setInputCloud(pcl_cloud);
             extract.setIndices(bfilter.getRemovedIndices());
-            extract.filter(*cloud_filtered);
+            extract.filter(*pcl_neg_filtered);
+            pcl_filtered = pcl_neg_filtered;
         }
 
         if (m_is_canceled) return;
 
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();
@@ -264,21 +279,23 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
 
         if (m_is_canceled) return;
         emit progress(10);
 
-        pcl::GridMinimum<PointXYZRGBN > gfilter(resolution);
-        gfilter.setInputCloud(cloud_);
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::GridMinimum<PointXYZRGBN> gfilter(resolution);
+        gfilter.setInputCloud(pcl_cloud);
         gfilter.setResolution(resolution);
         gfilter.setNegative(negative_);
-        gfilter.filter(*cloud_filtered);
+        gfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();
@@ -295,21 +312,23 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::LocalMaximum<PointXYZRGBN> lfilter;
-        lfilter.setInputCloud(cloud_);
+        lfilter.setInputCloud(pcl_cloud);
         lfilter.setRadius(radius);
         lfilter.setNegative(negative_);
-        lfilter.filter(*cloud_filtered);
+        lfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();
@@ -326,22 +345,24 @@ namespace ct
 
         TicToc time;
         time.tic();
-        Cloud::Ptr cloud_filtered(new Cloud);
-        cloud_filtered->setId(cloud_->id());
 
         if (m_is_canceled) return;
         emit progress(10);
 
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::ShadowPoints<PointXYZRGBN, PointXYZRGBN> sfilter;
-        sfilter.setInputCloud(cloud_);
-        sfilter.setNormals(cloud_);
+        sfilter.setInputCloud(pcl_cloud);
+        sfilter.setNormals(pcl_cloud);
         sfilter.setThreshold(threshold);
         sfilter.setNegative(negative_);
-        sfilter.filter(*cloud_filtered);
+        sfilter.filter(*pcl_filtered);
 
         if (m_is_canceled) return;
         emit progress(80);
 
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
         cloud_filtered->setHasRGB(cloud_->hasRGB());
         cloud_filtered->backupColors();

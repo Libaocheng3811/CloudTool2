@@ -133,7 +133,9 @@ void Color::apply()
                 // 为所有点云设置统一颜色
                 else
                 {
-                    cloud->setCloudColor({m_rgb.red(), m_rgb.green(), m_rgb.blue()});
+                    cloud->setCloudColor({static_cast<uint8_t>(m_rgb.red()),
+                                         static_cast<uint8_t>(m_rgb.green()),
+                                         static_cast<uint8_t>(m_rgb.blue())});
                     printI(QString("Apply cloud[id%1] point cloud[r:%2, g:%3, b:%4] done.")
                             .arg(cloud->id()).arg(m_rgb.red()).arg(m_rgb.green()).arg(m_rgb.blue()));
                 }
@@ -142,12 +144,16 @@ void Color::apply()
             case CT_COLOR_BACKGROUND:
                 break;
             case CT_COLOR_NORMALS:
-                cloud->setNormalColor({m_rgb.red(), m_rgb.green(), m_rgb.blue()});
+                cloud->setNormalColor({static_cast<uint8_t>(m_rgb.red()),
+                                       static_cast<uint8_t>(m_rgb.green()),
+                                       static_cast<uint8_t>(m_rgb.blue())});
                 printI(QString("Apply cloud[id:%1] normals color[r:%2, g:%3, b:%4] done.")
                         .arg(m_rgb.red()).arg(m_rgb.green()).arg(m_rgb.blue()));
                 break;
             case CT_COLOR_BOUNDINGBOX:
-                cloud->setBoxColor({m_rgb.red(), m_rgb.green(), m_rgb.blue()});
+                cloud->setBoxColor({static_cast<uint8_t>(m_rgb.red()),
+                                    static_cast<uint8_t>(m_rgb.green()),
+                                    static_cast<uint8_t>(m_rgb.blue())});
                 printI(QString("Apply cloud [id:%1] box color[r:%2, g:%3, b:%4] done.")
                         .arg(m_rgb.red()).arg(m_rgb.green()).arg(m_rgb.blue()));
                 break;
@@ -194,21 +200,29 @@ void Color::setColorRGB(const QColor &rgb)
         case CT_COLOR_POINTCLOUD:
             for (auto& cloud : selected_clouds)
                 // 传入CloudView执行时，颜色是RGB类型的，而在Color类中颜色是QColor类型的
-                m_cloudview->setPointCloudColor(cloud, {rgb.red(), rgb.green(), rgb.blue()});
+                m_cloudview->setPointCloudColor(cloud, {static_cast<uint8_t>(m_rgb.red()),
+                                                        static_cast<uint8_t>(m_rgb.green()),
+                                                        static_cast<uint8_t>(m_rgb.blue())});
             break;
 
         case CT_COLOR_BACKGROUND:
-            m_cloudview->setBackgroundColor({rgb.red(), rgb.green(), rgb.blue()});
+            m_cloudview->setBackgroundColor({static_cast<uint8_t>(m_rgb.red()),
+                                             static_cast<uint8_t>(m_rgb.green()),
+                                             static_cast<uint8_t>(m_rgb.blue())});
             break;
         case CT_COLOR_NORMALS:
             for (auto& cloud : selected_clouds)
                 if (m_cloudview->contains(cloud->normalId()))
-                    m_cloudview->setPointCloudColor(cloud->normalId(), {rgb.red(), rgb.green(), rgb.blue()});
+                    m_cloudview->setPointCloudColor(cloud->normalId(), {static_cast<uint8_t>(m_rgb.red()),
+                                                                        static_cast<uint8_t>(m_rgb.green()),
+                                                                        static_cast<uint8_t>(m_rgb.blue())});
             break;
         case CT_COLOR_BOUNDINGBOX:
             for (auto& cloud : selected_clouds)
                 if (m_cloudview->contains(cloud->boxId()))
-                    m_cloudview->setShapeColor(cloud->boxId(), {rgb.red(), rgb.green(), rgb.blue()});
+                    m_cloudview->setShapeColor(cloud->boxId(), {static_cast<uint8_t>(m_rgb.red()),
+                                                                static_cast<uint8_t>(m_rgb.green()),
+                                                                static_cast<uint8_t>(m_rgb.blue())});
             break;
     }
 }

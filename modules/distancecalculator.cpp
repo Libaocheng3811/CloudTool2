@@ -55,8 +55,10 @@ namespace ct{
 
     void DistanceCalculator::computeNearest(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp,
                                             std::vector<float> &dists) {
-        pcl::search::KdTree<ct::PointXYZRGBN> tree;
-        tree.setInputCloud(ref);
+        auto refCloud = ref->toPCL_XYZ();
+        auto compCloud = comp->toPCL_XYZ();
+        pcl::search::KdTree<ct::PointXYZ> tree;
+        tree.setInputCloud(refCloud);
 
         size_t n_points = comp->size();
         int progress_counter = 0;
@@ -68,7 +70,7 @@ namespace ct{
             std::vector<int> indices(1);
             std::vector<float> sqrt_dists(1);
 
-            if (tree.nearestKSearch(comp->points[i], 1, indices, sqrt_dists) > 0){
+            if (tree.nearestKSearch(compCloud->points[i], 1, indices, sqrt_dists) > 0){
                 dists[i] = std::sqrt(sqrt_dists[0]);
             }
             else{
@@ -87,8 +89,11 @@ namespace ct{
     void DistanceCalculator::computeKnnMean(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp, int k,
                                             std::vector<float> &dists) {
         if (k < 1) k = 1;
-        pcl::search::KdTree<ct::PointXYZRGBN> tree;
-        tree.setInputCloud(ref);
+        auto refCloud = ref->toPCL_XYZ();
+        auto compCloud = comp->toPCL_XYZ();
+
+        pcl::search::KdTree<ct::PointXYZ> tree;
+        tree.setInputCloud(refCloud);
 
         size_t n_points = comp->size();
         int progress_counter = 0;
@@ -101,7 +106,7 @@ namespace ct{
             std::vector<int> indices(k);
             std::vector<float> sqr_dists(k);
 
-            int found = tree.nearestKSearch(comp->points[i], k, indices, sqr_dists);
+            int found = tree.nearestKSearch(compCloud->points[i], k, indices, sqr_dists);
             if (found > 0) {
                 double sum = 0.0;
                 for (float sq : sqr_dists) sum += std::sqrt(sq);
@@ -120,8 +125,11 @@ namespace ct{
 
     void DistanceCalculator::computeRadiusMean(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp, double r,
                                                std::vector<float> &dists) {
-        pcl::search::KdTree<ct::PointXYZRGBN> tree;
-        tree.setInputCloud(ref);
+        auto refCloud = ref->toPCL_XYZ();
+        auto compCloud = comp->toPCL_XYZ();
+
+        pcl::search::KdTree<ct::PointXYZ> tree;
+        tree.setInputCloud(refCloud);
 
         size_t n_points = comp->size();
         int progress_counter = 0;
@@ -134,7 +142,7 @@ namespace ct{
             std::vector<int> indices;
             std::vector<float> sqr_dists;
 
-            int found = tree.radiusSearch(comp->points[i], r, indices, sqr_dists);
+            int found = tree.radiusSearch(compCloud->points[i], r, indices, sqr_dists);
             if (found > 0) {
                 double sum = 0.0;
                 for (float sq : sqr_dists) sum += std::sqrt(sq);

@@ -244,8 +244,8 @@ namespace ct {
             pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
             pcl::SampleConsensusInitialAlignment<PointXYZRGBN, PointXYZRGBN, Feature> reg;
 
-            reg.setInputTarget(target_cloud_);
-            reg.setInputSource(source_cloud_);
+            reg.setInputTarget(target_cloud_->toPCL_XYZRGBN());
+            reg.setInputSource(source_cloud_->toPCL_XYZRGBN());
             reg.setSourceFeatures(source);
             reg.setTargetFeatures(target);
             reg.setSearchMethodTarget(target_tree);
@@ -265,7 +265,12 @@ namespace ct {
             reg.setMinSampleDistance(min_sample_distance);
             reg.setNumberOfSamples(nr_samples);
 
-            reg.align(*ail_cloud);
+            // PCL align需要PCL点云作为输出
+            pcl::PointCloud<PointXYZRGBN>::Ptr pcl_aligned(new pcl::PointCloud<PointXYZRGBN>);
+            reg.align(*pcl_aligned);
+
+            // 从PCL点云创建Cloud对象
+            ail_cloud = Cloud::fromPCL_XYZRGBN(*pcl_aligned);
             emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                     reg.getFinalTransformation(), time.toc());
         }
@@ -287,14 +292,12 @@ namespace ct {
         {
             TicToc time;
             time.tic();
-            // 创建一个空的点云，用于存储配准后的点云
-            Cloud::Ptr ail_cloud(new Cloud);
             pcl::search::KdTree<PointXYZRGBN>::Ptr target_tree(new pcl::search::KdTree<PointXYZRGBN>);
             pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
             pcl::SampleConsensusPrerejective<PointXYZRGBN, PointXYZRGBN, Feature> reg;
 
-            reg.setInputSource(source_cloud_);
-            reg.setInputTarget(target_cloud_);
+            reg.setInputSource(source_cloud_->toPCL_XYZRGBN());
+            reg.setInputTarget(target_cloud_->toPCL_XYZRGBN());
             reg.setSourceFeatures(source);
             reg.setTargetFeatures(target);
             reg.setSearchMethodTarget(target_tree);
@@ -316,7 +319,12 @@ namespace ct {
             reg.setNumberOfSamples(nr_samples);
             reg.setInlierFraction(inlier_fraction);
 
-            reg.align(*ail_cloud);
+            // PCL align需要PCL点云作为输出
+            pcl::PointCloud<PointXYZRGBN>::Ptr pcl_aligned(new pcl::PointCloud<PointXYZRGBN>);
+            reg.align(*pcl_aligned);
+
+            // 从PCL点云创建Cloud对象
+            Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*pcl_aligned);
             emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
                                     reg.getFinalTransformation(), time.toc());
         }
