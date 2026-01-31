@@ -391,6 +391,14 @@ namespace ct
         addPoint(PointXYZ(pt.x, pt.y, pt.z), &color, &normal);
     }
 
+    void ct::Cloud::generateLOD()
+    {
+        if (!m_octree_root) return;
+
+        // 自底向上递归生成
+        generateLODRecursive(m_octree_root.get());
+    }
+
     // ===== 容量接口 =====
     size_t Cloud::size() const
     {
@@ -1080,6 +1088,93 @@ namespace ct
         }
 
         return new_node;
+    }
+
+    void Cloud::generateLODRecursive(ct::OctreeNode *node) {
+
+        if (!node) return;
+
+        // 1. 如果是叶子节点，清空 LOD 数据（叶子节点直接渲染 Block，不需要 LOD 代理）
+        if (node->isLeaf()) {
+            node->clearLOD();
+            return;
+        }
+
+        // 2. 递归处理所有子节点
+        for (int i = 0; i < 8; ++i) {
+            if (node->m_children[i]) {
+                generateLODRecursive(node->m_children[i]);
+            }
+        }
+
+        // 3. 收集候选点 (Candidates)
+        // 我们需要从子节点中收集点，汇聚到当前节点
+        std::vector<pcl::PointXYZRGB> candidates;
+        candidates.reserve(MAX_LOD_POINTS * 8); // 预估大小
+
+        for (int i = 0; i < 8; ++i) {
+            OctreeNode *child = node->m_children[i];
+            if (!child) continue;
+
+            if (child->isLeaf()) {
+                // 子节点是叶子：从 Block 中采样
+                // 为了性能，不要把 Block 所有点都拿来，只拿一部分
+                auto block = child->m_block;
+                if (!block || block->empty()) continue;
+
+                size_t step = 1;
+                // 如果 Block 点太多，我们只取 MAX_LOD_POINTS 那么多就够了
+                if (block->size() > MAX_LOD_POINTS) {
+                    step = block->size() / MAX_LOD_POINTS;
+                }
+                if (step < 1) step = 1;
+
+                for (size_t k = 0; k < block->size(); k += step) {
+                    pcl::PointXYZRGB p;
+                    const auto &src_pt = block->m_points[k];
+                    p.x = src_pt.x;
+                    p.y = src_pt.y;
+                    p.z = src_pt.z;
+
+                    if (block->m_colors) {
+                        const auto &c = (*block->m_colors)[k];
+                        p.r = c.r;
+                        p.g = c.g;
+                        p.b = c.b;
+                    } else {
+                        p.r = 255;
+                        p.g = 255;
+                        p.b = 255;
+                    }
+                    candidates.push_back(p);
+                }
+            } else {
+                // 子节点是内部节点：直接继承它的 LOD 点
+                // 因为子节点的 LOD 已经是下采样过的了，数量可控
+                candidates.insert(candidates.end(),
+                                  child->m_lod_points.begin(),
+                                  child->m_lod_points.end());
+            }
+        }
+
+        // 4. 对候选点进行降采样 (Downsampling)
+        // 如果候选点数量超过了当前节点的最大容量，随机打乱并截断
+        if (candidates.size() > MAX_LOD_POINTS) {
+            // 使用随机洗牌来实现均匀采样
+            static std::random_device rd;
+            static std::mt19937 g(rd());
+            std::shuffle(candidates.begin(), candidates.end(), g);
+
+            candidates.resize(MAX_LOD_POINTS);
+        }
+
+        // 5. 存入当前节点
+        node->m_lod_points = std::move(candidates);
+        node->m_lod_dirty = true;
+
+        // 清理旧的缓存，等待渲染器上传
+        node->m_vtk_lod_polydata.reset();
+
     }
 
     void Cloud::append(const Cloud& other)

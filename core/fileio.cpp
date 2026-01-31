@@ -157,6 +157,11 @@ namespace ct
         cloud->setInfo(fileInfo);
         cloud->update(); //更新包围盒，统计信息
 
+        emit progress(95);
+        // 生成LOD数据
+        cloud->generateLOD();
+
+
         emit progress(100);
         emit loadCloudResult(true, cloud, time.toc());
     }

@@ -15,6 +15,9 @@ namespace ct{
     // 每个数据块的最大点数 (建议 30k-60k)
     static const size_t MAX_POINTS_PER_BLOCK = 60000;
 
+    // 每个内部节点保留的 LOD 代理点最大数量
+    static const size_t MAX_LOD_POINTS = 30000;
+
     /**
      * @brief 数据块 (Data Block) - 八叉树叶子负载
      */
@@ -192,6 +195,13 @@ namespace ct{
 
         std::shared_ptr<void> m_vtk_lod_polydata;
         bool m_lod_dirty = true;
+
+        void clearLOD() {
+            m_lod_points.clear();
+            m_lod_points.shrink_to_fit();
+            m_vtk_lod_polydata.reset();
+            m_lod_dirty = true;
+        }
 
         // --- 方法 ---
         bool isLeaf() const { return m_block != nullptr; }

@@ -72,6 +72,13 @@ namespace ct
 
         void addPoint(const PointXYZRGBN& pt);
 
+        /**
+        * @brief 生成八叉树的 LOD (Level of Detail) 数据
+        * @details 自底向上遍历树，父节点从子节点中随机采样点作为代理。
+         * 建议在 addPoints 完成后调用一次。
+        */
+        void generateLOD();
+
         // ===== 核心访问接口 =====
         /**
          * @brief 获取所有数据块 (扁平化列表)
@@ -257,6 +264,12 @@ namespace ct
         void updateRecursive(OctreeNode* node, PointXYZ& min_pt, PointXYZ& max_pt, size_t& count);
 
         std::unique_ptr<OctreeNode> cloneOctreeRecursive(const OctreeNode* src_node, OctreeNode* parent);
+
+        /**
+        * @brief 递归生成 LOD
+        * @return 该节点贡献给父节点的采样点列表
+        */
+        void generateLODRecursive(OctreeNode* node);
     private:
         // ===== 核心数据（私有）=====
         // 八叉树根节点

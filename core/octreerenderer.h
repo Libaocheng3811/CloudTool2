@@ -8,92 +8,81 @@
 #include "cloud.h"
 #include "octree.h"
 
+#include <vtkSmartPointer.h>
 #include <vector>
-#include <queue>
 #include <map>
+#include <unordered_set>
 
 // VTK 前向声明
 class vtkRenderer;
 class vtkActor;
-class vtkPolyDataMapper;
-class vtkCamera;
-class vtkPolyData;
 
 namespace ct{
     /**
-    * @brief 八叉树渲染调度器
-    * @details 负责管理一个 Cloud 对象的渲染。实现视锥体剔除、LOD 切换和 Actor 池管理。
+    * @brief 高性能八叉树 LOD 渲染器
+    * @details 策略：
+    * 1. SSE (Screen Space Error) 遍历：根据屏幕投影大小决定渲染精细 Block 还是粗糙 LOD。
+    * 2. 动态合并 (Dynamic Merging)：每帧将所有可见点合并到一个巨大的 vtkPolyData 中，只使用 1 个 Actor。
     */
     class OctreeRenderer{
     public:
         OctreeRenderer(Cloud::Ptr cloud, vtkRenderer* renderer);
         ~OctreeRenderer();
 
-        void setVisibility(bool visible) { m_visible = visible; }
-
+        void setVisibility(bool visible);
         bool isVisible() const { return m_visible; }
-        // 每一帧渲染前调用 (响应相机移动)
-        void update();
 
-        // 强制刷新所有缓存 (例如修改颜色后)
+        void update();
         void invalidateCache();
 
-        // 获取可见的 Actor 列表 (用于 Pick 等操作)
         std::vector<vtkActor*> getActiveActors() const;
-
         CloudBlock::Ptr getBlockFromActor(vtkActor* actor);
-
         ct::Cloud::Ptr getCloud() const {return m_cloud; }
 
     private:
-        // --- 内部辅助结构 ---
-        struct RenderItem {
-            vtkActor* actor = nullptr;
-            vtkPolyDataMapper* mapper = nullptr;
-            CloudBlock::Ptr block; // 当前绑定的 Block (如果是 LOD 则为空)
-            OctreeNode* lodNode = nullptr;   // 当前绑定的 LOD Node (如果是 Block 则为空)
-            bool is_active = false; // 标记本帧是否被使用
+        // 遍历上下文
+        struct TraversalContext {
+            const double* planes;
+            Eigen::Vector3f camPos;
+            float pixelsPerUnit;
+            std::vector<OctreeNode*>* visibleNodes;
+            int currentActorCount = 0; // 【新增】计数器
+            int maxActors = 300;       // 【新增】最大允许渲染的块数
         };
 
-        // 递归遍历八叉树，收集可见节点
-        void traverseOctree(OctreeNode* node, const double* planes,
-                            const Eigen::Vector3f& camPos,
-                            std::vector<CloudBlock::Ptr>& outVisibleBlocks,
-                            std::vector<OctreeNode*>& outVisibleLODs);
+        void traverse(OctreeNode* node, TraversalContext& ctx);
 
-        // 分配 Actor
-        void assignActors(const std::vector<CloudBlock::Ptr>& blocks,
-                          const std::vector<OctreeNode*>& lods);
+        // 为节点创建或获取缓存的 Actor
+        vtkActor* getOrCreateActor(OctreeNode* node, bool is_lod);
 
-        // 将数据转换为 vtkPolyData (懒加载核心)
-        void updateBlockPolyData(CloudBlock* block);
-        void updateLODPolyData(OctreeNode* node);
-
-        // 检查包围盒是否在视锥体内
+        // 辅助计算
         bool isBoxInFrustum(const Box& box, const double* planes);
+        float projectSize(const Box& box, const Eigen::Vector3f& camPos, float pixelsPerUnit);
 
     private:
         Cloud::Ptr m_cloud;
-        vtkRenderer* m_vtk_renderer; // 弱引用
-        std::map<void*, int> m_block_to_actor_index; // 快速查找 Block 目前对应哪个 Actor 索引
-
+        vtkRenderer* m_vtk_renderer;
         bool m_visible = true;
 
-        // --- Actor 池 ---
-        // 所有的 Actor 资源 (包括空闲的和正在使用的)
-        std::vector<RenderItem> m_actor_pool;
+        // --- 核心缓存 ---
+        // Key: Node指针, Value: 对应的 VTK Actor
+        // 我们不需要区分是 LOD 还是 Block，因为一个 Node 同一时间只显示一种状态
+        // 但为了安全，我们可以让 Node 自己持有 Actor (侵入式) 或者这里用 Map (非侵入式)
+        // 这里使用 Map 避免修改 OctreeNode 头文件太过频繁
+        std::map<OctreeNode*, vtkSmartPointer<vtkActor>> m_actor_cache;
 
-        // 池大小限制 (例如 500 个块)
-        // 如果可见块超过这个数，远处的块可能会被迫隐藏或合并 (暂未实现合并，直接丢弃最远的)
-        static const int MAX_ACTORS = 2000;
+        // 记录上一帧显示的节点，用于差量更新
+        std::unordered_set<OctreeNode*> m_current_visible_nodes;
 
-        // 当前帧使用的 Actor 数量
-        int m_used_actor_count = 0;
+        // --- 调度参数 ---
+        float m_lod_threshold = 400.0f; // 屏幕投影像素阈值 (大于此值递归，小于此值画LOD)
 
-        // LOD 阈值 (距离/包围盒大小)
-        float m_lod_threshold = 0.2f; // 屏幕投影大小比率
+        // 缓存上一帧的视点信息，减少不必要的更新
+        Eigen::Vector3f m_last_cam_pos;
+        double m_last_cam_dir[3];
+        bool m_force_update = false;
     };
-}// namespace ct
 
+}// namespace ct
 
 #endif //CLOUDTOOL2_OCTREERENDERER_H
