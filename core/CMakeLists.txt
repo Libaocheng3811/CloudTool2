@@ -1,19 +1,7 @@
-set(LibSrcs
-        cloud.cpp
-        cloudview.cpp
-        common.cpp
-        console.cpp
-        fileio.cpp
-        )
-
-set(LibHdrs
-        exports.h
-        cloud.h
-        cloudview.h
-        common.h
-        console.h
-        fileio.h
-        )
+file(GLOB LibSrcs  CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+file(GLOB LibHdrs CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 
 find_package(VTK COMPONENTS
     vtkGUISupportQt

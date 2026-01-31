@@ -169,7 +169,12 @@ namespace ct
             m_cloudview->addBox(cloud);
         }
 
-        m_cloudview->resetCamera(); // 可选
+        if (!cloud->empty()) {
+            Eigen::Vector3f min_pt = cloud->min().getVector3fMap();
+            Eigen::Vector3f max_pt = cloud->max().getVector3fMap();
+            m_cloudview->zoomToBounds(min_pt, max_pt);
+        }
+
         printI(QString("Add cloud[id:%1] done.").arg(cloud->id()));
     }
 
@@ -181,7 +186,7 @@ namespace ct
         // 如果cloud和new_cloud不是同一个对象，将new_cloud的内容移动到cloud中
         if (cloud != new_cloud) {
             // 使用移动赋值操作符将new_cloud的内容转移到cloud
-            *cloud = std::move(*new_cloud);
+            cloud->swap(*new_cloud);
         }
         // 更新点云
         cloud->update();

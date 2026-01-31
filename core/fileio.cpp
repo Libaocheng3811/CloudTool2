@@ -1,12 +1,10 @@
 #include "fileio.h"
 
-#include "pcl/filters/filter.h"
 #include "pcl/io/pcd_io.h"
 #include "pcl/io/ply_io.h"
 #include "pcl/io/ifs_io.h"
 #include "pcl/io/obj_io.h"
 #include <pcl/PCLPointCloud2.h>
-#include <pcl/conversions.h>
 #include <pcl/common/common.h>
 
 #include "lasreader.hpp"
@@ -15,9 +13,53 @@
 #include <fstream>
 #include <string>
 #include <iomanip> // std::setprecision
+#include <cstdlib>
 
 namespace ct
 {
+    class FastLineParser {
+    public:
+        std::vector<char*> tokens;
+        std::string buffer;
+
+        // 根据分隔符解析一行
+        void parse(std::istream& file, char separator) {
+            tokens.clear();
+            if (!std::getline(file, buffer)) return;
+
+            // 如果是空行，直接返回
+            if (buffer.empty()) return;
+            // 处理 Windows CR
+            if (buffer.back() == '\r') buffer.pop_back();
+
+            char* ptr = &buffer[0];
+            char* end = ptr + buffer.size();
+
+            // 特殊处理空格分隔符 (处理连续空格)
+            if (separator == ' ') {
+                while (ptr < end) {
+                    // 跳过前导空格
+                    while (ptr < end && std::isspace(*ptr)) ptr++;
+                    if (ptr >= end) break;
+
+                    tokens.push_back(ptr);
+
+                    // 找到 token 结尾
+                    while (ptr < end && !std::isspace(*ptr)) ptr++;
+                    if (ptr < end) *ptr++ = '\0'; // 截断字符串
+                }
+            }
+            else {
+                // 处理显式分隔符 (如逗号)
+                while (ptr < end) {
+                    tokens.push_back(ptr);
+                    while (ptr < end && *ptr != separator) ptr++;
+                    if (ptr < end) *ptr++ = '\0';
+                }
+            }
+        }
+    };
+
     QString getPCLFieldType(uint8_t type)
     {
         switch(type) {
@@ -147,167 +189,6 @@ namespace ct
         else emit saveCloudResult(false, filename, time.toc());
     }
 
-    bool FileIO::loadLAS(const QString &filename, Cloud::Ptr &cloud) {
-        LASreadOpener lasreadopener;
-        lasreadopener.set_file_name(filename.toLocal8Bit().constData());
-        LASreader* lasreader = lasreadopener.open();
-        if (!lasreader) return false;
-
-        size_t total_points = lasreader->npoints;
-        if (total_points == 0){
-            lasreader->close();
-            delete lasreader;
-            return false;
-        }
-
-        cloud->m_xyz->reserve(total_points);
-
-        int fmt = lasreader->header.point_data_format;
-        bool has_color = (fmt == 2 || fmt == 3 || fmt == 5 || fmt == 7);
-        if (has_color) cloud->enableColors();
-
-        // 强度字段
-        bool has_valid_intensity = false;
-        std::vector<float> intensities;
-        intensities.reserve(total_points);
-
-        size_t lod_step = (total_points > PREVIEW_LIMIT) ? (total_points / PREVIEW_LIMIT) : 1;
-        // 只有当需要降采样时才创建预览云，否则直接用全量（Cloud::getPreviewCloud 会处理）
-        if (lod_step > 1) {
-            cloud->m_preview = std::make_shared<pcl::PointCloud<PointXYZRGB>>();
-            cloud->m_preview->reserve(PREVIEW_LIMIT + 200);
-        }
-
-        // 读取第一个点以确定 Global Shift
-        if (!lasreader->read_point()) {
-            lasreader->close();
-            delete lasreader;
-            return false;
-        }
-
-        double raw_x = lasreader->point.get_x();
-        double raw_y = lasreader->point.get_y();
-        double raw_z = lasreader->point.get_z();
-
-        const double THRESHOLD_XY = 10000.0;
-        bool is_large = std::abs(raw_x) > THRESHOLD_XY || std::abs(raw_y) > THRESHOLD_XY;
-        Eigen::Vector3d suggested_shift = Eigen::Vector3d::Zero();
-        if (is_large) {
-            double sx = -std::floor(raw_x / 1000.0) * 1000.0;
-            double sy = -std::floor(raw_y / 1000.0) * 1000.0;
-            double sz = 0.0; // 高程通常不需要偏移，或者按需
-
-            suggested_shift = Eigen::Vector3d(sx, sy, sz);
-            // 请求用户确认 (阻塞信号)
-            bool skipped = false;
-            emit requestGlobalShift(Eigen::Vector3d(raw_x, raw_y, raw_z), suggested_shift, skipped);
-
-            if (!skipped) {
-                cloud->setGlobalShift(-suggested_shift); // Cloud 存储的是 Origin (-Shift)
-            }
-        }
-
-        float shift_x = static_cast<float>(suggested_shift.x());
-        float shift_y = static_cast<float>(suggested_shift.y());
-        float shift_z = static_cast<float>(suggested_shift.z());
-
-        // 处理第一个点
-        {
-            float x = static_cast<float>(raw_x) + shift_x;
-            float y = static_cast<float>(raw_y) + shift_y;
-            float z = static_cast<float>(raw_z) + shift_z;
-
-            cloud->m_xyz->push_back(pcl::PointXYZ(x, y, z));
-
-            uint8_t r = 0, g = 0, b = 0;
-            if (has_color) {
-                // LAS 颜色通常是 16位 (0-65535)，需要压缩到 8位
-                r = lasreader->point.rgb[0] >> 8;
-                g = lasreader->point.rgb[1] >> 8;
-                b = lasreader->point.rgb[2] >> 8;
-                cloud->m_colors->push_back({r, g, b});
-            }
-
-            // 读取第一个点的强度，判断是否有效
-            float intensity_val = static_cast<float>(lasreader->point.get_intensity());
-            intensities.push_back(intensity_val);
-            if (intensity_val > 0.0f) has_valid_intensity = true;
-
-            // [LOD 写入]
-            if (lod_step > 1) {
-                pcl::PointXYZRGB p;
-                p.x = x; p.y = y; p.z = z;
-                p.r = r; p.g = g; p.b = b;
-                if (!has_color) { p.r = 255; p.g = 255; p.b = 255; }
-                cloud->m_preview->push_back(p);
-            }
-        }
-
-        size_t idx = 1;
-        int progress_interval = (total_points > 100) ? (total_points / 100) : 1;
-
-        while (lasreader->read_point()) {
-            if (m_is_canceled) {
-                lasreader->close();
-                delete lasreader;
-                return false;
-            }
-
-            // 坐标
-            float x = static_cast<float>(lasreader->point.get_x()) + shift_x;
-            float y = static_cast<float>(lasreader->point.get_y()) + shift_y;
-            float z = static_cast<float>(lasreader->point.get_z()) + shift_z;
-
-            cloud->m_xyz->push_back(pcl::PointXYZ(x, y, z));
-
-            // 颜色
-            uint8_t r = 0, g = 0, b = 0;
-            if (has_color) {
-                r = lasreader->point.rgb[0] >> 8;
-                g = lasreader->point.rgb[1] >> 8;
-                b = lasreader->point.rgb[2] >> 8;
-                cloud->m_colors->push_back({r, g, b});
-            }
-
-            // 读取第一个点的强度，判断是否有效
-            float intensity_val = static_cast<float>(lasreader->point.get_intensity());
-            intensities.push_back(intensity_val);
-            if (!has_valid_intensity && intensity_val > 0.0f) has_valid_intensity = true;
-
-            // [LOD 实时生成]
-            // 如果需要 LOD 且命中步长，加入预览云
-            // todo 这里的预览点云是怎么选取的，选点查看信息时，为什么不直接使用预览点云的点信息，而是要转换会原始点云索引呢？
-            if (lod_step > 1 && idx % lod_step == 0) {
-                pcl::PointXYZRGB p;
-                p.x = x; p.y = y; p.z = z;
-                if (has_color) {
-                    p.r = r; p.g = g; p.b = b;
-                } else {
-                    p.r = 255; p.g = 255; p.b = 255;
-                }
-                cloud->m_preview->push_back(p);
-            }
-
-            // 更新进度条 (5% ~ 90%)
-            idx++;
-            if (idx % progress_interval == 0) {
-                int p = 5 + (int)(idx * 85 / total_points);
-                emit progress(p);
-            }
-        }
-
-        // 只有强度字段不为空时才添加
-        if (has_valid_intensity && !intensities.empty()) {
-            cloud->addScalarField("Intensity", intensities);
-        }
-
-        cloud->setHasRGB(has_color);
-
-        lasreader->close();
-        delete lasreader;
-        return true;
-    }
-
     bool FileIO::loadPLY_PCD(const QString &filename, Cloud::Ptr &cloud) {
         pcl::PCLPointCloud2 blob;
         int res = -1;
@@ -334,11 +215,6 @@ namespace ct
         size_t total_points = blob.width * blob.height;
         if (total_points == 0) return false;
 
-        // 获取 blob 数据大小，用于后续边界检查
-        size_t blob_data_size = blob.data.size();
-
-        cloud->m_xyz->resize(total_points);
-
         int x_off = -1, y_off = -1, z_off = -1;
         for (const auto& f : blob.fields){
             if (f.name == "x") x_off = f.offset;
@@ -347,32 +223,71 @@ namespace ct
         }
         if (x_off < 0 || y_off < 0 || z_off < 0) return false;
 
-        // 处理Global Shift（带边界检查）
-        Eigen::Vector3d suggested_shift = Eigen::Vector3d::Zero();
-        const uint8_t* ptr0 = blob.data.data();
-        int max_offset = std::max({x_off, y_off, z_off}) + 4;
+        const uint8_t* raw_data = blob.data.data();
+        int step = blob.point_step;
+        size_t blob_data_size = blob.data.size();
 
-        // 检查是否有足够的数据读取第一个点的坐标
-        if (blob_data_size >= max_offset) {
-            float x0 = *reinterpret_cast<const float*>(ptr0 + x_off);
-            float y0 = *reinterpret_cast<const float*>(ptr0 + y_off);
-            float z0 = *reinterpret_cast<const float*>(ptr0 + z_off);
+        // 预扫描计算 BBox
+        PointXYZ min_pt(FLT_MAX, FLT_MAX, FLT_MAX);
+        PointXYZ max_pt(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+        // 检查第一个点确定 Shift
+        Eigen::Vector3d suggested_shift = Eigen::Vector3d::Zero();
+
+        if (total_points > 0 && blob_data_size >= (size_t)std::max({x_off, y_off, z_off}) + 4) {
+            float x0 = *reinterpret_cast<const float*>(raw_data + x_off);
+            float y0 = *reinterpret_cast<const float*>(raw_data + y_off);
+            float z0 = *reinterpret_cast<const float*>(raw_data + z_off);
 
             const double THRESHOLD_XY = 10000.0;
             if (std::abs(x0) > THRESHOLD_XY || std::abs(y0) > THRESHOLD_XY) {
                 double sx = -std::floor(x0 / 1000.0) * 1000.0;
                 double sy = -std::floor(y0 / 1000.0) * 1000.0;
                 double sz = 0.0;
-
                 suggested_shift = Eigen::Vector3d(sx, sy, sz);
+
                 bool skipped = false;
                 emit requestGlobalShift(Eigen::Vector3d(x0, y0, z0), suggested_shift, skipped);
-                if (!skipped) {
-                    cloud->setGlobalShift(-suggested_shift);
-                }
+                if (!skipped) cloud->setGlobalShift(-suggested_shift);
             }
         }
-        emit progress(5);
+
+        float shift_x = (float)suggested_shift.x();
+        float shift_y = (float)suggested_shift.y();
+        float shift_z = (float)suggested_shift.z();
+
+        // 快速扫描计算边界 (OpenMP 加速)
+        // 注意：这里为了安全，使用原子操作或 reduce，或者简单串行
+        // 为了代码简洁，这里串行扫描前 10% 或全部 (取决于性能要求)
+        // 建议：完整扫描，因为 Octree 边界很重要
+        for (size_t i = 0; i < total_points; ++i) {
+            const uint8_t* pt_ptr = raw_data + i * step;
+            // 简单的边界检查略...
+            float x = *reinterpret_cast<const float*>(pt_ptr + x_off) + shift_x;
+            float y = *reinterpret_cast<const float*>(pt_ptr + y_off) + shift_y;
+            float z = *reinterpret_cast<const float*>(pt_ptr + z_off) + shift_z;
+
+            if (x < min_pt.x) min_pt.x = x;
+            if (x > max_pt.x) max_pt.x = x;
+            if (y < min_pt.y) min_pt.y = y;
+            if (y > max_pt.y) max_pt.y = y;
+            if (z < min_pt.z) min_pt.z = z;
+            if (z > max_pt.z) max_pt.z = z;
+        }
+
+        // 初始化八叉树
+        Box box;
+        box.width  = (max_pt.x - min_pt.x) * 1.01;
+        box.height = (max_pt.y - min_pt.y) * 1.01;
+        box.depth  = (max_pt.z - min_pt.z) * 1.01;
+        box.translation = Eigen::Vector3f(
+                (min_pt.x + max_pt.x) * 0.5f,
+                (min_pt.y + max_pt.y) * 0.5f,
+                (min_pt.z + max_pt.z) * 0.5f
+        );
+        cloud->initOctree(box);
+
+        emit progress(10);
 
         // 准备解析
         struct ExtractInfo {
@@ -449,171 +364,95 @@ namespace ct
         // 如果检测到有法线字段，预分配法线容器
         if (has_normal) cloud->enableNormals();
 
-        // 分配标量场空间
-        QMap<QString, std::vector<float>> scalar_data;
-        for(const auto& t : tasks) {
-            if (t.type == ExtractInfo::Scalar) {
-                scalar_data[t.saveName].resize(total_points);
-            }
-        }
+        CloudBatch batch;
+        batch.reserve(BATCH_SIZE);
 
-        // 5. 并行提取数据
-        // 为了线程安全访问 scalar_data，我们构建一个指针查找表
-        std::vector<float*> task_scalar_ptrs;
-        task_scalar_ptrs.reserve(tasks.size());
+        int progress_interval = (total_points > 100) ? (total_points / 100) : 1;
 
-        for (const auto& t : tasks) {
-            if (t.type == ExtractInfo::Scalar) {
-                task_scalar_ptrs.push_back(scalar_data[t.saveName].data());
-            } else {
-                task_scalar_ptrs.push_back(nullptr); // 占位
-            }
-        }
+        // 循环处理每个点
+        for (size_t i = 0; i < total_points; ++i) {
+            if (m_is_canceled) return false;
 
-        float shift_x = (float)suggested_shift.x();
-        float shift_y = (float)suggested_shift.y();
-        float shift_z = (float)suggested_shift.z();
+            // 计算当前点的数据指针和剩余字节数 (安全检查)
+            const uint8_t* pt_ptr = raw_data + i * step;
+            size_t remaining = blob_data_size - (i * step);
+            if (remaining < (size_t)step) break; // 防止越界
 
-        int step = blob.point_step;
-        const uint8_t* raw_data = blob.data.data();
+            // --- 提取并应用偏移 (XYZ) ---
+            float x = *reinterpret_cast<const float*>(pt_ptr + x_off) + shift_x;
+            float y = *reinterpret_cast<const float*>(pt_ptr + y_off) + shift_y;
+            float z = *reinterpret_cast<const float*>(pt_ptr + z_off) + shift_z;
+            batch.points.emplace_back(x, y, z);
 
-        // 验证数据完整性并调整点数
-        size_t max_valid_points = blob_data_size / step;
-        if (max_valid_points < total_points) {
-            // 数据不完整，调整点云大小
-            total_points = max_valid_points;
-            cloud->m_xyz->resize(total_points);
-            // 重新启用颜色和法线，确保大小正确
-            if (has_color) {
-                cloud->enableColors();
-                cloud->m_colors->resize(total_points);
-            }
-            if (has_normal) {
-                cloud->enableNormals();
-                cloud->m_normals->resize(total_points);
-            }
-        }
-
-        // 开启 OpenMP 加速
-        // 将 blob_data_size 捕获为局部变量，在并行区域中使用
-        const size_t data_size = blob_data_size;
-        // 计算最大字段偏移量，用于边界检查
-        const int max_field_offset = std::max({x_off, y_off, z_off, r_off, g_off, b_off,
-                                                nx_off, ny_off, nz_off, 0});
-        const size_t max_bytes_needed = static_cast<size_t>(max_field_offset) + sizeof(float);
-
-#pragma omp parallel for
-        for (long long i = 0; i < (long long)total_points; ++i) {
-            if (m_is_canceled) continue;
-
-            const uint8_t* pt_ptr = raw_data + (size_t)i * step;
-
-            // 计算从 pt_ptr 到 blob.data 末尾的剩余字节数
-            size_t remaining_from_pt_ptr = data_size - static_cast<size_t>(pt_ptr - raw_data);
-
-            // 检查是否超出了数据边界
-            if (remaining_from_pt_ptr < max_bytes_needed) {
-                // 数据不完整，跳过这个点或使用默认值
-                cloud->m_xyz->points[i].x = shift_x;
-                cloud->m_xyz->points[i].y = shift_y;
-                cloud->m_xyz->points[i].z = shift_z;
-                continue;
-            }
-
-            // 最大安全偏移量 = 当前点到数据末尾的距离
-            size_t max_offset = remaining_from_pt_ptr;
-
-            // 提取 XYZ（带边界检查）
-            float x = 0, y = 0, z = 0;
-            if (x_off >= 0 && (size_t)x_off + sizeof(float) <= max_offset) memcpy(&x, pt_ptr + x_off, sizeof(float));
-            if (y_off >= 0 && (size_t)y_off + sizeof(float) <= max_offset) memcpy(&y, pt_ptr + y_off, sizeof(float));
-            if (z_off >= 0 && (size_t)z_off + sizeof(float) <= max_offset) memcpy(&z, pt_ptr + z_off, sizeof(float));
-
-            cloud->m_xyz->points[i].x = x + shift_x;
-            cloud->m_xyz->points[i].y = y + shift_y;
-            cloud->m_xyz->points[i].z = z + shift_z;
-
-            // 提取其他属性
-            for (size_t k = 0; k < tasks.size(); ++k) {
-                const auto& t = tasks[k];
-
-                // 提取标量场
+            // --- 提取其他属性 (Scalar / Packed Color) ---
+            for (const auto& t : tasks) {
                 if (t.type == ExtractInfo::Scalar) {
-                    size_t remaining_size = max_offset;
-                    if (t.offset >= 0 && t.offset < max_offset) {
-                        remaining_size = max_offset - t.offset;
-                    }
-                    float val = getFieldValueAsFloat(pt_ptr + t.offset, t.datatype, remaining_size);
-                    task_scalar_ptrs[k][i] = val;
+                    float val = getFieldValueAsFloat(pt_ptr + t.offset, t.datatype, remaining);
+                    batch.scalars[t.saveName].push_back(val);
                 }
-                else if (t.type == ExtractInfo::ColorPacked) { // 提取打包的颜色
-                    if (t.offset >= 0 && (size_t)t.offset + 4 <= max_offset) {
-                        uint32_t rgb_packed = safeRead<uint32_t>(pt_ptr, t.offset, max_offset);
-                        (*cloud->m_colors)[i].r = (rgb_packed >> 16) & 0xFF;
-                        (*cloud->m_colors)[i].g = (rgb_packed >> 8) & 0xFF;
-                        (*cloud->m_colors)[i].b = rgb_packed & 0xFF;
-                    } else {
-                        // 默认白色
-                        (*cloud->m_colors)[i].r = 255;
-                        (*cloud->m_colors)[i].g = 255;
-                        (*cloud->m_colors)[i].b = 255;
+                else if (t.type == ExtractInfo::ColorPacked) {
+                    // 处理打包颜色 (如 float rgba)
+                    uint32_t rgb_packed = safeRead<uint32_t>(pt_ptr, t.offset, remaining);
+                    uint8_t r = (rgb_packed >> 16) & 0xFF;
+                    uint8_t g = (rgb_packed >> 8) & 0xFF;
+                    uint8_t b = rgb_packed & 0xFF;
+
+                    // 只有当颜色还未被其他字段填充时才添加 (避免冲突)
+                    if (batch.colors.size() < batch.points.size()) {
+                        batch.colors.emplace_back(r, g, b);
                     }
                 }
             }
 
-            // 提取分开的颜色分量（如果存在）
+            // --- 提取 RGB 分量 (如果存在独立字段) ---
             if (has_color && r_off >= 0 && g_off >= 0 && b_off >= 0) {
-                uint8_t r = 255, g = 255, b = 255;
-
-                if (r_off >= 0 && r_off < max_offset) {
-                    r = static_cast<uint8_t>(getFieldValueAsFloat(pt_ptr + r_off, r_datatype, max_offset - r_off));
+                // 如果之前已经有 packed color 填入了，这里会覆盖还是忽略？
+                // 现在的逻辑：如果 batch.colors 还没填满，就填入
+                if (batch.colors.size() < batch.points.size()) {
+                    uint8_t r = static_cast<uint8_t>(getFieldValueAsFloat(pt_ptr + r_off, r_datatype, remaining));
+                    uint8_t g = static_cast<uint8_t>(getFieldValueAsFloat(pt_ptr + g_off, g_datatype, remaining));
+                    uint8_t b = static_cast<uint8_t>(getFieldValueAsFloat(pt_ptr + b_off, b_datatype, remaining));
+                    batch.colors.emplace_back(r, g, b);
                 }
-                if (g_off >= 0 && g_off < max_offset) {
-                    g = static_cast<uint8_t>(getFieldValueAsFloat(pt_ptr + g_off, g_datatype, max_offset - g_off));
-                }
-                if (b_off >= 0 && b_off < max_offset) {
-                    b = static_cast<uint8_t>(getFieldValueAsFloat(pt_ptr + b_off, b_datatype, max_offset - b_off));
-                }
-
-                (*cloud->m_colors)[i].r = r;
-                (*cloud->m_colors)[i].g = g;
-                (*cloud->m_colors)[i].b = b;
+            }
+            // 补齐颜色 (如果上面两种方式都没提取到，或者数据缺失)
+            if (has_color && batch.colors.size() < batch.points.size()) {
+                batch.colors.emplace_back(255, 255, 255); // Default White
             }
 
-            // 提取法线（如果存在）
-            if (has_normal && nx_off >= 0 && ny_off >= 0 && nz_off >= 0) {
-                float nx = 0, ny = 0, nz = 0;
+            // --- 提取法线 (Normal) ---
+            if (has_normal && nx_off >= 0) {
+                float nx = getFieldValueAsFloat(pt_ptr + nx_off, nx_datatype, remaining);
+                float ny = getFieldValueAsFloat(pt_ptr + ny_off, ny_datatype, remaining);
+                float nz = getFieldValueAsFloat(pt_ptr + nz_off, nz_datatype, remaining);
 
-                if (nx_off >= 0 && (size_t)nx_off + 4 <= max_offset) {
-                    nx = getFieldValueAsFloat(pt_ptr + nx_off, nx_datatype, max_offset - nx_off);
-                }
-                if (ny_off >= 0 && (size_t)ny_off + 4 <= max_offset) {
-                    ny = getFieldValueAsFloat(pt_ptr + ny_off, ny_datatype, max_offset - ny_off);
-                }
-                if (nz_off >= 0 && (size_t)nz_off + 4 <= max_offset) {
-                    nz = getFieldValueAsFloat(pt_ptr + nz_off, nz_datatype, max_offset - nz_off);
-                }
-
-                ct::CompressedNormal cn;
+                CompressedNormal cn;
                 cn.set(Eigen::Vector3f(nx, ny, nz));
-                (*cloud->m_normals)[i] = cn;
+                batch.normals.push_back(cn);
+            }
+
+            // --- 批次提交 ---
+            if (batch.points.size() >= BATCH_SIZE) {
+                batch.flushTo(cloud);
+            }
+
+            // --- 进度条 ---
+            if (i % progress_interval == 0) {
+                int p = 10 + (int)(i * 90 / total_points);
+                emit progress(p);
             }
         }
 
-        for (auto it = scalar_data.begin(); it != scalar_data.end(); ++it) {
-            cloud->addScalarField(it.key(), it.value());
+        // 提交剩余数据
+        if (!batch.empty()) {
+            batch.flushTo(cloud);
         }
 
-        cloud->setHasRGB(has_color);
+        cloud->setHasColors(has_color);
         cloud->setHasNormals(has_normal);
 
-        emit progress(80);
+        cloud->update();
 
-        if (total_points > PREVIEW_LIMIT){
-            cloud->generatePreview();
-        }
-
-        cloud->m_xyz->is_dense = blob.is_dense;
         return true;
     }
 
@@ -621,12 +460,273 @@ namespace ct
         std::ifstream file(filename.toLocal8Bit().constData());
         if (!file.is_open()) return false;
 
-        //获取文件大小
+        // 获取文件大小用于进度条
         file.seekg(0, std::ios::end);
         long long file_size = file.tellg();
         file.seekg(0, std::ios::beg);
 
-        // 预读
+        // --- 预读与交互配置 ---
+        QStringList preview_lines;
+        std::string line;
+        int preview_count = 0;
+        while (std::getline(file, line) && preview_count < 50) {
+            if (!line.empty()) {
+                preview_lines << QString::fromStdString(line);
+                preview_count++;
+            }
+        }
+
+        // 重置文件指针
+        file.clear();
+        file.seekg(0);
+
+        ct::TxtImportParams params;
+        // 阻塞调用 UI 获取列映射
+        emit requestTxtImportSetup(preview_lines, params);
+
+        if (params.col_map.isEmpty()) return false; // 用户取消
+
+        // 验证必要字段 X, Y, Z
+        int idx_x = -1, idx_y = -1, idx_z = -1;
+        int idx_r = -1, idx_g = -1, idx_b = -1;
+        int idx_nx = -1, idx_ny = -1, idx_nz = -1;
+
+        // 标量场映射: vector<pair<col_index, field_name>>
+        std::vector<std::pair<int, QString>> scalar_indices;
+
+        for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it) {
+            int col = it.key() - 1; // 转换为 0-based 索引 (通常 UI 可能是 1-based，请根据实际 TxtImportParams 调整)
+            // 假设 params.col_map 的 key 是 0-based 的列索引：
+            col = it.key();
+
+            QString type = it.value();
+            if (type == "x") idx_x = col;
+            else if (type == "y") idx_y = col;
+            else if (type == "z") idx_z = col;
+            else if (type == "r") idx_r = col;
+            else if (type == "g") idx_g = col;
+            else if (type == "b") idx_b = col;
+            else if (type == "nx") idx_nx = col;
+            else if (type == "ny") idx_ny = col;
+            else if (type == "nz") idx_nz = col;
+            else if (type != "ignore") {
+                scalar_indices.push_back({col, type});
+            }
+        }
+
+        if (idx_x < 0 || idx_y < 0 || idx_z < 0) return false;
+
+        // 跳过 header lines
+        for(int i=0; i<params.skip_lines; ++i) std::getline(file, line);
+
+        // 记录数据区起始位置
+        std::streampos data_start_pos = file.tellg();
+        long long data_start_offset = (long long)data_start_pos;
+
+        // =========================================================
+        // Pass 1: 快速扫描计算 Bounding Box 和 Global Shift
+        // =========================================================
+        emit progress(1);
+
+        PointXYZ min_pt(FLT_MAX, FLT_MAX, FLT_MAX);
+        PointXYZ max_pt(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+        FastLineParser parser;
+        long long read_bytes = 0;
+        size_t scanned_points = 0;
+
+        // 寻找最大列索引，用于安全检查
+        int max_req_col = std::max({idx_x, idx_y, idx_z});
+
+        while (file.good()) {
+            if (m_is_canceled) return false;
+
+            parser.parse(file, params.separator);
+            if (parser.tokens.empty()) {
+                if (file.eof()) break;
+                continue;
+            }
+
+            if ((int)parser.tokens.size() > max_req_col) {
+                // 使用 strtof 快速转换
+                float x = std::strtof(parser.tokens[idx_x], nullptr);
+                float y = std::strtof(parser.tokens[idx_y], nullptr);
+                float z = std::strtof(parser.tokens[idx_z], nullptr);
+
+                if (x < min_pt.x) min_pt.x = x;
+                if (x > max_pt.x) max_pt.x = x;
+                if (y < min_pt.y) min_pt.y = y;
+                if (y > max_pt.y) max_pt.y = y;
+                if (z < min_pt.z) min_pt.z = z;
+                if (z > max_pt.z) max_pt.z = z;
+
+                scanned_points++;
+            }
+
+            // 简单的 Pass 1 进度反馈 (1% - 10%)
+            if (scanned_points % 50000 == 0) {
+                read_bytes += parser.buffer.size(); // 近似
+                int p = 1 + (int)(read_bytes * 9 / (file_size - data_start_offset));
+                emit progress(p);
+            }
+        }
+
+        if (scanned_points == 0) return false;
+
+        // =========================================================
+        // 计算 Global Shift
+        // =========================================================
+        Eigen::Vector3d suggested_shift = Eigen::Vector3d::Zero();
+        const double THRESHOLD_XY = 10000.0;
+
+        // 检查是否是大坐标
+        if (std::abs(min_pt.x) > THRESHOLD_XY || std::abs(min_pt.y) > THRESHOLD_XY) {
+            double sx = -std::floor(min_pt.x / 1000.0) * 1000.0;
+            double sy = -std::floor(min_pt.y / 1000.0) * 1000.0;
+            double sz = 0.0;
+            suggested_shift = Eigen::Vector3d(sx, sy, sz);
+
+            bool skipped = false;
+            // 交互询问用户是否应用偏移
+            emit requestGlobalShift(Eigen::Vector3d(min_pt.x, min_pt.y, min_pt.z), suggested_shift, skipped);
+
+            if (!skipped) cloud->setGlobalShift(-suggested_shift);
+        }
+
+        float shift_x = (float)suggested_shift.x();
+        float shift_y = (float)suggested_shift.y();
+        float shift_z = (float)suggested_shift.z();
+
+        // =========================================================
+        // 初始化八叉树
+        // =========================================================
+        Box box;
+        // 应用 Shift 后的包围盒大小
+        box.width  = (max_pt.x - min_pt.x) * 1.01;
+        box.height = (max_pt.y - min_pt.y) * 1.01;
+        box.depth  = (max_pt.z - min_pt.z) * 1.01;
+        // 中心点也需要加上 shift (变成局部坐标系下的中心)
+        box.translation = Eigen::Vector3f(
+                (min_pt.x + max_pt.x) * 0.5f + shift_x,
+                (min_pt.y + max_pt.y) * 0.5f + shift_y,
+                (min_pt.z + max_pt.z) * 0.5f + shift_z
+        );
+        cloud->initOctree(box);
+
+        // =========================================================
+        // Pass 2: 完整读取与流式加载
+        // =========================================================
+
+        file.clear(); // 清除 EOF 标志
+        file.seekg(data_start_pos);
+        read_bytes = 0;
+
+        // 准备属性开关
+        bool has_color = (idx_r >= 0 && idx_g >= 0 && idx_b >= 0);
+        bool has_normal = (idx_nx >= 0 && idx_ny >= 0 && idx_nz >= 0);
+
+        if (has_color) cloud->enableColors();
+        if (has_normal) cloud->enableNormals();
+
+        // 准备批处理缓冲区
+        CloudBatch batch;
+        batch.reserve(BATCH_SIZE);
+
+        // 预先为标量场分配内存以避免 map 查找开销 (在 CloudBatch flush 时处理 map)
+        // 但为了简单适配 CloudBatch 结构，我们还是按行写入 map
+        // 优化建议：CloudBatch 内部可以是 vector<float> per field，而不是 vector of Maps
+        // 这里的代码按照现有的 CloudBatch 接口编写
+
+        size_t processed_count = 0;
+        int progress_interval = (scanned_points > 100) ? (scanned_points / 100) : 1000;
+
+        while (file.good()) {
+            if (m_is_canceled) return false;
+
+            parser.parse(file, params.separator);
+            if (parser.tokens.empty()) {
+                if (file.eof()) break;
+                continue;
+            }
+
+            // 解析 XYZ (带 Shift)
+            if ((int)parser.tokens.size() > idx_x && (int)parser.tokens.size() > idx_y && (int)parser.tokens.size() > idx_z) {
+                float x = std::strtof(parser.tokens[idx_x], nullptr) + shift_x;
+                float y = std::strtof(parser.tokens[idx_y], nullptr) + shift_y;
+                float z = std::strtof(parser.tokens[idx_z], nullptr) + shift_z;
+
+                batch.points.emplace_back(x, y, z);
+
+                // 解析 RGB
+                if (has_color) {
+                    // 安全检查：防止行尾缺少列
+                    int r = ((int)parser.tokens.size() > idx_r) ? std::strtof(parser.tokens[idx_r], nullptr) : 0;
+                    int g = ((int)parser.tokens.size() > idx_g) ? std::strtof(parser.tokens[idx_g], nullptr) : 0;
+                    int b = ((int)parser.tokens.size() > idx_b) ? std::strtof(parser.tokens[idx_b], nullptr) : 0;
+                    batch.colors.emplace_back((uint8_t)r, (uint8_t)g, (uint8_t)b);
+                }
+
+                // 解析法线
+                if (has_normal) {
+                    float nx = ((int)parser.tokens.size() > idx_nx) ? std::strtof(parser.tokens[idx_nx], nullptr) : 0;
+                    float ny = ((int)parser.tokens.size() > idx_ny) ? std::strtof(parser.tokens[idx_ny], nullptr) : 0;
+                    float nz = ((int)parser.tokens.size() > idx_nz) ? std::strtof(parser.tokens[idx_nz], nullptr) : 0;
+
+                    CompressedNormal cn;
+                    cn.set(Eigen::Vector3f(nx, ny, nz));
+                    batch.normals.push_back(cn);
+                }
+
+                // 解析标量场
+                for (const auto& kv : scalar_indices) {
+                    int col = kv.first;
+                    const QString& name = kv.second;
+
+                    float val = 0.0f;
+                    if ((int)parser.tokens.size() > col) {
+                        val = std::strtof(parser.tokens[col], nullptr);
+                    }
+                    batch.scalars[name].push_back(val);
+                }
+            }
+
+            // 批次提交 (每 50w 点)
+            if (batch.points.size() >= BATCH_SIZE) {
+                batch.flushTo(cloud);
+            }
+
+            //  进度条 (10% - 100%)
+            processed_count++;
+            if (processed_count % progress_interval == 0) {
+                int p = 10 + (int)(processed_count * 90 / scanned_points);
+                if (p > 100) p = 100;
+                emit progress(p);
+            }
+        }
+
+        // 提交剩余点
+        if (!batch.empty()) {
+            batch.flushTo(cloud);
+        }
+
+        // 更新点云统计信息
+        cloud->update();
+        emit progress(100);
+
+        return true;
+    }
+
+#if 0
+    bool FileIO::loadTXT(const QString &filename, Cloud::Ptr &cloud) {
+        std::ifstream file(filename.toLocal8Bit().constData());
+        if (!file.is_open()) return false;
+
+        // 获取文件大小
+        file.seekg(0, std::ios::end);
+        long long file_size = file.tellg();
+        file.seekg(0, std::ios::beg);
+
+        // --- 预读与交互配置 (保持不变) ---
         QStringList preview_lines;
         std::string line;
         int preview_count = 0;
@@ -639,11 +739,10 @@ namespace ct
         file.clear();
         file.seekg(0);
 
-        // 交互配置
         ct::TxtImportParams params;
         emit requestTxtImportSetup(preview_lines, params);
+        if (params.col_map.isEmpty()) return false; // 用户取消
 
-        // 检查配置
         bool has_x = false, has_y = false, has_z = false;
         for(auto val : params.col_map) {
             if(val == "x") has_x = true;
@@ -652,216 +751,210 @@ namespace ct
         }
         if (params.col_map.isEmpty() || !has_x || !has_y || !has_z) return false;
 
-        // 解析
+        // 跳过 header lines
         for(int i=0; i<params.skip_lines; ++i) std::getline(file, line);
 
-        std::streampos  data_start_pos = file.tellg();
+        // 记录数据起始位置，方便第二遍读取
+        std::streampos data_start_pos = file.tellg();
 
-        if (std::getline(file, line)){
-            // 解析第一行
+        // =========================================================
+        // Pass 1: 快速扫描计算 Bounding Box
+        // =========================================================
+        emit progress(1); // 标记开始扫描
+
+        PointXYZ min_pt(FLT_MAX, FLT_MAX, FLT_MAX);
+        PointXYZ max_pt(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+        long long read_bytes = 0;
+        size_t estimated_points = 0;
+
+        // 优化：使用局部变量减少 map 查找
+        int idx_x = -1, idx_y = -1, idx_z = -1;
+        for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it) {
+            if (it.value() == "x") idx_x = it.key();
+            if (it.value() == "y") idx_y = it.key();
+            if (it.value() == "z") idx_z = it.key();
+        }
+
+        while (std::getline(file, line)) {
+            if (m_is_canceled) return false;
+            if (line.empty()) continue;
+
+            // 简单的分割 (为了速度，只解析 XYZ)
             QString qline = QString::fromStdString(line);
             QStringList parts;
             if (params.separator == ' ') parts = qline.simplified().split(' ', QString::SkipEmptyParts);
             else parts = qline.split(params.separator);
 
-            double first_x = 0, first_y = 0, first_z = 0;
-            for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it){
-                if (it.key() < parts.size()){
-                    if (it.value() == "x") first_x = parts[it.key()].toDouble();
-                    if (it.value() == "y") first_y = parts[it.key()].toDouble();
-                    if (it.value() == "z") first_z = parts[it.key()].toDouble();
-                }
+            if (idx_x < parts.size() && idx_y < parts.size() && idx_z < parts.size()) {
+                float x = parts[idx_x].toFloat();
+                float y = parts[idx_y].toFloat();
+                float z = parts[idx_z].toFloat();
+
+                if (x < min_pt.x) min_pt.x = x;
+                if (x > max_pt.x) max_pt.x = x;
+                if (y < min_pt.y) min_pt.y = y;
+                if (y > max_pt.y) max_pt.y = y;
+                if (z < min_pt.z) min_pt.z = z;
+                if (z > max_pt.z) max_pt.z = z;
+
+                estimated_points++;
             }
 
-            const double THRESHOLD_XY = 10000.0;
-            if(std::abs(first_x) > THRESHOLD_XY || std::abs(first_y) > THRESHOLD_XY){
-                double shiftX = -std::floor(first_x / 1000.0) * 1000.0;
-                double shiftY = -std::floor(first_y / 1000.0) * 1000.0;
-                double shiftZ = 0.0;
-
-                Eigen::Vector3d first_point(first_x, first_y, first_z);
-                Eigen::Vector3d suggested_shift(shiftX, shiftY, shiftZ);
-                bool skipped = false;
-
-                emit requestGlobalShift(first_point, suggested_shift, skipped);
-
-                if (!skipped) cloud->setGlobalShift(-suggested_shift);
+            // Pass 1 进度条 (占前 10%)
+            read_bytes += line.size() + 1;
+            if (estimated_points % 100000 == 0) {
+                int p = (int)(read_bytes * 10 / file_size);
+                emit progress(p);
             }
         }
+
+        // =========================================================
+        // 计算 Global Shift 并初始化八叉树
+        // =========================================================
+
+        // 检查 Shift
+        Eigen::Vector3d suggested_shift = Eigen::Vector3d::Zero();
+        const double THRESHOLD_XY = 10000.0;
+
+        if (std::abs(min_pt.x) > THRESHOLD_XY || std::abs(min_pt.y) > THRESHOLD_XY) {
+            double sx = -std::floor(min_pt.x / 1000.0) * 1000.0;
+            double sy = -std::floor(min_pt.y / 1000.0) * 1000.0;
+            double sz = 0.0;
+            suggested_shift = Eigen::Vector3d(sx, sy, sz);
+
+            bool skipped = false;
+            // 注意：这里用 Pass 1 找到的第一个点或者 min_pt 作为参考
+            emit requestGlobalShift(Eigen::Vector3d(min_pt.x, min_pt.y, min_pt.z), suggested_shift, skipped);
+            if (!skipped) cloud->setGlobalShift(-suggested_shift);
+        }
+
+        float shift_x = (float)suggested_shift.x();
+        float shift_y = (float)suggested_shift.y();
+        float shift_z = (float)suggested_shift.z();
+
+        // 初始化八叉树
+        Box box;
+        box.width  = (max_pt.x - min_pt.x) * 1.01;
+        box.height = (max_pt.y - min_pt.y) * 1.01;
+        box.depth  = (max_pt.z - min_pt.z) * 1.01;
+        box.translation = Eigen::Vector3f(
+                (min_pt.x + max_pt.x) * 0.5f + shift_x,
+                (min_pt.y + max_pt.y) * 0.5f + shift_y,
+                (min_pt.z + max_pt.z) * 0.5f + shift_z
+        );
+        cloud->initOctree(box);
+
+        // =========================================================
+        // Pass 2: 完整流式读取
+        // =========================================================
+
         file.clear();
         file.seekg(data_start_pos);
+        read_bytes = 0;
 
-        emit  progress(5);
+        // 准备缓冲区
+        CloudBatch batch;
+        batch.reserve(BATCH_SIZE);
 
-        long long read_bytes = 0;
-        Eigen::Vector3d shift = -cloud->getGlobalShift();
-        bool has_shift = (shift != Eigen::Vector3d::Zero());
-        float shift_x = (float)shift.x();
-        float shift_y = (float)shift.y();
-        float shift_z = (float)shift.z();
-
-        bool has_color = false;
-        bool has_normal = false;
-        QList<int> scalar_indices;
-        QList<QString> scalar_names;
+        // 预解析列映射
+        int idx_r = -1, idx_g = -1, idx_b = -1;
+        int idx_nx = -1, idx_ny = -1, idx_nz = -1;
+        QMap<int, QString> scalar_map; // col_index -> name
 
         for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it) {
             QString type = it.value();
-            if (type == "r" || type == "g" || type == "b") has_color = true;
-            if (type.startsWith("n")) has_normal = true; // nx, ny, nz
-            if (type != "x" && type != "y" && type != "z" &&
-                type != "r" && type != "g" && type != "b" &&
-                !type.startsWith("n") && type != "ignore") {
-                scalar_indices.append(it.key());
-                scalar_names.append(type);
+            if (type == "r") idx_r = it.key();
+            else if (type == "g") idx_g = it.key();
+            else if (type == "b") idx_b = it.key();
+            else if (type == "nx") idx_nx = it.key();
+            else if (type == "ny") idx_ny = it.key();
+            else if (type == "nz") idx_nz = it.key();
+            else if (type != "x" && type != "y" && type != "z" && type != "ignore") {
+                scalar_map.insert(it.key(), type);
             }
         }
 
-        // 由于TXT无法预知点数，通过文件大小进行估计，并预分配内存
-        size_t estimated_points = file_size / 50;
+        bool has_color = (idx_r >= 0);
+        bool has_normal = (idx_nx >= 0);
+        if (has_color) cloud->enableColors();
+        if (has_normal) cloud->enableNormals();
 
-        cloud->m_xyz->reserve(estimated_points);
-
-        // 注意：不提前调用 enableColors/enableNormals，因为此时 m_xyz->size() = 0
-        // enableColors/enableNormals 内部调用 resize(m_xyz->size())，会 resize 到 0
-        // 改为按需创建并预分配
-        std::unique_ptr<std::vector<RGB>> temp_colors;
-        std::unique_ptr<std::vector<CompressedNormal>> temp_normals;
-        if (has_color) {
-            temp_colors = std::make_unique<std::vector<RGB>>();
-            temp_colors->reserve(estimated_points);
-        }
-        if (has_normal) {
-            temp_normals = std::make_unique<std::vector<CompressedNormal>>();
-            temp_normals->reserve(estimated_points);
-        }
-
-        QMap<QString, std::vector<float>> scalar_data;
-        for(const QString& name : scalar_names) {
-            scalar_data[name].reserve(estimated_points);
-        }
-
-        if (cloud->m_preview == nullptr) {
-            cloud->m_preview = std::make_shared<pcl::PointCloud<PointXYZRGB>>();
-            cloud->m_preview->reserve(PREVIEW_LIMIT);
-        }
-
-        int lod_step = (estimated_points > PREVIEW_LIMIT) ? (estimated_points / PREVIEW_LIMIT) : 1;
-        if (lod_step < 1) lod_step = 1;
-
-        size_t current_point_idx = 0;
-
-        // 读取循环
         while (std::getline(file, line))
         {
             if (m_is_canceled) return false;
+            if (line.empty()) continue;
 
             read_bytes += line.size() + 1;
-            if (read_bytes % 1024000 == 0) { // 每 1MB 更新
-                int p = 5 + (int)(read_bytes * 85 / file_size);
-                if (p > 90) p = 90;
+
+            // 进度条 (10% ~ 100%)
+            if (read_bytes % 1024000 == 0) {
+                int p = 10 + (int)(read_bytes * 90 / file_size);
+                if (p > 100) p = 100;
                 emit progress(p);
             }
-
-            if (line.empty()) continue;
 
             QString qline = QString::fromStdString(line);
             QStringList parts;
             if (params.separator == ' ') parts = qline.simplified().split(' ', QString::SkipEmptyParts);
             else parts = qline.split(params.separator);
 
-            // 解析
-            float x=0, y=0, z=0;
-            uint8_t r=255, g=255, b=255;
-            float nx=0, ny=0, nz=0;
+            // 解析 XYZ
+            if (idx_x < parts.size() && idx_y < parts.size() && idx_z < parts.size()) {
+                float x = parts[idx_x].toFloat() + shift_x;
+                float y = parts[idx_y].toFloat() + shift_y;
+                float z = parts[idx_z].toFloat() + shift_z;
+                batch.points.emplace_back(x, y, z);
 
-            for(auto it = params.col_map.begin(); it != params.col_map.end(); ++it) {
-                int idx = it.key();
-                if (idx >= parts.size()) continue;
+                // 解析 RGB
+                if (has_color) {
+                    uint8_t r = (idx_r < parts.size()) ? (uint8_t)parts[idx_r].toFloat() : 255;
+                    uint8_t g = (idx_g < parts.size()) ? (uint8_t)parts[idx_g].toFloat() : 255;
+                    uint8_t b = (idx_b < parts.size()) ? (uint8_t)parts[idx_b].toFloat() : 255;
+                    batch.colors.emplace_back(r, g, b);
+                }
 
-                float val = parts[idx].toFloat();
-                QString type = it.value();
+                // 解析 Normal
+                if (has_normal) {
+                    float nx = (idx_nx < parts.size()) ? parts[idx_nx].toFloat() : 0;
+                    float ny = (idx_ny < parts.size()) ? parts[idx_ny].toFloat() : 0;
+                    float nz = (idx_nz < parts.size()) ? parts[idx_nz].toFloat() : 0;
+                    CompressedNormal cn;
+                    cn.set(Eigen::Vector3f(nx, ny, nz));
+                    batch.normals.push_back(cn);
+                }
 
-                if (type == "x") x = val;
-                else if (type == "y") y = val;
-                else if (type == "z") z = val;
-                else if (type == "r") r = (uint8_t)val;
-                else if (type == "g") g = (uint8_t)val;
-                else if (type == "b") b = (uint8_t)val;
-                else if (type == "nx") nx = val;
-                else if (type == "ny") ny = val;
-                else if (type == "nz") nz = val;
-                else if (type != "ignore") {
-                    // 标量场
-                    scalar_data[type].push_back(val);
+                // 解析 Scalar Fields
+                for (auto it = scalar_map.begin(); it != scalar_map.end(); ++it) {
+                    int col_idx = it.key();
+                    if (col_idx < parts.size()) {
+                        batch.scalars[it.value()].push_back(parts[col_idx].toFloat());
+                    } else {
+                        batch.scalars[it.value()].push_back(0.0f);
+                    }
                 }
             }
 
-            // 应用 Shift
-            if (has_shift) {
-                x += shift_x;
-                y += shift_y;
-                z += shift_z;
-            }
-
-            // 存入 SOA
-            cloud->m_xyz->push_back(pcl::PointXYZ(x, y, z));
-            if (has_color) temp_colors->push_back({r, g, b});
-            if (has_normal) {
-                CompressedNormal cn;
-                cn.set(Eigen::Vector3f(nx, ny, nz));
-                temp_normals->push_back(cn);
-            }
-
-            // 实时 LOD
-            if (lod_step > 1 && current_point_idx % lod_step == 0) {
-                if (cloud->m_preview->size() < PREVIEW_LIMIT) {
-                    pcl::PointXYZRGB p;
-                    p.x=x; p.y=y; p.z=z;
-                    if(has_color) { p.r=r; p.g=g; p.b=b; }
-                    else { p.r=255; p.g=255; p.b=255; }
-                    cloud->m_preview->push_back(p);
-                }
-            }
-            current_point_idx++;
-        }
-
-        // 如果点数小于预览点数，则不需要生成预览
-        if (cloud->m_xyz->size() <= PREVIEW_LIMIT) {
-            // 释放预览云内存
-            cloud->m_preview.reset();
-            cloud->m_preview = nullptr;
-        }
-        else {
-            // 如果点数巨大，且我们在读取时没有生成预览,重新生成
-            if (lod_step == 1 && cloud->m_preview == nullptr) {
-                cloud->generatePreview(PREVIEW_LIMIT);
+            // 批处理提交
+            if (batch.points.size() >= BATCH_SIZE) {
+                batch.flushTo(cloud);
             }
         }
 
-        for(auto it = scalar_data.begin(); it != scalar_data.end(); ++it) {
-            cloud->addScalarField(it.key(), it.value());
+        // 提交剩余数据
+        if (!batch.empty()) {
+            batch.flushTo(cloud);
         }
 
-        // 将临时颜色和法线数据转移到 cloud
-        if (temp_colors && !temp_colors->empty()) {
-            cloud->m_colors = std::move(temp_colors);
-            cloud->m_has_rgb = true;
-        }
-        if (temp_normals && !temp_normals->empty()) {
-            cloud->m_normals = std::move(temp_normals);
-            cloud->m_has_normals = true;
-        }
-
-        cloud->setHasRGB(has_color);
-        cloud->setHasNormals(has_normal);
-
-        cloud->m_xyz->is_dense = true;
+        cloud->update();
         return true;
     }
+#endif
 
     bool FileIO::loadGeneralPCL(const QString &filename, Cloud::Ptr &cloud) {
         emit progress(5);
+
+        // 使用带法线和颜色的通用点类型
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
 
         int res = -1;
@@ -878,6 +971,7 @@ namespace ct
         const auto& p0 = temp_cloud->points[0];
         const double THRESHOLD_XY = 10000.0;
 
+        // 计算 Global Shift
         Eigen::Vector3d suggested_shift = Eigen::Vector3d::Zero();
         if (std::abs(p0.x) > THRESHOLD_XY || std::abs(p0.y) > THRESHOLD_XY) {
             double sx = -std::floor(p0.x / 1000.0) * 1000.0;
@@ -894,43 +988,242 @@ namespace ct
             }
         }
 
-        cloud->m_xyz->resize(num_points);
-        // 假设 OBJ 都有颜色和法线
-        cloud->enableColors();
-        cloud->enableNormals();
-
         float shift_x = (float)suggested_shift.x();
         float shift_y = (float)suggested_shift.y();
         float shift_z = (float)suggested_shift.z();
 
-#pragma omp parallel for
-        for (int i = 0; i < (int)num_points; ++i) {
+        // 预计算包围盒 (手动循环)
+        PointXYZ min_pt(FLT_MAX, FLT_MAX, FLT_MAX);
+        PointXYZ max_pt(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+        for (const auto& p : temp_cloud->points) {
+            float x = p.x + shift_x;
+            float y = p.y + shift_y;
+            float z = p.z + shift_z;
+
+            if (x < min_pt.x) min_pt.x = x;
+            if (x > max_pt.x) max_pt.x = x;
+            if (y < min_pt.y) min_pt.y = y;
+            if (y > max_pt.y) max_pt.y = y;
+            if (z < min_pt.z) min_pt.z = z;
+            if (z > max_pt.z) max_pt.z = z;
+        }
+
+        Box box;
+        box.width  = (max_pt.x - min_pt.x) * 1.01;
+        box.height = (max_pt.y - min_pt.y) * 1.01;
+        box.depth  = (max_pt.z - min_pt.z) * 1.01;
+        box.translation = Eigen::Vector3f(
+                (min_pt.x + max_pt.x) * 0.5f,
+                (min_pt.y + max_pt.y) * 0.5f,
+                (min_pt.z + max_pt.z) * 0.5f
+        );
+        cloud->initOctree(box);
+
+        // 准备批处理
+        // 假设 OBJ 都有颜色和法线 (temp_cloud 类型决定了它有这些字段，即使值为0)
+        cloud->enableColors();
+        cloud->enableNormals();
+
+        CloudBatch batch;
+        batch.reserve(BATCH_SIZE);
+
+        int progress_interval = (num_points > 100) ? (num_points / 100) : 1;
+
+        for (size_t i = 0; i < num_points; ++i) {
+            if (m_is_canceled) return false;
+
             const auto& src = temp_cloud->points[i];
 
             // XYZ
-            cloud->m_xyz->points[i].x = src.x + shift_x;
-            cloud->m_xyz->points[i].y = src.y + shift_y;
-            cloud->m_xyz->points[i].z = src.z + shift_z;
+            batch.points.emplace_back(src.x + shift_x, src.y + shift_y, src.z + shift_z);
 
             // Color
-            (*cloud->m_colors)[i] = {src.r, src.g, src.b};
+            batch.colors.emplace_back(src.r, src.g, src.b);
 
             // Normal
-            (*cloud->m_normals)[i].set(Eigen::Vector3f(src.normal_x, src.normal_y, src.normal_z));
+            CompressedNormal cn;
+            cn.set(Eigen::Vector3f(src.normal_x, src.normal_y, src.normal_z));
+            batch.normals.push_back(cn);
+
+            // 提交批次
+            if (batch.points.size() >= BATCH_SIZE) {
+                batch.flushTo(cloud);
+            }
+
+            if (i % progress_interval == 0) {
+                int p = 50 + (int)(i * 50 / num_points);
+                emit progress(p);
+            }
         }
-        if (m_is_canceled) return false;
-        emit progress(80);
 
-        cloud->setHasRGB(!cloud->m_colors->empty());
-        cloud->setHasNormals(!cloud->m_normals->empty());
+        if (!batch.empty()) batch.flushTo(cloud);
 
-        if (num_points > PREVIEW_LIMIT){
-            cloud->generatePreview();
-        }
+        cloud->setHasColors(true);
+        cloud->setHasNormals(true);
 
-        cloud->m_xyz->is_dense = temp_cloud->is_dense;
+        cloud->update();
         emit progress(100);
 
+        return true;
+    }
+
+    bool FileIO::loadLAS(const QString &filename, Cloud::Ptr &cloud) {
+        LASreadOpener lasreadopener;
+        lasreadopener.set_file_name(filename.toLocal8Bit().constData());
+        LASreader* lasreader = lasreadopener.open();
+        if (!lasreader) return false;
+
+        size_t total_points = lasreader->npoints;
+        if (total_points == 0){
+            lasreader->close();
+            delete lasreader;
+            return false;
+        }
+
+        int fmt = lasreader->header.point_data_format;
+        bool has_color = (fmt == 2 || fmt == 3 || fmt == 5 || fmt == 7);
+        if (has_color) cloud->enableColors();
+
+        // 准备流式缓冲区
+        CloudBatch batch;
+        batch.reserve(BATCH_SIZE);
+
+        bool has_valid_intensity = false;
+
+        // 读取第一个点以确定 Global Shift
+        if (!lasreader->read_point()) {
+            lasreader->close();
+            delete lasreader;
+            return false;
+        }
+
+        double raw_x = lasreader->point.get_x();
+        double raw_y = lasreader->point.get_y();
+        double raw_z = lasreader->point.get_z();
+
+        // 计算 Global Shift
+        const double THRESHOLD_XY = 10000.0;
+        bool is_large = std::abs(raw_x) > THRESHOLD_XY || std::abs(raw_y) > THRESHOLD_XY;
+        Eigen::Vector3d suggested_shift = Eigen::Vector3d::Zero();
+
+        if (is_large) {
+            double sx = -std::floor(raw_x / 1000.0) * 1000.0;
+            double sy = -std::floor(raw_y / 1000.0) * 1000.0;
+            double sz = 0.0;
+
+            suggested_shift = Eigen::Vector3d(sx, sy, sz);
+            bool skipped = false;
+            emit requestGlobalShift(Eigen::Vector3d(raw_x, raw_y, raw_z), suggested_shift, skipped);
+
+            if (!skipped) {
+                cloud->setGlobalShift(-suggested_shift);
+            }
+        }
+
+        float shift_x = static_cast<float>(suggested_shift.x());
+        float shift_y = static_cast<float>(suggested_shift.y());
+        float shift_z = static_cast<float>(suggested_shift.z());
+
+        // 现在可以根据 Shift 后的范围初始化八叉树了
+        Box box;
+        box.width  = lasreader->header.max_x - lasreader->header.min_x;
+        box.height = lasreader->header.max_y - lasreader->header.min_y;
+        box.depth  = lasreader->header.max_z - lasreader->header.min_z;
+        // 中心点也需要加上 shift
+        double cx = (lasreader->header.min_x + lasreader->header.max_x) * 0.5 + shift_x;
+        double cy = (lasreader->header.min_y + lasreader->header.max_y) * 0.5 + shift_y;
+        double cz = (lasreader->header.min_z + lasreader->header.max_z) * 0.5 + shift_z;
+        box.translation = Eigen::Vector3f(cx, cy, cz);
+
+        // 稍微扩大一点 Box 防止边界浮点误差
+        box.width *= 1.01; box.height *= 1.01; box.depth *= 1.01;
+
+        cloud->initOctree(box);
+
+        // 处理第一个点
+        {
+            float x = static_cast<float>(raw_x) + shift_x;
+            float y = static_cast<float>(raw_y) + shift_y;
+            float z = static_cast<float>(raw_z) + shift_z;
+
+            batch.points.emplace_back(x, y, z);
+
+            if (has_color) {
+                uint8_t r = lasreader->point.rgb[0] >> 8;
+                uint8_t g = lasreader->point.rgb[1] >> 8;
+                uint8_t b = lasreader->point.rgb[2] >> 8;
+                batch.colors.emplace_back(r, g, b);
+            }
+
+            float intensity_val = static_cast<float>(lasreader->point.get_intensity());
+            batch.scalars["Intensity"].push_back(intensity_val);
+            if (intensity_val > 0.0f) has_valid_intensity = true;
+        }
+
+        size_t idx = 1;
+        int progress_interval = (total_points > 100) ? (total_points / 100) : 1;
+
+        // 循环读取剩余点
+        while (lasreader->read_point()) {
+            if (m_is_canceled) {
+                lasreader->close();
+                delete lasreader;
+                return false;
+            }
+
+            // 坐标
+            float x = static_cast<float>(lasreader->point.get_x()) + shift_x;
+            float y = static_cast<float>(lasreader->point.get_y()) + shift_y;
+            float z = static_cast<float>(lasreader->point.get_z()) + shift_z;
+
+            batch.points.emplace_back(x, y, z);
+
+            // 颜色
+            if (has_color) {
+                uint8_t r = lasreader->point.rgb[0] >> 8;
+                uint8_t g = lasreader->point.rgb[1] >> 8;
+                uint8_t b = lasreader->point.rgb[2] >> 8;
+                batch.colors.emplace_back(r, g, b);
+            }
+
+            // 强度
+            float intensity_val = static_cast<float>(lasreader->point.get_intensity());
+            batch.scalars["Intensity"].push_back(intensity_val);
+            if (!has_valid_intensity && intensity_val > 0.0f) has_valid_intensity = true;
+
+            // 满批次提交
+            if (batch.points.size() >= BATCH_SIZE) {
+                // 如果发现所有强度都无效，可以不提交强度字段以节省内存
+                // 但这里为了简化逻辑，暂时全部提交，后面再统一移除
+                batch.flushTo(cloud);
+            }
+
+            // 进度条
+            idx++;
+            if (idx % progress_interval == 0) {
+                int p = 5 + (int)(idx * 85 / total_points);
+                emit progress(p);
+            }
+        }
+
+        // 提交剩余数据
+        if (!batch.empty()) {
+            batch.flushTo(cloud);
+        }
+
+        // 后处理：如果强度全为 0，移除该字段
+        if (!has_valid_intensity) {
+            cloud->removeScalarField("Intensity");
+        }
+
+        cloud->setHasColors(has_color);
+
+        // 更新统计信息 (此时点已全部插入)
+        cloud->update();
+
+        lasreader->close();
+        delete lasreader;
         return true;
     }
 
@@ -940,17 +1233,16 @@ namespace ct
         LASheader lasheader;
 
         // 确定格式
-        if (cloud->hasRGB()) {
-            // 原文件有颜色，保存为 Format 2 (支持 XYZ, Intensity, RGB)
+        if (cloud->hasColors()) {
             lasheader.point_data_format = 2; // XYZ + RGB + Intensity
             lasheader.point_data_record_length = 26;
         } else {
-            lasheader.point_data_format = 0;  // XYZ + Intensity (不存 RGB)
+            lasheader.point_data_format = 0;  // XYZ + Intensity
             lasheader.point_data_record_length = 20;
         }
 
         // 设置精度因子
-        lasheader.x_scale_factor = 0.0001; // 0.1毫米精度
+        lasheader.x_scale_factor = 0.0001;
         lasheader.y_scale_factor = 0.0001;
         lasheader.z_scale_factor = 0.0001;
 
@@ -965,39 +1257,58 @@ namespace ct
         LASwriter *laswriter = laswriteopener.open(&lasheader);
         if (!laswriter) return false;
 
-        // 预取 Intensity 字段指针 (如果存在)
-        const std::vector<float>* intensity_ptr = nullptr;
-        if (cloud->hasScalarField("Intensity")) {
-            intensity_ptr = cloud->getScalarField("Intensity");
-        }
-
         LASpoint laspoint;
         laspoint.init(&lasheader, lasheader.point_data_format, lasheader.point_data_record_length, &lasheader);
 
-        // 循环写入
-        size_t num_points = cloud->size();
-        for (size_t i = 0; i < num_points; ++i)
-        {
-            const auto& p = cloud->m_xyz->points[i];
-            laspoint.set_x(p.x + shift.x());
-            laspoint.set_y(p.y + shift.y());
-            laspoint.set_z(p.z + shift.z());
+        // 遍历所有数据块
+        const auto& blocks = cloud->getBlocks();
 
-            if (cloud->hasRGB() && cloud->m_colors && i < cloud->m_colors->size()) {
-                const auto& c = (*cloud->m_colors)[i];
-                laspoint.rgb[0] = c.r * 256;
-                laspoint.rgb[1] = c.g * 256;
-                laspoint.rgb[2] = c.b * 256;
+        // 进度统计
+        size_t total_points = cloud->size();
+        size_t processed_points = 0;
+        int progress_interval = (total_points > 100) ? (total_points / 100) : 1;
+
+        for (const auto& block : blocks) {
+            if (block->empty()) continue;
+
+            // 预取当前 Block 的 Intensity 数据 (如果存在)
+            const std::vector<float>* intensity_ptr = nullptr;
+            if (block->m_scalar_fields.contains("Intensity")) {
+                intensity_ptr = &block->m_scalar_fields["Intensity"];
             }
 
-            // [Intensity]
-            if (intensity_ptr) {
-                laspoint.set_intensity(static_cast<uint16_t>((*intensity_ptr)[i]));
-            } else {
-                laspoint.set_intensity(0);
-            }
+            size_t n = block->size();
+            for (size_t i = 0; i < n; ++i) {
+                if (m_is_canceled) {
+                    laswriter->close(); delete laswriter; return false;
+                }
 
-            laswriter->write_point(&laspoint);
+                const auto& p = block->m_points[i];
+                laspoint.set_x(p.x + shift.x());
+                laspoint.set_y(p.y + shift.y());
+                laspoint.set_z(p.z + shift.z());
+
+                if (cloud->hasColors() && block->m_colors) {
+                    const auto& c = (*block->m_colors)[i];
+                    laspoint.rgb[0] = c.r * 256; // 8bit -> 16bit
+                    laspoint.rgb[1] = c.g * 256;
+                    laspoint.rgb[2] = c.b * 256;
+                }
+
+                if (intensity_ptr) {
+                    laspoint.set_intensity(static_cast<uint16_t>((*intensity_ptr)[i]));
+                } else {
+                    laspoint.set_intensity(0);
+                }
+
+                laswriter->write_point(&laspoint);
+
+                // 进度条
+                processed_points++;
+                if (processed_points % progress_interval == 0) {
+                    emit progress((int)(processed_points * 100 / total_points));
+                }
+            }
         }
 
         laswriter->close();
@@ -1006,29 +1317,33 @@ namespace ct
     }
 
     bool FileIO::saveTXT(const Cloud::Ptr &cloud, const QString &filename) {
-        // 收集可用字段
+        // 收集可用字段 (Metadata)
         QStringList available_fields;
         available_fields << "x" << "y" << "z";
-        if (cloud->hasRGB()) available_fields << "r" << "g" << "b";
+        if (cloud->hasColors()) available_fields << "r" << "g" << "b";
         if (cloud->hasNormals()) available_fields << "nx" << "ny" << "nz";
 
-        //添加标量字段
-        QStringList scalar_names = cloud->getScalarFieldNames();
-        available_fields.append(scalar_names);
+        // 获取标量场名称
+        available_fields.append(cloud->getScalarFieldNames());
 
-        //请求配置
+        // 请求 UI 配置 (阻塞式)
         ct::TxtExportParams params;
         emit requestTxtExportSetup(available_fields, params);
         if (params.selected_fields.isEmpty()) return false; // 用户取消
 
-        //打开文件
+        // 打开文件
         std::ofstream file(filename.toLocal8Bit().constData());
         if (!file.is_open()) return false;
 
-        //设置精度
+        // --- 性能优化：设置 1MB 写入缓冲区 ---
+        // 这能极大减少磁盘 I/O 次数，对 TXT 写入至关重要
+        std::vector<char> buffer(1024 * 1024);
+        file.rdbuf()->pubsetbuf(buffer.data(), buffer.size());
+
+        // 设置浮点精度
         file << std::fixed << std::setprecision(params.precision);
 
-        //写入header（可选）
+        // 写入 Header (可选)
         if (params.has_header) {
             for (int i = 0; i < params.selected_fields.size(); i++){
                 file << params.selected_fields[i].toStdString();
@@ -1037,104 +1352,174 @@ namespace ct
             file << "\n";
         }
 
-        //准备数据指针以加速访问
-        struct FieldPtr {
-            enum Type { XYZ, RGB, Normal, Scalar};
+        // 准备字段描述符 (避免在循环中进行字符串比较)
+        struct FieldDesc {
+            enum Type { XYZ, RGB, Normal, Scalar };
             Type type;
-            int sub_index; // 0=x/r, 1=y/g, 2=z/b
-            const std::vector<float>* scalar_vec; // 标量字段
+            int sub_index; // 0=x/r/nx, 1=y/g/ny, 2=z/b/nz
+            QString scalar_name; // 仅 Scalar 类型需要
         };
 
-        std::vector<FieldPtr> field_ptrs;
+        std::vector<FieldDesc> field_descs;
+        field_descs.reserve(params.selected_fields.size());
+
         for (const QString& f : params.selected_fields){
-            if (f == "x") field_ptrs.push_back({FieldPtr::XYZ, 0, nullptr});
-            else if (f == "y") field_ptrs.push_back({FieldPtr::XYZ, 1, nullptr});
-            else if (f == "z") field_ptrs.push_back({FieldPtr::XYZ, 2, nullptr});
-            else if (f == "r") field_ptrs.push_back({FieldPtr::RGB, 0, nullptr});
-            else if (f == "g") field_ptrs.push_back({FieldPtr::RGB, 1, nullptr});
-            else if (f == "b") field_ptrs.push_back({FieldPtr::RGB, 2, nullptr});
-            else if (f == "nx") field_ptrs.push_back({FieldPtr::Normal, 0, nullptr});
-            else if (f == "ny") field_ptrs.push_back({FieldPtr::Normal, 1, nullptr});
-            else if (f == "nz") field_ptrs.push_back({FieldPtr::Normal, 2, nullptr});
+            if (f == "x") field_descs.push_back({FieldDesc::XYZ, 0, ""});
+            else if (f == "y") field_descs.push_back({FieldDesc::XYZ, 1, ""});
+            else if (f == "z") field_descs.push_back({FieldDesc::XYZ, 2, ""});
+            else if (f == "r") field_descs.push_back({FieldDesc::RGB, 0, ""});
+            else if (f == "g") field_descs.push_back({FieldDesc::RGB, 1, ""});
+            else if (f == "b") field_descs.push_back({FieldDesc::RGB, 2, ""});
+            else if (f == "nx") field_descs.push_back({FieldDesc::Normal, 0, ""});
+            else if (f == "ny") field_descs.push_back({FieldDesc::Normal, 1, ""});
+            else if (f == "nz") field_descs.push_back({FieldDesc::Normal, 2, ""});
             else {
-                field_ptrs.push_back({FieldPtr::Scalar, 0, cloud->getScalarField(f)});
+                field_descs.push_back({FieldDesc::Scalar, 0, f});
             }
         }
 
-        //循环写入
+        // 遍历所有 Block 进行写入
+        const auto& blocks = cloud->getBlocks();
+        Eigen::Vector3d shift = cloud->getGlobalShift(); // 用于还原大坐标
         char sep = params.separator;
-        size_t num_points = cloud->size();
-        Eigen::Vector3d shift = cloud->getGlobalShift();
 
-        for (size_t i = 0; i < num_points; i++){
-            const auto& p = cloud->m_xyz->points[i];
+        size_t total_points = cloud->size();
+        size_t processed_points = 0;
+        int progress_interval = (total_points > 100) ? (total_points / 100) : 1;
 
-            for (size_t k = 0; k < field_ptrs.size(); k++){
-                const auto& fp = field_ptrs[k];
+        for (const auto& block : blocks) {
+            if (block->empty()) continue;
 
-                if (fp.type == FieldPtr::XYZ){
-                    if (fp.sub_index == 0) file << (p.x + shift.x());
-                    else if (fp.sub_index == 1) file << (p.y + shift.y());
-                    else file << (p.z + shift.z());
-                }
-                else if (fp.type == FieldPtr::RGB){
-                    if (cloud->m_colors && i < cloud->m_colors->size()) {
-                        const auto& c = (*cloud->m_colors)[i];
-                        int val = 0;
-                        if (fp.sub_index == 0) val = c.r;
-                        else if (fp.sub_index == 1) val = c.g;
-                        else val = c.b;
-                        file << val;
-                    } else file << 0;
-                }
-                else if (fp.type == FieldPtr::Normal) {
-                    if (cloud->m_normals && i < cloud->m_normals->size()) {
-                        Eigen::Vector3f n = (*cloud->m_normals)[i].get();
-                        if (fp.sub_index == 0) file << n.x();
-                        else if (fp.sub_index == 1) file << n.y();
-                        else file << n.z();
-                    } else file << 0;
-                }
-                else if (fp.type == FieldPtr::Scalar){
-                    file << (*fp.scalar_vec)[i];
-                }
+            size_t n = block->size();
 
-                if (k < field_ptrs.size() - 1) file << sep;
+            // --- 关键：预取当前 Block 的数据指针 ---
+            const auto& pts = block->m_points;
+            const auto* colors = block->m_colors.get(); // 可能为 nullptr
+            const auto* normals = block->m_normals.get(); // 可能为 nullptr
+
+            // 为每个 Scalar 字段查找当前 Block 对应的 vector 指针
+            // 这样内层循环就不需要 map 查找了
+            std::vector<const std::vector<float>*> scalar_ptrs(field_descs.size(), nullptr);
+            for (size_t k = 0; k < field_descs.size(); ++k) {
+                if (field_descs[k].type == FieldDesc::Scalar) {
+                    const QString& name = field_descs[k].scalar_name;
+                    if (block->m_scalar_fields.contains(name)) {
+                        scalar_ptrs[k] = &block->m_scalar_fields[name];
+                    }
+                }
             }
-            file << "\n";
+
+            // --- 内层循环：逐点写入 ---
+            for (size_t i = 0; i < n; ++i) {
+                if (m_is_canceled) {
+                    file.close();
+                    return false;
+                }
+
+                // 写入用户选择的每一列
+                for (size_t k = 0; k < field_descs.size(); ++k) {
+                    const auto& fd = field_descs[k];
+
+                    switch (fd.type) {
+                        case FieldDesc::XYZ: {
+                            const auto& p = pts[i];
+                            if (fd.sub_index == 0) file << (p.x + shift.x());
+                            else if (fd.sub_index == 1) file << (p.y + shift.y());
+                            else file << (p.z + shift.z());
+                            break;
+                        }
+                        case FieldDesc::RGB: {
+                            if (colors) {
+                                const auto& c = (*colors)[i];
+                                int val = (fd.sub_index == 0) ? c.r : (fd.sub_index == 1 ? c.g : c.b);
+                                file << val;
+                            } else {
+                                file << 0;
+                            }
+                            break;
+                        }
+                        case FieldDesc::Normal: {
+                            if (normals) {
+                                // 需要解压法线
+                                Eigen::Vector3f n_vec = (*normals)[i].get();
+                                if (fd.sub_index == 0) file << n_vec.x();
+                                else if (fd.sub_index == 1) file << n_vec.y();
+                                else file << n_vec.z();
+                            } else {
+                                file << 0;
+                            }
+                            break;
+                        }
+                        case FieldDesc::Scalar: {
+                            const auto* vec_ptr = scalar_ptrs[k];
+                            if (vec_ptr && i < vec_ptr->size()) {
+                                file << (*vec_ptr)[i];
+                            } else {
+                                file << 0;
+                            }
+                            break;
+                        }
+                    }
+
+                    // 写入分隔符或换行
+                    if (k < field_descs.size() - 1) file << sep;
+                }
+                file << "\n";
+
+                // 进度条更新
+                processed_points++;
+                if (processed_points % 5000 == 0) { // 减少 emit 频率
+                    if (processed_points % progress_interval == 0) {
+                        emit progress((int)(processed_points * 100 / total_points));
+                    }
+                }
+            }
         }
+
         file.close();
         return true;
     }
 
     bool FileIO::savePCL(const Cloud::Ptr &cloud, const QString &filename, bool isBinary) {
+        // 准备 PCL 消息对象
         pcl::PCLPointCloud2 msg;
         msg.height = 1;
-        msg.width = cloud->size();
-        msg.is_dense = cloud->m_xyz->is_dense;
+        msg.width = cloud->size(); // 总点数
+        msg.is_dense = false; // 无法保证所有点都有效，保守设为 false
         msg.is_bigendian = false;
 
+        if (msg.width == 0) return false;
+
         // 动态定义字段 (Fields)
-        pcl::PCLPointField f;
+        // 根据 PCL 标准，我们需要构造字段列表。
+        // 注意：offset 会自动累加
         int current_offset = 0;
 
-        // [XYZ]
-        f.name = "x"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
-        msg.fields.push_back(f); current_offset += 4;
+        // --- XYZ ---
+        {
+            pcl::PCLPointField f;
+            f.name = "x"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
+            msg.fields.push_back(f); current_offset += 4;
+            f.name = "y"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
+            msg.fields.push_back(f); current_offset += 4;
+            f.name = "z"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
+            msg.fields.push_back(f); current_offset += 4;
+        }
 
-        f.name = "y"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
-        msg.fields.push_back(f); current_offset += 4;
-
-        f.name = "z"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
-        msg.fields.push_back(f); current_offset += 4;
-
-        if (cloud->hasRGB()) {
+        // --- RGB ---
+        // PCL 中 RGB 通常被打包为一个 float (实际是 uint32)
+        // 或者是 r, g, b 分开 (PLY常用)。这里为了兼容性，使用标准的打包 "rgb" 字段
+        bool has_rgb = cloud->hasColors();
+        if (has_rgb) {
+            pcl::PCLPointField f;
             f.name = "rgb"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
             msg.fields.push_back(f); current_offset += 4;
         }
 
-        // Normal
-        if (cloud->hasNormals()) {
+        // --- Normals ---
+        bool has_normals = cloud->hasNormals();
+        if (has_normals) {
+            pcl::PCLPointField f;
             f.name = "normal_x"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
             msg.fields.push_back(f); current_offset += 4;
             f.name = "normal_y"; f.offset = current_offset; f.datatype = pcl::PCLPointField::FLOAT32; f.count = 1;
@@ -1143,9 +1528,10 @@ namespace ct
             msg.fields.push_back(f); current_offset += 4;
         }
 
-        // Scalar Fields (自定义字段)
-        QStringList fieldNames = cloud->getScalarFieldNames();
-        for (const QString& name : fieldNames) {
+        // --- Scalar Fields (自定义标量场) ---
+        QStringList scalar_names = cloud->getScalarFieldNames();
+        for (const QString& name : scalar_names) {
+            pcl::PCLPointField f;
             f.name = name.toStdString();
             f.offset = current_offset;
             f.datatype = pcl::PCLPointField::FLOAT32;
@@ -1156,72 +1542,162 @@ namespace ct
 
         msg.point_step = current_offset;
         msg.row_step = msg.point_step * msg.width;
-        msg.data.resize(msg.row_step);
-        uint8_t* ptr = msg.data.data();
 
-        // 预取标量场指针
-        std::vector<const std::vector<float>*> scalar_ptrs;
-        for (const QString& name : fieldNames) {
-            scalar_ptrs.push_back(cloud->getScalarField(name));
+        // 分配内存 (可能很大，注意 catch 异常)
+        try {
+            msg.data.resize(msg.row_step);
+        } catch (...) {
+            return false; // 内存不足
         }
 
+        // 计算每个 Block 的写入起始位置 (Prefix Sum)
+        // 这对于并行写入是必须的，我们需要知道每个 block 往 msg.data 的哪个位置写
+        const auto& blocks = cloud->getBlocks();
+        std::vector<size_t> block_offsets(blocks.size(), 0);
+        size_t running_offset = 0;
+        for (size_t i = 0; i < blocks.size(); ++i) {
+            block_offsets[i] = running_offset;
+            running_offset += blocks[i]->size();
+        }
+
+        // 并行填充数据
         Eigen::Vector3d shift = cloud->getGlobalShift();
         float sx = (float)shift.x();
         float sy = (float)shift.y();
         float sz = (float)shift.z();
 
-        size_t num_points = cloud->size();
-        // 开启 OpenMP 加速写入
+        uint8_t* base_ptr = msg.data.data();
+        int step = msg.point_step;
+
+        // 辅助：获取字段偏移量 (避免循环中查找)
+        int off_rgb = -1;
+        int off_nx = -1, off_ny = -1, off_nz = -1;
+        std::vector<int> off_scalars;
+
+        // 重新扫描一遍 fields 确定偏移
+        for (const auto& f : msg.fields) {
+            if (f.name == "rgb") off_rgb = f.offset;
+            else if (f.name == "normal_x") off_nx = f.offset;
+            else if (f.name == "normal_y") off_ny = f.offset;
+            else if (f.name == "normal_z") off_nz = f.offset;
+            else {
+                // 检查是否是标量场
+                if (scalar_names.contains(QString::fromStdString(f.name))) {
+                    off_scalars.push_back(f.offset);
+                }
+            }
+        }
+
+        // 开启 OpenMP 并行处理 Block
+        // 注意：FileIO 继承自 QObject，多线程中尽量不要 emit 信号，或者使用 atomic 计数器控制频率
+        std::atomic<size_t> processed_points_counter(0);
+        bool write_failed = false;
+
 #pragma omp parallel for
-        for (int i = 0; i < (int)num_points; ++i)
-        {
-            uint8_t* pt_ptr = ptr + i * msg.point_step;
-            int offset = 0;
+        for (int k = 0; k < (int)blocks.size(); ++k) {
+            if (write_failed || m_is_canceled) continue;
 
-            // XYZ (还原大坐标)
-            const auto& p = cloud->m_xyz->points[i];
-            float x = p.x + sx;
-            float y = p.y + sy;
-            float z = p.z + sz;
+            const auto& block = blocks[k];
+            if (block->empty()) continue;
 
-            memcpy(pt_ptr + offset, &x, 4); offset += 4;
-            memcpy(pt_ptr + offset, &y, 4); offset += 4;
-            memcpy(pt_ptr + offset, &z, 4); offset += 4;
+            size_t n = block->size();
+            size_t start_idx = block_offsets[k];
 
-            // RGB
-            if (cloud->hasRGB()) {
-                std::uint32_t rgb_val = cloud->getPointColorForSave(i);
-                memcpy(pt_ptr + offset, &rgb_val, 4);
-                offset += 4;
+            // 数据指针预取
+            const auto& pts = block->m_points;
+            const auto* colors = (has_rgb && block->m_colors) ? block->m_colors.get() : nullptr;
+            const auto* normals = (has_normals && block->m_normals) ? block->m_normals.get() : nullptr;
+
+            // 标量场指针预取
+            std::vector<const std::vector<float>*> scalar_ptrs;
+            if (!scalar_names.isEmpty()) {
+                scalar_ptrs.reserve(scalar_names.size());
+                for (const QString& name : scalar_names) {
+                    if (block->m_scalar_fields.contains(name)) {
+                        scalar_ptrs.push_back(&block->m_scalar_fields[name]);
+                    } else {
+                        scalar_ptrs.push_back(nullptr); // 缺失字段处理
+                    }
+                }
             }
 
-            // Normal
-            if (cloud->hasNormals() && cloud->m_normals) {
-                Eigen::Vector3f n = (*cloud->m_normals)[i].get();
-                float nx = n.x(); float ny = n.y(); float nz = n.z();
-                memcpy(pt_ptr + offset, &nx, 4); offset += 4;
-                memcpy(pt_ptr + offset, &ny, 4); offset += 4;
-                memcpy(pt_ptr + offset, &nz, 4); offset += 4;
+            // 块内循环
+            for (size_t i = 0; i < n; ++i) {
+                // 计算当前点在 msg.data 中的内存地址
+                uint8_t* pt_ptr = base_ptr + (start_idx + i) * step;
+
+                // --- 写入 XYZ ---
+                const auto& p = pts[i];
+                float x = p.x + sx;
+                float y = p.y + sy;
+                float z = p.z + sz;
+
+                // 直接 memcpy 比 reinterpret_cast 更安全，且会被编译器优化
+                memcpy(pt_ptr + 0, &x, 4);
+                memcpy(pt_ptr + 4, &y, 4);
+                memcpy(pt_ptr + 8, &z, 4);
+
+                // --- 写入 RGB ---
+                if (has_rgb && off_rgb >= 0) {
+                    uint32_t rgb_val = 0;
+                    if (colors) {
+                        const auto& c = (*colors)[i];
+                        // PCL 格式: int rgb = (r << 16) | (g << 8) | b
+                        // 注意大小端，通常 x86 是小端，PCL 默认也是
+                        rgb_val = (static_cast<uint32_t>(c.r) << 16) |
+                                  (static_cast<uint32_t>(c.g) << 8)  |
+                                  (static_cast<uint32_t>(c.b));
+                    }
+                    // 虽然是 float 类型字段，但实际存储的是位填充的 int
+                    memcpy(pt_ptr + off_rgb, &rgb_val, 4);
+                }
+
+                // --- 写入 Normals ---
+                if (has_normals && off_nx >= 0) {
+                    float nx = 0, ny = 0, nz = 1;
+                    if (normals) {
+                        Eigen::Vector3f n_vec = (*normals)[i].get();
+                        nx = n_vec.x(); ny = n_vec.y(); nz = n_vec.z();
+                    }
+                    memcpy(pt_ptr + off_nx, &nx, 4);
+                    memcpy(pt_ptr + off_ny, &ny, 4);
+                    memcpy(pt_ptr + off_nz, &nz, 4);
+                }
+
+                // --- 写入 Scalars ---
+                for (size_t s_idx = 0; s_idx < scalar_ptrs.size(); ++s_idx) {
+                    float val = 0.0f;
+                    if (scalar_ptrs[s_idx] && i < scalar_ptrs[s_idx]->size()) {
+                        val = (*scalar_ptrs[s_idx])[i];
+                    }
+                    memcpy(pt_ptr + off_scalars[s_idx], &val, 4);
+                }
             }
 
-            // Scalar Fields
-            for (size_t k = 0; k < scalar_ptrs.size(); ++k) {
-                float val = (*scalar_ptrs[k])[i];
-                memcpy(pt_ptr + offset, &val, 4);
-                offset += 4;
-            }
+            // 简单的进度更新逻辑（非精确，为了减少原子操作开销，每处理完一个块加一次）
+            // 如果需要高频更新，可以在块内循环里做
+            processed_points_counter += n;
         }
 
-        // 写入文件
+        if (m_is_canceled) return false;
+
+        // 调用 PCL 保存函数
+        // 这一步是同步的，对于大文件可能会阻塞一会
+        int res = -1;
         if (filename.endsWith(".pcd", Qt::CaseInsensitive)) {
-            pcl::io::savePCDFile(filename.toLocal8Bit().toStdString(), msg, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), isBinary);
-            return true;
+            pcl::PCDWriter writer;
+            res = writer.write(filename.toLocal8Bit().toStdString(), msg, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), isBinary);
         }
-        else {
-            // 默认为 PLY
+        else if (filename.endsWith(".ply", Qt::CaseInsensitive)) {
             pcl::PLYWriter writer;
-            int res = writer.write(filename.toLocal8Bit().toStdString(), msg, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), isBinary, false);
-            return (res == 0);
+            // PCL 的 PLYWriter 可能不完全支持所有自定义字段的自动映射，但在 binary 模式下通常工作良好
+            res = writer.write(filename.toLocal8Bit().toStdString(), msg, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), isBinary, false);
+        } else {
+            // 默认回退到 PCD
+            pcl::PCDWriter writer;
+            res = writer.write(filename.toLocal8Bit().toStdString(), msg, Eigen::Vector4f::Zero(), Eigen::Quaternionf::Identity(), isBinary);
         }
+
+        return (res == 0);
     }
 }

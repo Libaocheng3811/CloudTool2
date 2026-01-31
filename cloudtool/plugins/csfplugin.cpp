@@ -85,7 +85,7 @@ void CSFPlugin::onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud
     ground_cloud->setId(m_cloud->id() + "_ground");
     off_ground_cloud->setId(m_cloud->id() + "_off_ground");
 
-    if (!m_cloud->hasRGB()){
+    if (!m_cloud->hasColors()){
         // 如果没有RGB信息，手动赋色
         ground_cloud->setCloudColor(ct::RGB{0, 255, 0}); // Green
         off_ground_cloud->setCloudColor(ct::RGB{255, 0, 0}); // Red

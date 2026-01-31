@@ -1,4 +1,5 @@
 #include "cloudview.h"
+#include "common.h"
 
 #include <vtkAutoInit.h>
 // VTK_MODULE_INIT 宏用于初始化 VTK 模块
@@ -12,12 +13,15 @@ VTK_MODULE_INIT(vtkRenderingFreeType)
 #include <vtkCamera.h>
 #include <vtkProperty2D.h>
 #include <vtkTextActor.h>
+#include <vtkRenderWindowInteractor.h>
+#include <vtkCommand.h>
 
 #include <QDropEvent>
 #include <QMimeData>
 #include <QUrl>
 
 #include <cmath>
+
 #define INFO_CLOUD_ID  "info_cloud_id"
 #define INFO_TEXT      "info_text"
 
@@ -58,34 +62,34 @@ namespace ct
         this->setRenderWindow(m_renderwindow);
 
         m_viewer->setupInteractor(this->interactor(), this->renderWindow());
+        if (this->interactor()) {
+            vtkNew<vtkCallbackCommand> callback;
+            callback->SetCallback(CloudView::OnRenderEvent);
+            callback->SetClientData(this);
+
+            m_observer_tag = this->interactor()->AddObserver(vtkCommand::RenderEvent, callback);
+        }
+
         m_render->GradientBackgroundOn();
         m_render->SetBackground2(0.05, 0.4, 0.6);
         m_render->SetBackground(0.00, 0.05, 0.08);
 
         connect(this, &CloudView::sizeChanged, [this](QSize size){
             if (m_show_id && !m_current_id.isEmpty()) {
-                // 重新计算位置并更新
                 m_viewer->updateText(m_current_id.toStdString(),
                                      size.width() - m_current_id.length() * 6 - 20,
                                      size.height() - 25,
                                      12, 1, 1, 1, INFO_CLOUD_ID);
             }
-        });
 
-        connect(this, &CloudView::sizeChanged, [this](QSize size){
             QMap<int, InfoData>::iterator i;
             for (i = m_active_infos.begin(); i != m_active_infos.end(); ++i) {
                 int level = i.key();
                 const InfoData& data = i.value();
                 std::string id = INFO_TEXT + std::to_string(level);
-
                 int y_pos = size.height() - 25 * level;
-
-                m_viewer->updateText(data.text.toStdString(),
-                                     10, y_pos,
-                                     12,
-                                     data.rgb.rf(), data.rgb.gf(), data.rgb.bf(),
-                                     id);
+                m_viewer->updateText(data.text.toStdString(), 10, y_pos, 12,
+                                     data.rgb.rf(), data.rgb.gf(), data.rgb.bf(), id);
             }
         });
 
@@ -102,6 +106,55 @@ namespace ct
         m_viewer->getRenderWindow()->Render();
     }
 
+    CloudView::~CloudView()
+    {
+        if (this->interactor()) {
+            this->interactor()->RemoveObserver(m_observer_tag);
+        }
+
+        m_OctreeRenders.clear();
+    }
+
+    void CloudView::OnRenderEvent(vtkObject* caller, unsigned long eventId, void* clientData, void* callData)
+    {
+        CloudView* self = static_cast<CloudView*>(clientData);
+        if (self) {
+            self->updateRenderers();
+        }
+    }
+
+    void CloudView::updateRenderers() {
+        // 只在相机移动时更新
+        static vtkCamera* lastCam = nullptr;
+        static Eigen::Vector3f lastPos(0, 0, 0);
+        static double lastFocal[3] = {0, 0, 0};
+
+        vtkCamera* cam = m_render->GetActiveCamera();
+        double* pos = cam->GetPosition();
+        double* focal = cam->GetFocalPoint();
+
+        // 检查相机是否真的移动了
+        bool cameraChanged = (lastCam != cam ||
+                              std::abs(pos[0] - lastPos.x()) > 0.01 ||
+                              std::abs(pos[1] - lastPos.y()) > 0.01 ||
+                              std::abs(pos[2] - lastPos.z()) > 0.01 ||
+                              std::abs(focal[0] - lastFocal[0]) > 0.01 ||
+                              std::abs(focal[1] - lastFocal[1]) > 0.01 ||
+                              std::abs(focal[2] - lastFocal[2]) > 0.01);
+
+        if (!cameraChanged) return; // 相机没动，不更新
+
+        lastCam = cam;
+        lastPos = Eigen::Vector3f(pos[0], pos[1], pos[2]);
+        lastFocal[0] = focal[0];
+        lastFocal[1] = focal[1];
+        lastFocal[2] = focal[2];
+
+        for (auto& renderer : m_OctreeRenders) {
+            renderer->update();
+        }
+    }
+
     void CloudView::addPointCloud(const Cloud::Ptr &cloud)
     {
         bool found = false;
@@ -113,26 +166,15 @@ namespace ct
         }
         if (!found) m_visible_clouds.push_back(cloud);
 
-        // 如果是大型点云，自动生成预览点云，只生成一次
-        auto renderCloud = cloud->getPreviewCloud();
-        std::string cloudId = cloud->id().toStdString();
-
-        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_handler(renderCloud);
-
-        if (!m_viewer->contains(cloudId))
-            m_viewer->addPointCloud<PointXYZRGB>(renderCloud, rgb_handler, cloudId);
-        else
-        {
-            m_viewer->updatePointCloud<pcl::PointXYZRGB>(renderCloud, rgb_handler, cloudId);
+        if (m_OctreeRenders.contains(cloud->id())) {
+            m_OctreeRenders.remove(cloud->id());
         }
 
-        if (cloud->pointSize() != 1)
-            m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
-                                                       cloud->pointSize(), cloudId);
-        // 设置点云透明度
-        if (cloud->opacity() != 1)
-            m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY,
-                                                       cloud->opacity(), cloudId);
+        auto renderer = std::make_shared<OctreeRenderer>(cloud, m_viewer->getRendererCollection()->GetFirstRenderer());
+        m_OctreeRenders.insert(cloud->id(), renderer);
+
+        renderer->update();
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -160,14 +202,12 @@ namespace ct
         {
             m_viewer->addCube(cloud->box().translation, cloud->box().rotation,
                               cloud->box().width, cloud->box().height,
-                              cloud->box().depth, cloud->boxId().toStdString());
+                              cloud->box().depth, id);
 
             m_viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
                                                   pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME,
                                                   id);
         }
-        else
-        {}
 
         m_viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, cloud->boxColor().rf(),
                                               cloud->boxColor().gf(), cloud->boxColor().bf(), id);
@@ -176,55 +216,67 @@ namespace ct
 
     void CloudView::addPointCloudNormals(const Cloud::Ptr &cloud, int level, float scale)
     {
-        // TODO 既然只显示预览点云，法线是不是也应该只显示预览点云的法线呢
+        // TODO 只显示一定数量的法线，不全部显示
         std::string id = cloud->normalId().toStdString();
 
         if (!cloud->hasNormals()) return;
 
-        // 只显示预览点云的法线 (LOD)
-        // 我们需要按同样的步长抽取法线
-        auto previewXYZ = cloud->getPreviewCloud(); // PointXYZRGB
-        size_t previewSize = previewXYZ->size();
-        size_t fullSize = cloud->size();
+        // [性能优化]：不要转换全量点云！只采样一部分用于显示法线。
+        // 对于大点云，全量显示法线会变成一团毛球，没有任何视觉意义且卡死显卡。
+        // 我们限制用于显示法线的点数为 50,000 点。
 
-        // 计算步长 (假设是线性采样)
-        int step = (fullSize > 0 && previewSize > 0) ? (fullSize / previewSize) : 1;
-        if (step < 1) step = 1;
+        const size_t MAX_NORMAL_POINTS = 50000;
 
-        // 构建临时 PointXYZRGBNormal 用于显示法线
-        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr previewWithNormals(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-        previewWithNormals->reserve(previewSize);
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
 
-        for (size_t i = 0; i < previewSize; ++i) {
-            const auto& p = previewXYZ->points[i];
+        size_t total = cloud->size();
+        size_t step = (total > MAX_NORMAL_POINTS) ? (total / MAX_NORMAL_POINTS) : 1;
 
-            // 回溯原始索引 (近似)
-            size_t originalIdx = i * step;
-            if (originalIdx >= fullSize) originalIdx = fullSize - 1;
+        temp_cloud->reserve(MAX_NORMAL_POINTS);
 
-            pcl::PointXYZRGBNormal pn;
-            pn.x = p.x; pn.y = p.y; pn.z = p.z;
-            pn.rgb = p.rgb;
+        // 遍历 Block 进行稀疏采样
+        const auto& blocks = cloud->getBlocks();
+        size_t global_idx = 0;
 
-            // 从全量法线中抽取
-            const auto* normals = cloud->getNormalsData();
-            if (normals && originalIdx < normals->size()) {
-                Eigen::Vector3f n = (*normals)[originalIdx].get();
-                pn.normal_x = n.x();
-                pn.normal_y = n.y();
-                pn.normal_z = n.z();
+        for (const auto& block : blocks) {
+            if (block->empty()) continue;
+
+            size_t n = block->size();
+            const auto& pts = block->m_points;
+            const auto* colors = (block->m_colors) ? block->m_colors.get() : nullptr;
+            const auto* norms = (block->m_normals) ? block->m_normals.get() : nullptr;
+
+            if (!norms) continue; // 没有法线数据跳过
+
+            for (size_t i = 0; i < n; ++i) {
+                if (global_idx % step == 0) {
+                    pcl::PointXYZRGBNormal p;
+                    p.x = pts[i].x; p.y = pts[i].y; p.z = pts[i].z;
+
+                    if (colors) { p.r=(*colors)[i].r; p.g=(*colors)[i].g; p.b=(*colors)[i].b; }
+                    else { p.r=255; p.g=255; p.b=255; }
+
+                    Eigen::Vector3f nv = (*norms)[i].get();
+                    p.normal_x = nv.x(); p.normal_y = nv.y(); p.normal_z = nv.z();
+
+                    temp_cloud->push_back(p);
+                }
+                global_idx++;
+
+                // 如果凑够了就停，避免遍历完一亿个点
+                if (temp_cloud->size() >= MAX_NORMAL_POINTS) goto done_sampling;
             }
-            previewWithNormals->push_back(pn);
         }
+
+        done_sampling:
 
         if (!m_viewer->contains(id))
-            m_viewer->addPointCloudNormals<pcl::PointXYZRGBNormal>(previewWithNormals, level, scale, id);
+            m_viewer->addPointCloudNormals<pcl::PointXYZRGBNormal>(temp_cloud, level, scale, id);
         else {
             m_viewer->removePointCloud(id);
-            m_viewer->addPointCloudNormals<pcl::PointXYZRGBNormal>(previewWithNormals, level, scale, id);
+            m_viewer->addPointCloudNormals<pcl::PointXYZRGBNormal>(temp_cloud, level, scale, id);
         }
 
-        // 设置颜色
         m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR,
                                                    cloud->normalColor().rf(), cloud->normalColor().gf(),
                                                    cloud->normalColor().bf(), id);
@@ -235,8 +287,9 @@ namespace ct
     void CloudView::addCorrespondences(const Cloud::Ptr &source_points, const Cloud::Ptr &target_points,
                                        const pcl::CorrespondencesPtr &correspondences, const QString &id)
     {
-        auto srcPCL = source_points->getPreviewCloud();
-        auto tgtPCL = target_points->getPreviewCloud();
+        // TODO 为了兼容，只能暂时转换点云类型，会损耗性能
+        auto srcPCL = source_points->toPCL_XYZRGB();
+        auto tgtPCL = target_points->toPCL_XYZRGB();
 
         std::string std_id = id.toStdString();
 
@@ -250,9 +303,9 @@ namespace ct
 
     void CloudView::addPolygon(const Cloud::Ptr &cloud, const QString &id, const ct::RGB &rgb)
     {
+        // TODO 同样需要转换格式，性能损耗
         std::string std_id = id.toStdString();
-
-        auto pclCloud = cloud->toPCL_XYZRGB();
+        auto pclCloud = cloud->toPCL_XYZRGB(); // 需要转换为 PCL 格式
 
         if (!m_viewer->contains(std_id))
             m_viewer->addPolygon<PointXYZRGB>(pclCloud, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
@@ -268,7 +321,8 @@ namespace ct
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
-    void CloudView::addArrow(const ct::PointXYZRGBN &pt1, const ct::PointXYZRGBN &pt2, const QString &id, bool display_length, const ct::RGB &rgb)
+    void CloudView::addArrow(const ct::PointXYZRGBN &pt1, const ct::PointXYZRGBN &pt2, const QString &id,
+                             bool display_length, const ct::RGB &rgb)
     {
         if (!m_viewer->contains(id.toStdString()))
             m_viewer->addArrow(pt1, pt2, rgb.rf(), rgb.gf(), rgb.bf(), display_length, id.toStdString());
@@ -282,36 +336,39 @@ namespace ct
 
     void CloudView::addCube(const pcl::ModelCoefficients::Ptr &coefficients, const QString &id)
     {
-        if (!m_viewer->contains(id.toStdString()))
-            m_viewer->addCube(*coefficients, id.toStdString());
+        std::string std_id = id.toStdString();
+        if (!m_viewer->contains(std_id))
+            m_viewer->addCube(*coefficients, std_id);
         else
         {
-            m_viewer->removeShape(id.toStdString());
-            m_viewer->addCube(*coefficients, id.toStdString());
+            m_viewer->removeShape(std_id);
+            m_viewer->addCube(*coefficients, std_id);
         }
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addCube(const ct::PointXYZRGBN &min, ct::PointXYZRGBN &max, const QString &id, const ct::RGB &rgb)
     {
-        if (!m_viewer->contains(id.toStdString()))
-            m_viewer->addCube(min.x, max.x, min.y, max.y, min.z, max.z, rgb.rf(), rgb.gf(), rgb.bf(), id.toStdString());
+        std::string std_id = id.toStdString();
+        if (!m_viewer->contains(std_id))
+            m_viewer->addCube(min.x, max.x, min.y, max.y, min.z, max.z, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
         else
         {
-            m_viewer->removeShape(id.toStdString());
-            m_viewer->addCube(min.x, max.x, min.y, max.y, min.z, max.z, rgb.rf(), rgb.gf(), rgb.bf(), id.toStdString());
+            m_viewer->removeShape(std_id);
+            m_viewer->addCube(min.x, max.x, min.y, max.y, min.z, max.z, rgb.rf(), rgb.gf(), rgb.bf(), std_id);
         }
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::addCube(const ct::Box &box, const QString &id)
     {
-        if (!m_viewer->contains(id.toStdString()))
-            m_viewer->addCube(box.translation, box.rotation, box.width, box.height, box.depth, id.toStdString());
+        std::string std_id = id.toStdString();
+        if (!m_viewer->contains(std_id))
+            m_viewer->addCube(box.translation, box.rotation, box.width, box.height, box.depth, std_id);
         else
         {
-            m_viewer->removeShape(id.toStdString());
-            m_viewer->addCube(box.translation, box.rotation, box.width, box.height, box.depth, id.toStdString());
+            m_viewer->removeShape(std_id);
+            m_viewer->addCube(box.translation, box.rotation, box.width, box.height, box.depth, std_id);
         }
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
@@ -322,80 +379,113 @@ namespace ct
         m_render->SetDisplayPoint(pos.x, pos.y, 0.1);
         m_render->DisplayToWorld();
         m_render->GetWorldPoint(point);
+
+        if (point[3] != 0.0) {
+            point[0] /= point[3];
+            point[1] /= point[3];
+            point[2] /= point[3];
+        }
+
         return PointXYZRGBN(point[0], point[1], point[2], 0, 0, 0);
     }
 
     void CloudView::addPolygon2D(const std::vector<PointXY> &points, const QString &id, const ct::RGB &rgb)
     {
         Cloud::Ptr cloud(new Cloud);
-        // 循环遍历将二维点转换成三维点
+
+        Box box; box.width=10; box.height=10; box.depth=10; // 虚拟 Box
+        cloud->initOctree(box);
+
         for (auto& i : points)
         {
             PointXYZRGBN point = this->displayToWorld(i);
-            // 将转换后的三维点存储在cloud中
-            cloud->push_back(point);
+            cloud->addPoint(PointXYZ(point.x, point.y, point.z));
         }
-        // 添加多边形
+
         this->addPolygon(cloud, id, rgb);
     }
 
     // point pick
-    int CloudView::singlePick(const ct::PointXY &pos, const QString& target_cloud_id)
+    PickResult CloudView::singlePick(const ct::PointXY &pos, const QString& target_cloud_id)
     {
+        PickResult result;
+        result.valid = false;
+
         vtkSmartPointer<vtkPointPicker> picker = vtkSmartPointer<vtkPointPicker>::New();
-        vtkRenderer* ren = m_viewer->getRenderWindow()->GetRenderers()->GetFirstRenderer();
+        picker->SetTolerance(0.005);
 
-        if (!target_cloud_id.isEmpty()){
-            std::string id = target_cloud_id.toStdString();
-            auto cloud_actor_map = m_viewer->getCloudActorMap();
+        // 1. 构建 Pick List
+        picker->InitializePickList();
 
-            if (cloud_actor_map->find(id) != cloud_actor_map->end()){
-                vtkProp* actor = cloud_actor_map->at(id).actor;
-
-                picker->InitializePickList();
-                picker->AddPickList(actor);
-                picker->PickFromListOn();
-            }
+        // 收集自定义渲染器的 Actor
+        for (auto it = m_OctreeRenders.begin(); it != m_OctreeRenders.end(); ++it) {
+            if (!target_cloud_id.isEmpty() && it.key() != target_cloud_id) continue;
+            std::vector<vtkActor*> actors = it.value()->getActiveActors();
+            for (auto actor : actors) picker->AddPickList(actor);
         }
 
-        picker->Pick(pos.x, pos.y, 0.0, ren);
+        picker->PickFromListOn();
+        picker->Pick(pos.x, pos.y, 0.0, m_render);
 
-        int previewIdx = static_cast<int>(picker->GetPointId());
-        picker->PickFromListOff();
-        if (previewIdx < 0) return -1;
+        vtkIdType pointId = picker->GetPointId();
+        vtkActor* actor = picker->GetActor();
 
-        // 映射回原始索引
-        if (!target_cloud_id.isEmpty()) {
-            for(const auto& c : m_visible_clouds) {
-                if(c->id() == target_cloud_id) {
-                    size_t fullSize = c->size();
-                    size_t previewSize = c->getPreviewCloud()->size();
+        if (pointId != -1 && actor != nullptr) {
+            for (auto it = m_OctreeRenders.begin(); it != m_OctreeRenders.end(); ++it) {
+                auto block = it.value()->getBlockFromActor(actor);
+                if (block) {
+                    // 找到了！构建 PickResult
+                    result.valid = true;
+                    result.cloud = it.value()->getCloud(); // OctreeRenderer 需要提供 getCloud()
 
-                    if (previewSize > 0 && fullSize > previewSize) {
-                        size_t step = fullSize / previewSize;
-                        if (step < 1) step = 1;
+                    // 获取点数据
+                    const auto& pt = block->m_points[pointId];
+                    result.point.x = pt.x; result.point.y = pt.y; result.point.z = pt.z;
 
-                        // 简单的线性映射
-                        size_t realIdx = previewIdx * step;
-                        if (realIdx >= fullSize) realIdx = fullSize - 1;
-
-                        return static_cast<int>(realIdx);
+                    if (block->m_colors) {
+                        const auto& c = (*block->m_colors)[pointId];
+                        result.point.r = c.r; result.point.g = c.g; result.point.b = c.b;
+                    } else {
+                        result.point.r = 255; result.point.g = 255; result.point.b = 255;
                     }
-                    // 如果没有 LOD (previewSize == fullSize)，索引是一样的
-                    return previewIdx;
+
+                    if (block->m_normals) {
+                        Eigen::Vector3f n = (*block->m_normals)[pointId].get();
+                        result.point.normal_x = n.x(); result.point.normal_y = n.y(); result.point.normal_z = n.z();
+                    } else {
+                        result.point.normal_x = 0; result.point.normal_y = 0; result.point.normal_z = 0;
+                    }
+
+                    // 获取标量数据
+                    if (!block->m_scalar_fields.isEmpty()) {
+                        for(auto sit = block->m_scalar_fields.begin(); sit != block->m_scalar_fields.end(); ++sit) {
+                            result.scalars.insert(sit.key(), sit.value()[pointId]);
+                        }
+                    }
+
+                    return result;
                 }
             }
         }
-        return previewIdx;
+        return result; // valid = false
     }
 
-    std::vector<int> CloudView::areaPick(const std::vector<PointXY> &poly_points, const Cloud::Ptr &cloud, bool in_out)
+    Cloud::Ptr CloudView::areaPick(const std::vector<PointXY> &poly_points, const Cloud::Ptr &cloud, bool in_out)
     {
-        // 获取传入点集合的大小
-        int size = poly_points.size();
-        if (size < 3) return {};
+        if (poly_points.size() < 3 || !cloud) return nullptr;
 
-        // 预计算多边形常数 (Point in Polygon 算法)
+        Cloud::Ptr result_cloud(new Cloud);
+        // 初始化结果云的八叉树 (使用原云的 BBox，或者计算新 BBox)
+        result_cloud->initOctree(cloud->box());
+
+        if (cloud->hasColors()) result_cloud->enableColors();
+        if (cloud->hasNormals()) result_cloud->enableNormals();
+
+        // 复制标量场定义
+        QStringList scalar_names = cloud->getScalarFieldNames();
+
+        // 1. 预计算多边形参数 (PIP算法)
+        int size = poly_points.size();
         std::vector<float> constant(size);
         std::vector<float> multiple(size);
         int i, j = size - 1;
@@ -411,36 +501,88 @@ namespace ct
             j = i;
         }
 
-        std::vector<int> indices;
-        size_t n_points = cloud->size();
-
         auto worldToDisplay = [&](const pcl::PointXYZ& pt, double out[3]) {
             m_render->SetWorldPoint(pt.x, pt.y, pt.z, 1.0);
             m_render->WorldToDisplay();
             m_render->GetDisplayPoint(out);
         };
 
-        for (size_t k = 0; k < n_points; k++)
-        {
-            // 获取全量点
-            const auto& pt = cloud->getXYZCloud()->points[k];
+        const auto& blocks = cloud->getBlocks();
 
-            double p[3];
-            worldToDisplay(pt, p);
+        // 准备批量添加的容器，减少 addPoints 调用次数
+        std::vector<PointXYZ> batch_pts;
+        std::vector<RGB> batch_colors;
+        std::vector<CompressedNormal> batch_normals;
+        QMap<QString, std::vector<float>> batch_scalars;
 
-            bool oddNodes = in_out;
-            bool current = poly_points[size - 1].y > p[1];
-            bool previous;
+        size_t batch_limit = 50000;
+        batch_pts.reserve(batch_limit);
+        // ... reserve others ...
 
-            for (int m = 0; m < size; m++) {
-                previous = current;
-                current = poly_points[m].y > p[1];
-                if (current != previous)
-                    oddNodes ^= (p[1] * multiple[m] + constant[m] < p[0]);
+        for (const auto& block : blocks) {
+            if (block->empty()) continue;
+
+            // TODO: Block 级视锥体剔除 / 包围盒投影剔除 (优化点)
+
+            size_t n = block->size();
+            for (size_t k = 0; k < n; k++) {
+                const auto& pt = block->m_points[k];
+                double p[3];
+                worldToDisplay(pt, p);
+
+                bool oddNodes = in_out;
+                bool current = poly_points[size - 1].y > p[1];
+                bool previous;
+
+                for (int m = 0; m < size; m++) {
+                    previous = current;
+                    current = poly_points[m].y > p[1];
+                    if (current != previous)
+                        oddNodes ^= (p[1] * multiple[m] + constant[m] < p[0]);
+                }
+
+                if (oddNodes) {
+                    // 收集数据
+                    batch_pts.push_back(pt);
+
+                    if (cloud->hasColors() && block->m_colors)
+                        batch_colors.push_back((*block->m_colors)[k]);
+
+                    if (cloud->hasNormals() && block->m_normals)
+                        batch_normals.push_back((*block->m_normals)[k]);
+
+                    for (const auto& name : scalar_names) {
+                        if (block->m_scalar_fields.contains(name)) {
+                            batch_scalars[name].push_back(block->m_scalar_fields[name][k]);
+                        } else {
+                            batch_scalars[name].push_back(0.0f);
+                        }
+                    }
+
+                    // 批满提交
+                    if (batch_pts.size() >= batch_limit) {
+                        result_cloud->addPoints(batch_pts,
+                                                batch_colors.empty() ? nullptr : &batch_colors,
+                                                batch_normals.empty() ? nullptr : &batch_normals,
+                                                batch_scalars.isEmpty() ? nullptr : &batch_scalars);
+
+                        batch_pts.clear(); batch_colors.clear(); batch_normals.clear();
+                        for(auto& v : batch_scalars) v.clear();
+                    }
+                }
             }
-            if (oddNodes) indices.push_back(k);
         }
-        return indices;
+
+        // 提交剩余
+        if (!batch_pts.empty()) {
+            result_cloud->addPoints(batch_pts,
+                                    batch_colors.empty() ? nullptr : &batch_colors,
+                                    batch_normals.empty() ? nullptr : &batch_normals,
+                                    batch_scalars.isEmpty() ? nullptr : &batch_scalars);
+        }
+
+        result_cloud->update();
+        return result_cloud;
     }
 
     ///////////////////////////////////////////////////////////////////
@@ -451,12 +593,13 @@ namespace ct
                                  [&](const Cloud::Ptr& cloud) { return cloud->id() == id; });
         m_visible_clouds.erase(it, m_visible_clouds.end());
 
-        std::string preview_id = id.toStdString() + "_preview";
-        if (m_viewer->contains(preview_id))
-            m_viewer->removePointCloud(preview_id);
+        m_OctreeRenders.remove(id);
 
-        // 移除点云数据，并重新渲染窗口
-        m_viewer->removePointCloud(id.toStdString());
+        // TODO 这里清理的是什么？
+        std::string preview_id = id.toStdString() + "_preview";
+        if (m_viewer->contains(preview_id)) m_viewer->removePointCloud(preview_id);
+        if (m_viewer->contains(id.toStdString())) m_viewer->removePointCloud(id.toStdString());
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -479,7 +622,7 @@ namespace ct
     void CloudView::removeAllPointClouds()
     {
         m_visible_clouds.clear();
-
+        m_OctreeRenders.clear();
         m_viewer->removeAllPointClouds();
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
@@ -493,28 +636,35 @@ namespace ct
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const RGB& rgb)
     {
         cloud->setCloudColor(rgb);
-        auto renderCloud = cloud->getPreviewCloud();
 
-        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_handler(renderCloud);
-        m_viewer->updatePointCloud<pcl::PointXYZRGB>(renderCloud, rgb_handler, cloud->id().toStdString());
+        if (m_OctreeRenders.contains(cloud->id())) {
+            // 颜色变了，必须让 Block 变脏，重新生成 PolyData
+            m_OctreeRenders[cloud->id()]->invalidateCache();
+            m_OctreeRenders[cloud->id()]->update();
+        }
 
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setPointCloudColor(const QString &id, const RGB &rgb)
     {
-        m_viewer->setPointCloudRenderingProperties(
-                pcl::visualization::PCL_VISUALIZER_COLOR, rgb.rf(), rgb.gf(), rgb.bf(), id.toStdString()
-                );
-        if (m_auto_render) m_viewer->getRenderWindow()->Render();
+        for(auto& c : m_visible_clouds) {
+            if (c->id() == id) {
+                setPointCloudColor(c, rgb);
+                return;
+            }
+        }
     }
 
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const QString& axis)
     {
         cloud->setCloudColor(axis);
-        auto renderCloud = cloud->getPreviewCloud();
-        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_handler(renderCloud);
-        m_viewer->updatePointCloud<pcl::PointXYZRGB>(renderCloud, rgb_handler, cloud->id().toStdString());
+
+        if (m_OctreeRenders.contains(cloud->id())) {
+            m_OctreeRenders[cloud->id()]->invalidateCache();
+            m_OctreeRenders[cloud->id()]->update();
+        }
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -522,25 +672,38 @@ namespace ct
     {
         cloud->restoreColors();
 
-        auto renderCloud = cloud->getPreviewCloud();
-        pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb_handler(renderCloud);
-        m_viewer->updatePointCloud<pcl::PointXYZRGB>(renderCloud, rgb_handler, cloud->id().toStdString());
+        if (m_OctreeRenders.contains(cloud->id())) {
+            m_OctreeRenders[cloud->id()]->invalidateCache();
+            m_OctreeRenders[cloud->id()]->update();
+        }
 
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setPointCloudSize(const QString &id, float size)
     {
-        // setPointCloudRenderingProperties是PCLVisualizer类的一个成员函数，用于设置点云的渲染属性。size表示点的大小，id是点云标识符，0是视口索引
-        m_viewer->setPointCloudRenderingProperties(
-                pcl::visualization::PCL_VISUALIZER_POINT_SIZE, size, id.toStdString(), 0);
+        for(auto& c : m_visible_clouds) {
+            if (c->id() == id) {
+                c->setPointSize(size); // 假设 Cloud 类有这个 setter
+
+                // 强制触发一次 update，应用新属性
+                if (m_OctreeRenders.contains(id)) m_OctreeRenders[id]->update();
+                break;
+            }
+        }
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
     void CloudView::setPointCloudOpacity(const QString &id, float value)
     {
-        m_viewer->setPointCloudRenderingProperties(
-                pcl::visualization::PCL_VISUALIZER_OPACITY, value, id.toStdString(), 0);
+        for(auto& c : m_visible_clouds) {
+            if (c->id() == id) {
+                c->setOpacity(value);
+                if (m_OctreeRenders.contains(id)) m_OctreeRenders[id]->update();
+                break;
+            }
+        }
+
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
     }
 
@@ -604,25 +767,26 @@ namespace ct
     }
 
     void CloudView::setPointCloudVisibility(const QString &id, bool visible) {
-        std::string std_id = id.toStdString();
+        //  控制 OctreeRenderer
+        if (m_OctreeRenders.contains(id)) {
+            m_OctreeRenders[id]->setVisibility(visible);  // 添加这行
+            m_OctreeRenders[id]->update();
+            // TODO 建议：在 OctreeRenderer::update() 中加一个 m_visible 标记
 
-        auto cloud_map = m_viewer->getCloudActorMap();
-        auto it = cloud_map->find(std_id);
-        if (it != cloud_map->end()){
-            it->second.actor->SetVisibility(visible ? 1 : 0);
-        }
+            // 控制 PCL 管理的辅助对象
+            std::string std_id = id.toStdString();
+            std::string normal_id = id.toStdString() + "-normals";
+            std::string box_id = id.toStdString() + "-box";
 
-        std::string normal_id = id.toStdString() + "-normals";
-        auto it_normal = cloud_map->find(normal_id);
-        if (it_normal != cloud_map->end()){
-            it_normal->second.actor->SetVisibility(visible ? 1 : 0);
-        }
+            // PCL Helper
+            if (m_viewer->contains(normal_id)) m_viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, visible?1.0:0.0, normal_id);
 
-        std::string box_id = id.toStdString() + "-box";
-        auto shape_map = m_viewer->getShapeActorMap();
-        auto it_box = shape_map->find(box_id);
-        if (it_box != shape_map->end()){
-            it_box->second->SetVisibility(visible ? 1 : 0);
+            // Shapes
+            auto shape_map = m_viewer->getShapeActorMap();
+            auto it_box = shape_map->find(box_id);
+            if (it_box != shape_map->end()){
+                it_box->second->SetVisibility(visible ? 1 : 0);
+            }
         }
 
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
@@ -776,6 +940,19 @@ namespace ct
         };
         m_render->ResetCamera(bounds);
         m_render->ResetCameraClippingRange();
+        updateRenderers();
+        m_viewer->getRenderWindow()->Render();
+    }
+
+    void CloudView::refresh()
+    {
+        // 1. 更新所有 OctreeRenderer (确保可见性等状态正确应用)
+        updateRenderers();
+
+        // 2. 重置相机的 Clipping Range (防止物体被裁剪)
+        m_render->ResetCameraClippingRange();
+
+        // 3. 强制重绘
         m_viewer->getRenderWindow()->Render();
     }
 

@@ -234,30 +234,21 @@ void Cutting::cuttingCloud(bool select_in)
     // 遍历选中的点云
     for (auto& cloud : selected_clouds)
     {
-        std::vector<int> indices = m_cloudview->areaPick(m_pick_points, cloud, select_in);
+        ct::Cloud::Ptr cut_cloud = m_cloudview->areaPick(m_pick_points, cloud, select_in);
 
-        // 使用PCL ExtractIndices提取点
-        auto pcl_cloud = cloud->toPCL_XYZRGBN();
-        pcl::PointIndices::Ptr pcl_indices(new pcl::PointIndices);
-        pcl_indices->indices = indices;
+        if (!cut_cloud || cut_cloud->empty()) {
+            printW("No points selected.");
+            continue;
+        }
 
-        pcl::ExtractIndices<ct::PointXYZRGBN> extract;
-        extract.setInputCloud(pcl_cloud);
-        extract.setIndices(pcl_indices);
-        extract.setNegative(false);
-
-        pcl::PointCloud<ct::PointXYZRGBN>::Ptr pcl_cut_cloud(new pcl::PointCloud<ct::PointXYZRGBN>);
-        extract.filter(*pcl_cut_cloud);
-
-        // 从PCL点云创建Cloud对象
-        ct::Cloud::Ptr cut_cloud = ct::Cloud::fromPCL_XYZRGBN(*pcl_cut_cloud);
         cut_cloud->setId(cloud->id() + CUTTING_PRE_FLAG);
-        cut_cloud->update();
+
         m_cloudview->addPointCloud(cut_cloud);
         m_cloudview->addBox(cut_cloud);
-        m_cloudview->setPointCloudColor(cut_cloud->id(), ct::Color::Green);
-        m_cloudview->setPointCloudSize(cut_cloud->id(), cut_cloud->pointSize() + 2);
-        m_cutting_map[cloud->id()] =cut_cloud;
+        m_cloudview->setPointCloudColor(cut_cloud, ct::Color::Green); // 新接口
+        m_cloudview->setPointCloudSize(cut_cloud->id(), cloud->pointSize() + 2); // 保持原逻辑
+
+        m_cutting_map[cloud->id()] = cut_cloud;
     }
 }
 

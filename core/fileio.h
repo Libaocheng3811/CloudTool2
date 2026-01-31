@@ -6,9 +6,56 @@
 #include "exports.h"
 
 #include <atomic>
+#include <QObject>
+#include <QString>
+#include <QMap>
+#include <vector>
 
 namespace ct
 {
+    /**
+    * @brief 流式加载缓冲区
+    * @details 用于在读取文件时暂存一批数据，满额后一次性提交给 Cloud 进行八叉树插入
+    */
+    struct CloudBatch {
+        std::vector<PointXYZ> points;
+        std::vector<RGB> colors;
+        std::vector<CompressedNormal> normals;
+        QMap<QString, std::vector<float>> scalars;
+
+        // 预留大小，避免频繁扩容
+        void reserve(size_t size) {
+            points.reserve(size);
+            colors.reserve(size);
+            normals.reserve(size);
+            // scalars 在运行时动态添加，无法预先 reserve，但在 addPoints 时会自动处理
+        }
+
+        void clear() {
+            points.clear();
+            colors.clear();
+            normals.clear();
+            // 清空数据但保留 Key，避免重复构造 Map
+            for (auto it = scalars.begin(); it != scalars.end(); ++it) {
+                it.value().clear();
+            }
+        }
+
+        // 检查是否为空
+        bool empty() const { return points.empty(); }
+
+        // 提交数据到 Cloud
+        void flushTo(Cloud::Ptr& cloud) {
+            if (points.empty()) return;
+
+            cloud->addPoints(points,
+                             colors.empty() ? nullptr : &colors,
+                             normals.empty() ? nullptr : &normals,
+                             scalars.isEmpty() ? nullptr : &scalars);
+            clear();
+        }
+    };
+
     class CT_EXPORT FileIO : public QObject
     {
         Q_OBJECT
@@ -92,6 +139,9 @@ namespace ct
 
     private:
         std::atomic<bool> m_is_canceled{false};
+
+        // 批处理大小 (例如 50万点提交一次)
+        const size_t BATCH_SIZE = 500000;
     };
 }
 

@@ -179,29 +179,30 @@ void PickPoints::updateInfo(int index)
     }
 }
 
-void PickPoints::updatePanelInfo(int index, const ct::PointXYZRGBN &pt, const ct::Cloud::Ptr& cloud) {
+void PickPoints::updatePanelInfo(const ct::PickResult& res) {
     // 基础样式
     QString html = "<body style='font-family: Microsoft YaHei, Arial, sans-serif; font-size: 9pt; color: #333;'>";
 
     // 标题和索引
-    html += QString("<div style='background-color: #E0E0E0; padding: 4px; border-radius: 3px;'><b>Index:</b> <span style='color:#0055AA'>%1</span></div>").arg(index);
+    html += QString("<div style='background-color: #E0E0E0; padding: 4px; border-radius: 3px;'><b>Picked Point</b></div>");
     html += "<table width='100%' border='0' cellspacing='0' cellpadding='2' style='margin-top: 5px;'>";
 
     // --- 动态生成表头 ---
     html += "<tr>";
     html += "<td style='color:#888; font-size:8pt;'>COORD</td>"; // XYZ 永远存在
 
-    bool showRGB = cloud->hasRGB();
+    bool showRGB = res.cloud && res.cloud->hasColors();
     if (showRGB) {
         html += "<td style='color:#888; font-size:8pt;'>RGB</td>";
     }
 
-    bool showNormal = cloud->hasNormals();
+    bool showNormal = res.cloud && res.cloud->hasNormals();
     if (showNormal) {
         html += "<td style='color:#888; font-size:8pt;'>NORMAL</td>";
     }
     html += "</tr>";
 
+    const auto& pt = res.point;
     // --- 第一行 (X, R, Nx) ---
     html += QString("<tr><td>X: %1</td>").arg(pt.x, 0, 'f', 3);
     if (showRGB)    html += QString("<td>R: %1</td>").arg((int)pt.r);
@@ -222,22 +223,18 @@ void PickPoints::updatePanelInfo(int index, const ct::PointXYZRGBN &pt, const ct
 
     html += "</table>";
 
-    QStringList scalarNames = cloud->getScalarFieldNames();
-
-    if (!scalarNames.isEmpty()) {
+    if (!res.scalars.isEmpty()) {
         html += "<div style='margin-top: 8px; border-top: 1px solid #DDD; padding-top: 4px;'></div>";
         html += "<table width='100%' border='0' cellspacing='0' cellpadding='2'>";
 
-        for (const QString& name : scalarNames) {
-            const std::vector<float>* data = cloud->getScalarField(name);
-            if (data && index < data->size()) {
-                float val = (*data)[index];
-
-                // 简单的两列布局：字段名 | 数值
-                html += QString("<tr><td style='color:#666;'>%1:</td><td><b>%2</b></td></tr>")
-                        .arg(name)
-                        .arg(val, 0, 'f', 6);
-            }
+        // 使用 QMapIterator 遍历
+        QMapIterator<QString, float> i(res.scalars);
+        while (i.hasNext()) {
+            i.next();
+            // 简单的两列布局：字段名 | 数值
+            html += QString("<tr><td style='color:#666;'>%1:</td><td><b>%2</b></td></tr>")
+                    .arg(i.key())
+                    .arg(i.value(), 0, 'f', 6);
         }
         html += "</table>";
     }
@@ -253,16 +250,17 @@ void PickPoints::updatePanelInfo(int index, const ct::PointXYZRGBN &pt, const ct
 
 void PickPoints::mouseLeftPressed(const ct::PointXY &pt)
 {
-    int index = m_cloudview->singlePick(pt, m_selected_cloud->id());
-    if (index < 0) return;
+    ct::PickResult res = m_cloudview->singlePick(pt, m_selected_cloud->id());
+    if (!res.valid) return;
 
-    ct::PointXYZRGBN  current_pt = m_selected_cloud->getPoint(index);
+    ct::PointXYZRGBN  current_pt = res.point;
     int mode = ui->cbox_type->currentIndex();
 
     if (mode == PICK_SINGLE){
         m_pick_point = pt;
         m_pick_cloud->clear();
-        m_pick_cloud->push_back(current_pt);
+
+        m_pick_cloud->addPoint(current_pt);
         m_pick_cloud->setId(m_selected_cloud->id() + PICKING_PRE_FLAG);
 
         //高亮显示红点
@@ -271,9 +269,9 @@ void PickPoints::mouseLeftPressed(const ct::PointXY &pt)
         m_cloudview->addPointCloud(m_pick_cloud);
         m_cloudview->setPointCloudColor(m_pick_cloud, ct::Color::Red);
 
-        updatePanelInfo(index, current_pt, m_selected_cloud);
+        updatePanelInfo(res);
 
-        printI(QString("Picked Point: %1").arg(index));
+        printI(QString("Picked Point: (%1, %2, %3)").arg(current_pt.x).arg(current_pt.y).arg(current_pt.z));
     }
     else if (mode == PICK_PAIR){
         if(ui->infoBrowser->isVisible()){
@@ -285,7 +283,8 @@ void PickPoints::mouseLeftPressed(const ct::PointXY &pt)
             //第一点
             m_pick_point = pt;
             m_pick_cloud->clear();
-            m_pick_cloud->push_back(current_pt);
+
+            m_pick_cloud->addPoint(current_pt);
 
             m_pick_cloud->setPointSize(15);
             m_cloudview->removePointCloud(m_pick_cloud->id());
@@ -308,7 +307,8 @@ void PickPoints::mouseLeftPressed(const ct::PointXY &pt)
             m_pick_cloud->clear();
             pick_start = true;
         }
-        m_pick_cloud->push_back(current_pt);
+
+        m_pick_cloud->addPoint(current_pt);
 
         // 更新显示
         m_pick_cloud->setPointSize(15);
@@ -325,11 +325,12 @@ void PickPoints::mouseLeftReleased(const ct::PointXY &pt)
     if (ui->cbox_type->currentIndex() == PICK_PAIR && pick_start){
         if(m_pick_point.x == pt.x && m_pick_point.y == pt.y) return;
 
-        int index = m_cloudview->singlePick(pt, m_selected_cloud->id());
-        if (index < 0) return;
+        ct::PickResult res = m_cloudview->singlePick(pt, m_selected_cloud->id());
+        if (!res.valid) return;
 
-        ct::PointXYZRGBN end_pt = m_selected_cloud->getPoint(index);
-        m_pick_cloud->push_back(end_pt);
+        ct::PointXYZRGBN end_pt = res.point;
+
+        m_pick_cloud->addPoint(end_pt);
 
         //画线
         m_pick_cloud->setPointSize(15);
@@ -337,7 +338,14 @@ void PickPoints::mouseLeftReleased(const ct::PointXY &pt)
         m_cloudview->addPointCloud(m_pick_cloud);
         m_cloudview->setPointCloudColor(m_pick_cloud, ct::Color::Red);
 
-        ct::PointXYZRGBN start_pt = m_pick_cloud->getPoint(0);
+        ct::PointXYZRGBN start_pt;
+        if (!m_pick_cloud->getBlocks().empty() && !m_pick_cloud->getBlocks().front()->empty()) {
+            auto& block = m_pick_cloud->getBlocks().front();
+            const auto& p = block->m_points[0];
+            start_pt.x = p.x; start_pt.y = p.y; start_pt.z = p.z;
+            // 颜色等属性如果需要也可以从 block->m_colors[0] 获取，但在计算距离时不需要
+        }
+
         m_cloudview->addArrow(end_pt, start_pt, ARROW_ID, true, ct::Color::Green);
 
         float distance = (start_pt.getVector3fMap() - end_pt.getVector3fMap()).norm();
@@ -373,27 +381,30 @@ void PickPoints::mouseMoved(const ct::PointXY &pt)
 {
     if (!pick_start) return;
 
-    int tmp = m_cloudview->singlePick(pt, m_selected_cloud->id());
-    if (tmp < 0){
+    ct::PickResult res = m_cloudview->singlePick(pt, m_selected_cloud->id());
+    if (!res.valid){
         if (ui->cbox_type->currentIndex() == PICK_PAIR) m_cloudview->removeShape(ARROW_ID);
         if (ui->cbox_type->currentIndex() == PICK_MULTI) m_cloudview->removeShape(POLYGONAL_ID);
         return;
     }
 
-    ct::PointXYZRGBN  current_hover_pt = m_selected_cloud->getPoint(tmp);
+    ct::PointXYZRGBN  current_hover_pt = res.point;
     int mode = ui->cbox_type->currentIndex();
 
     if (mode == PICK_PAIR){
         if (m_pick_cloud->empty()) return;
 
-        ct::PointXYZRGBN start_pt = m_pick_cloud->getPoint(0);
+        ct::PointXYZRGBN start_pt;
+        if (!m_pick_cloud->getBlocks().empty() && !m_pick_cloud->getBlocks().front()->empty()) {
+            const auto& p = m_pick_cloud->getBlocks().front()->m_points[0];
+            start_pt.x = p.x; start_pt.y = p.y; start_pt.z = p.z;
+        }
         m_cloudview->addArrow(current_hover_pt, start_pt, ARROW_ID, true, ct::Color::Green);
     }
     else if (mode == PICK_MULTI){
         // 创建临时点云用于显示多边形
         ct::Cloud::Ptr tmp_cloud = std::make_shared<ct::Cloud>();
-        tmp_cloud->addPoint(current_hover_pt.x, current_hover_pt.y, current_hover_pt.z,
-                          current_hover_pt.r, current_hover_pt.g, current_hover_pt.b);
+        tmp_cloud->addPoint(current_hover_pt);
 
         m_cloudview->addPolygon(tmp_cloud, POLYGONAL_ID, ct::Color::Green);
     }

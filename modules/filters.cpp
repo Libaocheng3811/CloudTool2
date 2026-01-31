@@ -37,7 +37,7 @@ namespace ct
     // 辅助函数，同步属性和自定义字段
     void syncCloudProperties(const Cloud::Ptr& source, Cloud::Ptr& target){
         target->setId(source->id());
-        target->setHasRGB(source->hasRGB());
+        target->setHasColors(source->hasColors());
 
         // TODO: 使用PCL的filter无法返回索引，就无法通过索引提取自定义字段信息，这里暂时丢弃自定义字段信息
 
@@ -71,7 +71,7 @@ namespace ct
         // 从 PCL 结果构造 Cloud
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         if (m_is_canceled) return;
@@ -109,7 +109,7 @@ namespace ct
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         if (m_is_canceled) return;
@@ -153,7 +153,7 @@ namespace ct
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         emit progress(100);
@@ -186,7 +186,7 @@ namespace ct
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         if (m_is_canceled) return;
@@ -220,7 +220,7 @@ namespace ct
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         if (m_is_canceled) return;
@@ -264,7 +264,7 @@ namespace ct
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         if (m_is_canceled) return;
@@ -297,7 +297,7 @@ namespace ct
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         if (m_is_canceled) return;
@@ -330,7 +330,7 @@ namespace ct
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         if (m_is_canceled) return;
@@ -364,7 +364,7 @@ namespace ct
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasRGB(cloud_->hasRGB());
+        cloud_filtered->setHasColors(cloud_->hasColors());
         cloud_filtered->backupColors();
 
         if (m_is_canceled) return;

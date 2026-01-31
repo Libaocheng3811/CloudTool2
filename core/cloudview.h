@@ -3,6 +3,7 @@
 
 #include "cloud.h"
 #include "exports.h"
+#include "octreerenderer.h"
 
 #include "QVTKOpenGLNativeWidget.h"
 #include <pcl/visualization/pcl_visualizer.h>
@@ -12,29 +13,41 @@
 #include <vtkCaptionActor2D.h>
 #include <vtkTextProperty.h>
 #include <vtkSmartPointer.h>
+#include <vtkCallbackCommand.h>
 
 #include <QMap>
+
+#include <memory>
 
 namespace ct {
 
     struct PointXY
     {
-        // 带参构造函数，在构造对象时必须传入两个参数，
         PointXY(int x, int y) : x(x), y(y) {}
         bool operator==(const PointXY& pt) const
         {
             return (this->x == pt.x) && (this->y == pt.y);
         }
         bool operator!=(const PointXY& pt) const { return !(*this == pt); }
-        // 既然已经使用了带参构造函数，那为什么还要给x,y赋值0.0f呢？？？
         float x = 0.0f;
         float y = 0.0f;
+    };
+
+    struct PickResult {
+        bool valid = false;          // 是否拾取成功
+        ct::PointXYZRGBN point;      // 拾取点的坐标、颜色、法线
+        ct::Cloud::Ptr cloud;        // 所属的点云对象
+
+        // 标量场数据 (Key: 字段名, Value: 数值)
+        QMap<QString, float> scalars;
     };
 
     class CT_EXPORT CloudView : public QVTKOpenGLNativeWidget{
         Q_OBJECT
     public:
         explicit CloudView(QWidget* parent = nullptr);
+
+        ~CloudView() override;
 
         ////////////////////////////////////////////////////////
         // add
@@ -55,6 +68,7 @@ namespace ct {
 
         /**
          * @brief 添加点云法线
+         * todo 法线的显示需要适配，暂时保留PCL 接口用于调试，或者后续重写为基于 Octree 的法线渲染
          */
         void addPointCloudNormals(const Cloud::Ptr& cloud, int level, float scale);
 
@@ -126,7 +140,7 @@ namespace ct {
          * @return int 选中点云的点索引
          * 主要是实现鼠标点击操作选点的功能
          */
-        int singlePick(const PointXY& p, const QString& target_cloud_id = "");
+        PickResult singlePick(const PointXY& p, const QString& target_cloud_id = "");
 
         /**
          * @brief 多边形选取,确定哪些点位于指定的多边形区域内或外
@@ -135,7 +149,7 @@ namespace ct {
          * @param in_out 选择是否反向
          * @return std::vector<int> 选中点云的点索引集合
          */
-        std::vector<int> areaPick(const std::vector<PointXY>& points, const Cloud::Ptr& cloud, bool in_out = false);
+        Cloud::Ptr areaPick(const std::vector<PointXY>& points, const Cloud::Ptr& cloud, bool in_out = false);
 
 
         ///////////////////////////////////////////////////////
@@ -306,6 +320,9 @@ namespace ct {
          */
         bool contains(const QString& id)
         {
+            if (m_OctreeRenders.contains(id)) {
+                return true;
+            }
             // 调用pcl::visualization::PCLVisualizer::Ptr类的contains方法，返回一个bool值，表示是否包含这个id
             return m_viewer->contains(id.toStdString());
         }
@@ -363,16 +380,10 @@ namespace ct {
         /**
          * @brief 手动刷新渲染窗口
          */
-        void refresh(){
-            m_render->ResetCameraClippingRange();
-            m_viewer->getRenderWindow()->Render(); }
+        void refresh();
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        /**
-         * @brief 任何从QObject派生的类都可以重新实现event()函数，（一个类接收到事件后，首先会由函数event处理）
-         * QWidget就是重写了event()函数，并针对典型事件定义了专门的事件处理函数
-         */
     protected:
         void mousePressEvent(QMouseEvent* event) override;
         void mouseReleaseEvent(QMouseEvent* event);
@@ -391,6 +402,10 @@ namespace ct {
     private:
         void setView(const Eigen::Vector3f& direction, const Eigen::Vector3f& up);
 
+        // VTK 交互/渲染回调
+        static void OnRenderEvent(vtkObject* caller, unsigned long eventId, void* clientData, void* callData);
+        void updateRenderers();
+
     private:
         struct InfoData{
             QString text;
@@ -401,10 +416,12 @@ namespace ct {
 
     private:
         Q_DISABLE_COPY(CloudView);
+
         bool m_show_id;
         int m_info_level;
         QString m_last_id;
         QString m_current_id; // 用于记录当前显示的ID字符串
+
         pcl::visualization::PCLVisualizer::Ptr m_viewer;
         vtkSmartPointer<vtkRenderer> m_render;
         vtkSmartPointer<vtkGenericOpenGLRenderWindow> m_renderwindow;
@@ -413,6 +430,9 @@ namespace ct {
         // 维护一个正在显示的Cloud::Ptr列表，方便进行预览模式切换
         std::vector<Cloud::Ptr> m_visible_clouds;
         bool m_auto_render = true; //默认开启自动渲染
+
+        QMap<QString, std::shared_ptr<OctreeRenderer>> m_OctreeRenders;
+        unsigned long m_observer_tag = 0; // 回调 ID
 
     };
 } // namespace ct

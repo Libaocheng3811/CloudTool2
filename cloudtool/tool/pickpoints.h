@@ -43,7 +43,7 @@ public:
 
 private:
     void updateInfo(int index);
-    void updatePanelInfo(int index, const ct::PointXYZRGBN& pt, const ct::Cloud::Ptr& cloud);
+    void updatePanelInfo(const ct::PickResult& res);
 
 public slots:
     void mouseLeftPressed(const ct::PointXY& pt);

@@ -10,7 +10,7 @@
 
 namespace ct{
     inline void syncAllScalarFields(const Cloud::Ptr& source, Cloud::Ptr& target, const std::vector<int>& indices){
-        target->setHasRGB(source->hasRGB());
+        target->setHasColors(source->hasColors());
 
         // 遍历源点云自定义字段
         QStringList fields = source->getScalarFieldNames();
