@@ -107,13 +107,14 @@ void VegPlugin::onFilterDone(const ct::Cloud::Ptr &veg_cloud, const ct::Cloud::P
     m_cloudtree->closeProgress();
     printI(QString("Vegetation Filter Finished in %1 s").arg(time));
 
-    if (veg_cloud && !veg_cloud->empty()) {
-        veg_cloud->makeAdaptive();
+    if (veg_cloud) {
+        veg_cloud->setId(m_cloud->id() + "_vegetation");
+        if (!veg_cloud->empty()) veg_cloud->makeAdaptive();
     }
 
-    // 2. 处理非植被点云
-    if (non_veg_cloud && !non_veg_cloud->empty()) {
-        non_veg_cloud->makeAdaptive();
+    if (non_veg_cloud) {
+        non_veg_cloud->setId(m_cloud->id() + "_non_vegetation");
+        if (!non_veg_cloud->empty()) non_veg_cloud->makeAdaptive();
     }
 
     std::vector<ct::Cloud::Ptr> results;

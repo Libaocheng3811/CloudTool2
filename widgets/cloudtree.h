@@ -211,6 +211,9 @@ namespace ct
 
         Eigen::Vector3d m_last_shift = Eigen::Vector3d::Zero();
         bool m_hasLastShift = false;
+
+        // 用于记录加载队列中的点云数量
+        int m_loading_queue_count = 0;
     };
 }
 

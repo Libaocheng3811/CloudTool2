@@ -94,6 +94,8 @@ namespace ct
         QStringList filePathList = QFileDialog::getOpenFileNames(this, tr("open cloud files"), m_path, filter);
         if (filePathList.isEmpty()) return;
 
+        m_loading_queue_count = filePathList.size();
+
         showProgress("Loading Point Cloud...");
 
         bindWorker(m_fileio);
@@ -417,7 +419,21 @@ namespace ct
             QTreeWidgetItem* groupItem = addItem(nullptr, folderName);
             insertCloud(cloud, groupItem, true);
         }
-        closeProgress();
+        m_loading_queue_count--;
+        if (m_loading_queue_count <= 0) {
+            // 所有任务都完成了，关闭进度条
+            m_loading_queue_count = 0; // 归零防守
+            closeProgress();
+        } else {
+            // 还有任务在队列中，更新界面提示，而不是关闭
+            if (m_processing_dialog) {
+                // 重置进度条为 0，准备显示下一个文件的进度
+                m_processing_dialog->setProgress(0);
+                // 更新提示文字
+                QString msg = QString("Loading Point Cloud... (%1 remaining)").arg(m_loading_queue_count);
+                m_processing_dialog->setMessage(msg);
+            }
+        }
     }
 
     void CloudTree::saveCloudResult(bool success, const QString &path, float time)
@@ -645,6 +661,16 @@ namespace ct
                     QStringList fields = update_cloud->getScalarFieldNames();
                     for (const QString& f : fields) color_mode->addItem(f);
 
+                    QString currentMode = update_cloud->currentColorMode();
+                    // 尝试在列表中找到当前模式
+                    int idx = color_mode->findText(currentMode);
+                    if (idx >= 0) {
+                        color_mode->setCurrentIndex(idx);
+                    } else {
+                        // 如果没找到（异常情况），默认选 RGB
+                        color_mode->setCurrentIndex(0);
+                    }
+
                     connect(color_mode, &QComboBox::currentTextChanged,
                             [=](const QString& text){
                                 if (text == "RGB (Default)") {
@@ -681,6 +707,7 @@ namespace ct
     }
 
     void CloudTree::closeProgress() {
+        m_loading_queue_count = 0;
         if (m_processing_dialog){
             m_processing_dialog->close();
             delete m_processing_dialog;

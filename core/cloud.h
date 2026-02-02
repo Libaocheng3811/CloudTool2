@@ -140,6 +140,7 @@ namespace ct
         void setCloudColor(const RGB& rgb);           // 设置纯色
         void setCloudColor(const QString& axis);      //按坐标轴着色
         void updateLODColorRecursive(OctreeNode* node, const RGB& rgb);
+        QString currentColorMode() const { return m_current_color_mode; }
 
         void backupColors();  // 所有 Block 备份当前颜色
         void restoreColors(); // 所有 Block 还原颜色
@@ -331,6 +332,7 @@ namespace ct
         QString m_type = CLOUD_TYPE_XYZ;
 
         bool m_color_modified = false;
+        QString m_current_color_mode = "RGB (Default)";
 
         static std::vector<float> s_jet_lut; // 颜色映射表
     };

@@ -1036,6 +1036,7 @@ namespace ct
         }
         // =========================================================
 
+        m_current_color_mode = axis;
         m_color_modified = true;
         invalidateRenderCache();
     }
@@ -1136,6 +1137,7 @@ namespace ct
             // 重新生成 LOD，它会从 Block 中抓取最新的颜色
             this->generateLOD();
         }
+        m_current_color_mode = field_name;
         m_color_modified = true;
         invalidateRenderCache();
     }
@@ -1229,15 +1231,13 @@ namespace ct
 
                 *block->m_colors = *block->m_backup_colors;
                 if (!block->m_colors->empty()) any_restored = true;
-
-                // CloudCompare 的逻辑通常是保留备份直到显式清除或覆盖
-                // 这里我们保留备份，允许用户反复切换
             }
         }
 
         if (any_restored) {
             m_has_rgb = true; // 确保 Cloud 状态正确
             m_color_modified = false; // 颜色已恢复到原始状态（或上一次备份的状态）
+            m_current_color_mode = "RGB (Default)";
             invalidateRenderCache();
         }
     }
@@ -1590,10 +1590,6 @@ namespace ct
         // 遍历所有 Block，移除 NaN
         for (auto& block : m_all_blocks) {
             if (block->empty()) continue;
-
-            // 简单的 remove_if + erase 逻辑
-            // 需要同步处理 points, colors, normals, scalars
-            // 这在 SOA 结构下比较麻烦，需要手写压缩逻辑
 
             size_t write_idx = 0;
             size_t read_idx = 0;
