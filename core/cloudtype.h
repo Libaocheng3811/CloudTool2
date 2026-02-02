@@ -112,24 +112,15 @@ namespace ct {
     }
 
     /**
-     * @brief 点云自适应配置参数
+     * @brief 自动八叉树配置参数
      */
-    struct CloudConfig {
-        // 是否启用八叉树 (点数过少时关闭)
-        bool enableOctree = true;
-
-        // 八叉树参数
-        size_t maxPointsPerBlock = 60000; // 一个block的最大点数
-        size_t maxLODPoints = 30000;      // LOD显示的最大点数，也就是每个block的降采样最大点数
-        int maxDepth = 8;                 // 八叉树的最大深度
-
-        // 渲染预算 (可选，暂时预留)
-        size_t pointBudget = 10000000;
-    };
-
     namespace AutoOctreeConfig {
         // 启用八叉树的最小点数阈值 (小于此值走直通模式)
         static constexpr size_t MIN_POINTS_FOR_OCTREE = 10000000;
+
+        // 默认的标准块大小 (用于初始化或回退)
+        // 设为 6万 是比较通用的经验值
+        static constexpr size_t DEFAULT_BLOCK_SIZE = 60000;
 
         // 目标块数量 (用于反推理想的块大小)
         // 并不是强制只有这么多块，而是作为一个参考基准
@@ -150,6 +141,24 @@ namespace ct {
         static constexpr int    DEFAULT_MAX_DEPTH = 8;
     }
 
+    /**
+     * @brief 点云配置参数
+     */
+    struct CloudConfig {
+        // 是否启用八叉树 (点数过少时关闭)
+        bool enableOctree = true;
+
+        // 使用常量初始化，消除硬编码
+        size_t maxPointsPerBlock = AutoOctreeConfig::DEFAULT_BLOCK_SIZE;
+
+        // 默认 LOD = Block * Ratio
+        size_t maxLODPoints = static_cast<size_t>(AutoOctreeConfig::DEFAULT_BLOCK_SIZE * AutoOctreeConfig::LOD_POINT_RATIO);
+
+        int maxDepth = AutoOctreeConfig::DEFAULT_MAX_DEPTH;
+
+        // 渲染预算 (可选，暂时预留)
+        size_t pointBudget = 10000000;
+    };
 
 } // namespace ct
 

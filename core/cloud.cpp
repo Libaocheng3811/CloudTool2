@@ -90,7 +90,6 @@ namespace ct
 
         // 第一级：直通模式 (Passthrough)
         // 如果点数极少 (< 200万)，不需要八叉树，直接当做一个大块处理
-        // TODO 这里可以用宏替换
         if (totalPoints < ct::AutoOctreeConfig::MIN_POINTS_FOR_OCTREE) {
             config.enableOctree = false;
             config.maxPointsPerBlock = totalPoints + 1000; // 确保不分裂
@@ -140,7 +139,6 @@ namespace ct
         // 2. 调用静态算法计算建议配置
         CloudConfig config = Cloud::calculateAdaptiveConfig(count);
 
-        // 3. 【关键纠错逻辑】也就是“治本”的地方
         // 检查现状：如果内存里的树结构已经是分裂状态（说明算法构建时产生了八叉树），
         // 那么即使点数很少（比如200万），也必须强制启用 Octree 和 LOD，
         // 否则渲染器遍历到内部节点时会因为 maxLODPoints=0 而显示空洞。
@@ -148,17 +146,18 @@ namespace ct
             if (!config.enableOctree) {
                 // 强制修正为八叉树模式
                 config.enableOctree = true;
-                config.maxDepth = 8; // 恢复默认深度
+                config.maxDepth = ct::AutoOctreeConfig::DEFAULT_MAX_DEPTH; // 恢复默认深度
 
-                // 强制给予 LOD 预算
-                config.maxLODPoints = static_cast<size_t>(config.maxPointsPerBlock * 0.75);
-                if (config.maxLODPoints < 100000) config.maxLODPoints = 100000;
+                config.maxPointsPerBlock = ct::AutoOctreeConfig::DEFAULT_BLOCK_SIZE;
             }
 
-            // 双重保险：如果启用八叉树但 LOD 为 0，强制修正
-            if (config.enableOctree && config.maxLODPoints == 0) {
-                config.maxLODPoints = 100000;
-            }
+            size_t calcLOD = static_cast<size_t>(config.maxPointsPerBlock * ct::AutoOctreeConfig::LOD_POINT_RATIO);
+
+            // 应用上下限钳位 (Clamping)
+            if (calcLOD < ct::AutoOctreeConfig::MIN_LOD_SIZE) calcLOD = ct::AutoOctreeConfig::MIN_LOD_SIZE;
+            if (calcLOD > ct::AutoOctreeConfig::MAX_LOD_SIZE) calcLOD = ct::AutoOctreeConfig::MAX_LOD_SIZE;
+
+            config.maxLODPoints = calcLOD;
         }
 
         // 4. 应用配置
