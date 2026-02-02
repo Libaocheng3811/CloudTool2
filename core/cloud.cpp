@@ -958,9 +958,8 @@ namespace ct
         float range = max_v - min_v;
         if (range < 1e-6f) range = 1.0f;
 
-        // HSV 转 RGB lambda (保持不变)
+        // HSV 转 RGB lambda
         auto hsv2rgb = [](float h, float s, float v, uint8_t& r, uint8_t& g, uint8_t& b) {
-            // ... (同原代码，省略以节省篇幅) ...
             float c = v * s;
             float x = c * (1 - std::abs(std::fmod(h * 6, 2.0f) - 1));
             float m = v - c;
@@ -978,6 +977,7 @@ namespace ct
             b = static_cast<uint8_t>((b_ + m) * 255);
         };
 
+        // 1. 更新 Block (叶子节点)
 #pragma omp parallel for
         for (int k = 0; k < m_all_blocks.size(); ++k) {
             auto& block = m_all_blocks[k];
@@ -989,11 +989,52 @@ namespace ct
                 float val = (axis == "x") ? pt.x : (axis == "y") ? pt.y : pt.z;
 
                 float norm = (val - min_v) / range;
+                if(norm < 0) norm = 0; if(norm > 1) norm = 1;
                 float hue = (1.0f - norm) * 0.66f;
 
                 hsv2rgb(hue, 1.0f, 1.0f, (*block->m_colors)[i].r, (*block->m_colors)[i].g, (*block->m_colors)[i].b);
             }
+            block->m_is_dirty = true;
+            block->m_vtk_polydata.reset();
         }
+
+        // =========================================================
+        // 【高性能方案 B】递归原地更新 LOD 颜色
+        // =========================================================
+        // 既然 LOD 点本身就有坐标，我们直接遍历树计算颜色，无需 generateLOD 重建
+
+        // 定义递归 Lambda (需要包含 <functional>)
+        std::function<void(OctreeNode*)> updateLOD = [&](OctreeNode* node) {
+            if (!node) return;
+
+            // 1. 处理当前节点的 LOD 点
+            if (!node->m_lod_points.empty()) {
+                for (auto& p : node->m_lod_points) {
+                    float val = (axis == "x") ? p.x : (axis == "y") ? p.y : p.z;
+                    float norm = (val - min_v) / range;
+                    if(norm < 0) norm = 0; if(norm > 1) norm = 1;
+
+                    float hue = (1.0f - norm) * 0.66f;
+
+                    hsv2rgb(hue, 1.0f, 1.0f, p.r, p.g, p.b);
+                }
+                node->m_lod_dirty = true;
+                node->m_vtk_lod_polydata.reset();
+            }
+
+            // 2. 递归子节点
+            for (int i = 0; i < 8; ++i) {
+                if (node->m_children[i]) {
+                    updateLOD(node->m_children[i]);
+                }
+            }
+        };
+
+        // 执行递归
+        if (m_octree_root && m_config.enableOctree) {
+            updateLOD(m_octree_root.get());
+        }
+        // =========================================================
 
         m_color_modified = true;
         invalidateRenderCache();
@@ -1086,8 +1127,15 @@ namespace ct
                 (*block->m_colors)[i].g = (packed >> 8) & 0xFF;
                 (*block->m_colors)[i].b = packed & 0xFF;
             }
+            block->m_is_dirty = true;
+            block->m_vtk_polydata.reset();
         }
 
+        // 同步更新LOD节点颜色，因为LOD节点不直接存储，所以无法直接生成
+        if (m_octree_root && m_config.enableOctree) {
+            // 重新生成 LOD，它会从 Block 中抓取最新的颜色
+            this->generateLOD();
+        }
         m_color_modified = true;
         invalidateRenderCache();
     }

@@ -151,7 +151,7 @@ namespace ct
         // 如果 parentItem 不为空，说明我们要在这个点云下创建子节点（比如选点结果）
         // 如果为空，说明是新加载的根点云，我们按逻辑可能需要创建一个"文件夹"作为根，或者直接作为根
         // 这里简化：直接作为 parentItem 的子节点，如果 parentItem 空，则作为 TopLevel
-        QTreeWidgetItem* newItem = addItem(parentItem, cloud->id(), selected);
+        QTreeWidgetItem* newItem = addItem(parentItem, cloud->id(), false);
 
         m_cloud_map.insert(newItem, cloud);
         m_cloudview->addPointCloud(cloud); // 渲染
@@ -173,6 +173,10 @@ namespace ct
             Eigen::Vector3f min_pt = cloud->min().getVector3fMap();
             Eigen::Vector3f max_pt = cloud->max().getVector3fMap();
             m_cloudview->zoomToBounds(min_pt, max_pt);
+        }
+
+        if (selected){
+            this->setCurrentItem(newItem);
         }
 
         printI(QString("Add cloud[id:%1] done.").arg(cloud->id()));
@@ -542,14 +546,22 @@ namespace ct
             }
         }
 
-        //更新属性表,只显示第一个选中的
-        if (m_table && !selectedItems.isEmpty()){
-            // 清理旧控件
+        // 更新属性表
+        if (m_table) {
             const int COLOR_MODE_ROW = 7;
             m_table->removeCellWidget(4, 1); // point size
             m_table->removeCellWidget(5, 1); // Opacity
             m_table->removeCellWidget(6, 1); // Normal Checkbox
             m_table->removeCellWidget(COLOR_MODE_ROW, 1); // Color Mode
+
+            // 清除文本内容
+            for(int i=0; i<4; ++i) {
+                if (m_table->item(i, 1)) m_table->item(i, 1)->setText("");
+                else m_table->setItem(i, 1, new QTableWidgetItem(""));
+            }
+            m_cloudview->showCloudId(""); // 清空左下角 ID
+
+            QList<QTreeWidgetItem*> selectedItems = getSelectedItems();
 
             if (!selectedItems.isEmpty()){
                 // 只显示第一个选中的点云
@@ -557,16 +569,16 @@ namespace ct
                 Cloud::Ptr update_cloud = getCloud(firstItem);
 
                 if (update_cloud){
-                    // 基础文本信息
+                    // 1. 基础文本信息
                     m_table->setItem(0, 1, new QTableWidgetItem(update_cloud->id()));
                     m_table->setItem(1, 1, new QTableWidgetItem(update_cloud->type()));
                     m_table->setItem(2, 1, new QTableWidgetItem(QString::number(update_cloud->size())));
                     m_table->setItem(3, 1, new QTableWidgetItem(QString::number(update_cloud->resolution())));
 
-                    // 在视图左下角显示 ID
+                    // 2. 在视图左下角显示 ID
                     m_cloudview->showCloudId(update_cloud->id());
 
-                    // Point Size (SpinBox)
+                    // 3. Point Size (SpinBox)
                     QSpinBox *point_size = new QSpinBox;
                     point_size->setRange(1, 99);
                     point_size->setValue(update_cloud->pointSize());
@@ -577,7 +589,7 @@ namespace ct
                             });
                     m_table->setCellWidget(4, 1, point_size);
 
-                    // Opacity (DoubleSpinBox)
+                    // 4. Opacity (DoubleSpinBox)
                     QDoubleSpinBox* opacity = new QDoubleSpinBox;
                     opacity->setSingleStep(0.1);
                     opacity->setRange(0, 1);
@@ -589,16 +601,17 @@ namespace ct
                             });
                     m_table->setCellWidget(5, 1, opacity);
 
-                    // Normals (Checkbox + Scale)
+                    // 5. Normals (Checkbox + Scale)
                     QWidget* normals_widget = new QWidget;
                     QHBoxLayout* layout = new QHBoxLayout(normals_widget);
-                    layout->setMargin(0);
+                    layout->setContentsMargins(0,0,0,0); // 修正布局边距，防止显示不全
+                    layout->setSpacing(5);
 
                     QCheckBox* show_normals = new QCheckBox;
                     QDoubleSpinBox* scale = new QDoubleSpinBox;
                     scale->setSingleStep(0.01);
                     scale->setRange(0, 9999);
-                    scale->setValue(0.05); // 默认法线长度
+                    scale->setValue(0.05);
 
                     show_normals->setEnabled(update_cloud->hasNormals());
 
@@ -616,10 +629,10 @@ namespace ct
 
                     layout->addWidget(show_normals);
                     layout->addWidget(scale);
-                    layout->addStretch();
+                    layout->addStretch(); // 靠左对齐
                     m_table->setCellWidget(6, 1, normals_widget);
 
-                    // Color Mode (ComboBox)
+                    // 6. Color Mode (ComboBox)
                     if (m_table->rowCount() <= COLOR_MODE_ROW) m_table->setRowCount(COLOR_MODE_ROW + 1);
 
                     QComboBox* color_mode = new QComboBox;
@@ -647,15 +660,6 @@ namespace ct
                     m_table->setCellWidget(COLOR_MODE_ROW, 1, color_mode);
                 }
             }
-            else {
-                // 如果没有选中点云，则清空属性表
-                for(int i=0; i<4; ++i) m_table->setItem(i, 1, new QTableWidgetItem(""));
-                m_cloudview->showCloudId("");
-            }
-        }
-        else if (m_table){
-            for (int i = 0; i < 4; ++i) m_table->setItem(i, 1, new QTableWidgetItem(""));
-            m_cloudview->showCloudId("");
         }
 
         m_cloudview->setAutoRender(true);
