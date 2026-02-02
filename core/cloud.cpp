@@ -84,21 +84,107 @@ namespace ct
         std::swap(m_color_modified, other.m_color_modified);
     }
 
-    void Cloud::initOctree(const ct::Box &globalBox, int maxDepth) {
+    CloudConfig Cloud::calculateAdaptiveConfig(size_t totalPoints)
+    {
+        CloudConfig config;
+
+        // 第一级：直通模式 (Passthrough)
+        // 如果点数极少 (< 200万)，不需要八叉树，直接当做一个大块处理
+        // TODO 这里可以用宏替换
+        if (totalPoints < ct::AutoOctreeConfig::MIN_POINTS_FOR_OCTREE) {
+            config.enableOctree = false;
+            config.maxPointsPerBlock = totalPoints + 1000; // 确保不分裂
+            config.maxDepth = 0;
+            config.maxLODPoints = 0; // 没有 LOD
+            return config;
+        }
+
+        config.enableOctree = true;
+
+        // 第二级：分块大小自适应
+        // 目标：让叶子节点数量保持在 1000 ~ 5000 之间，以平衡剔除效率和 DrawCall
+        const size_t targetBlockCount = ct::AutoOctreeConfig::TARGET_BLOCK_COUNT;
+        size_t idealBlockSize = totalPoints / targetBlockCount;
+
+        // 钳位到硬件友好区间 [10k, 500k]
+        if (idealBlockSize < ct::AutoOctreeConfig::MIN_BLOCK_SIZE) idealBlockSize = ct::AutoOctreeConfig::MIN_BLOCK_SIZE;
+        if (idealBlockSize > ct::AutoOctreeConfig::MAX_BLOCK_SIZE) idealBlockSize = ct::AutoOctreeConfig::MAX_BLOCK_SIZE;
+
+        config.maxPointsPerBlock = idealBlockSize;
+
+        // 第三级：LOD 密度自适应
+        // LOD 点数通常是 Block 点数的 20% ~ 50%
+        // 如果 Block 很大，LOD 也要大，否则远看会变空
+        config.maxLODPoints = static_cast<size_t>(idealBlockSize * ct::AutoOctreeConfig::LOD_POINT_RATIO);
+
+        // LOD 硬上限 (防止单个 DrawCall 过大)
+        if (config.maxLODPoints > ct::AutoOctreeConfig::MAX_LOD_SIZE) config.maxLODPoints = ct::AutoOctreeConfig::MAX_LOD_SIZE;
+        if (config.maxLODPoints < ct::AutoOctreeConfig::MIN_LOD_SIZE) config.maxLODPoints = ct::AutoOctreeConfig::MIN_LOD_SIZE;
+
+        // 估算深度
+        // 简单的对数估算: log8(Total / BlockSize)
+        // 但通常 8 层足够应对大部分场景
+        config.maxDepth = ct::AutoOctreeConfig::DEFAULT_MAX_DEPTH;
+
+        return config;
+    }
+
+    void Cloud::makeAdaptive()
+    {
+        // 1. 确保基础统计数据（如点数、包围盒）是最新的
+        this->update();
+
+        size_t count = this->size();
+        if (count == 0) return;
+
+        // 2. 调用静态算法计算建议配置
+        CloudConfig config = Cloud::calculateAdaptiveConfig(count);
+
+        // 3. 【关键纠错逻辑】也就是“治本”的地方
+        // 检查现状：如果内存里的树结构已经是分裂状态（说明算法构建时产生了八叉树），
+        // 那么即使点数很少（比如200万），也必须强制启用 Octree 和 LOD，
+        // 否则渲染器遍历到内部节点时会因为 maxLODPoints=0 而显示空洞。
+        if (isStructureSplit()) {
+            if (!config.enableOctree) {
+                // 强制修正为八叉树模式
+                config.enableOctree = true;
+                config.maxDepth = 8; // 恢复默认深度
+
+                // 强制给予 LOD 预算
+                config.maxLODPoints = static_cast<size_t>(config.maxPointsPerBlock * 0.75);
+                if (config.maxLODPoints < 100000) config.maxLODPoints = 100000;
+            }
+
+            // 双重保险：如果启用八叉树但 LOD 为 0，强制修正
+            if (config.enableOctree && config.maxLODPoints == 0) {
+                config.maxLODPoints = 100000;
+            }
+        }
+
+        // 4. 应用配置
+        this->setConfig(config);
+
+        // 5. 生成 LOD (仅当需要时)
+        if (config.enableOctree && config.maxLODPoints > 0) {
+            this->generateLOD();
+        }
+
+        // 6. 再次更新以确保状态一致
+        this->update();
+    }
+
+    void Cloud::initOctree(const ct::Box &globalBox) {
         // 清空现有数据
         clear();
 
-        m_max_depth = maxDepth;
         m_box = globalBox; // 设置全局包围盒
-        m_box.width *= 1.05f;
-        m_box.height *= 1.05f;
-        m_box.depth *= 1.05f;
 
         // 创建根节点
         m_octree_root = std::make_shared<OctreeNode>(globalBox, 0, nullptr);
 
         // 根节点初始时也是叶子节点，拥有一个空的 Block
         m_octree_root->m_block = std::make_shared<CloudBlock>();
+        m_octree_root->m_block->m_points.reserve(m_config.maxPointsPerBlock);
 
         // 记录到扁平化列表中
         m_all_blocks.push_back(m_octree_root->m_block);
@@ -122,45 +208,97 @@ namespace ct
     }
 
     CloudBlock* Cloud::insertPointToOctree(OctreeNode* node, const PointXYZ& pt,
-                                    const RGB* color, const CompressedNormal* normal)
+                                           const RGB* color, const CompressedNormal* normal)
     {
-        // 如果是叶子节点，直接尝试放入
+        // ---------------------------------------------------------
+        // 情况 1: 当前是叶子节点 (Leaf Node)
+        // ---------------------------------------------------------
         if (node->isLeaf()) {
-            // 检查容量
-            if (node->m_block->size() < MAX_POINTS_PER_BLOCK || node->m_depth >= m_max_depth) {
-                // 未满，或者已达到最大深度（无法再分），直接添加
+            // 判断是否需要分裂：
+            // 1. 块是否已满 (根据配置的 maxPointsPerBlock)
+            // 2. 深度是否已达上限 (根据配置的 maxDepth)
+            // 注意：如果 enableOctree=false，通常 maxPointsPerBlock 会设得很大，这里就不会触发分裂
+            bool is_full = node->m_block->size() >= m_config.maxPointsPerBlock;
+            bool reach_depth = node->m_depth >= m_config.maxDepth;
+
+            if (!is_full || reach_depth) {
+                // 未满或无法再分 -> 直接存入当前 Block
                 node->m_block->addPoint(pt, color, normal, nullptr);
                 return node->m_block.get();
             } else {
-                // 满了且可以分裂 -> 执行分裂
+                // 已满且可分 -> 执行分裂
+                // splitNode 内部会将当前 Block 的点分发给子节点，并将当前节点转为内部节点
                 splitNode(node);
+
+                // 分裂后，当前节点变成内部节点，递归调用自己重新插入该点
                 return insertPointToOctree(node, pt, color, normal);
             }
         }
-            // 如果是内部节点，向下路由
+            // ---------------------------------------------------------
+            // 情况 2: 当前是内部节点 (Internal Node)
+            // ---------------------------------------------------------
         else {
+            // 统计经过该节点的总点数 (用于采样概率计算)
             node->m_total_points_in_node++;
-            if (node->m_total_points_in_node % 50 == 0) {
+
+            // =========================================================
+            // 动态 LOD 采样逻辑 (蓄水池采样 Reservoir Sampling)
+            // =========================================================
+            // 只有当配置允许生成 LOD 时才执行
+            if (m_config.maxLODPoints > 0) {
+
+                // 构造 LOD 点 (包含坐标和颜色)
                 PointXYZRGB lod_pt;
                 lod_pt.x = pt.x; lod_pt.y = pt.y; lod_pt.z = pt.z;
-                if (color) { lod_pt.r = color->r; lod_pt.g = color->g; lod_pt.b = color->b; }
-                else { lod_pt.r = 255; lod_pt.g = 255; lod_pt.b = 255; }
-                node->m_lod_points.push_back(lod_pt);
-                node->m_lod_dirty = true; // 标记脏
+                if (color) {
+                    lod_pt.r = color->r; lod_pt.g = color->g; lod_pt.b = color->b;
+                } else {
+                    lod_pt.r = 255; lod_pt.g = 255; lod_pt.b = 255;
+                }
+
+                // 阶段 A: 蓄水池未满，直接添加
+                if (node->m_lod_points.size() < m_config.maxLODPoints) {
+                    node->m_lod_points.push_back(lod_pt);
+                    node->m_lod_dirty = true;
+                }
+                    // 阶段 B: 蓄水池已满，进行随机替换
+                    // 以 k/n 的概率决定是否保留当前点 (k=容量, n=当前总数)
+                else {
+                    // 使用简单的 rand() 即可满足视觉随机性，不需要过于沉重的随机引擎
+                    // 生成 [0, total_points - 1] 之间的随机数
+                    // 注意：m_total_points_in_node 在前面已经++了
+
+                    // 概率逻辑：如果随机数落在 [0, capacity-1] 区间内，则替换该位置的点
+                    // 这样保证了所有流过的点被选中的概率都是 capacity / total
+                    size_t capacity = m_config.maxLODPoints;
+                    size_t current_n = node->m_total_points_in_node;
+
+                    // 简单的伪随机生成 (比 std::mt19937 快)
+                    // 如果 rand() 最大值较小，对于极大量点可能分布不匀，但在 LOD 视觉欺骗上通常足够
+                    // 如果需要更高质量，可使用 std::hash 或线性同余
+                    if ((size_t)rand() % current_n < capacity) {
+                        size_t replace_idx = rand() % capacity;
+                        node->m_lod_points[replace_idx] = lod_pt;
+                        node->m_lod_dirty = true;
+                    }
+                }
             }
 
+            // =========================================================
+            // 向下路由 (Routing)
+            // =========================================================
             int childIdx = node->getChildIndex(pt);
 
             // 如果对应子节点不存在，按需创建
             if (!node->m_children[childIdx]) {
                 // 计算子节点的包围盒
                 Box childBox;
-                childBox.width = node->m_box.width / 2.0;
-                childBox.height = node->m_box.height / 2.0;
-                childBox.depth = node->m_box.depth / 2.0;
+                childBox.width = node->m_box.width * 0.5f;
+                childBox.height = node->m_box.height * 0.5f;
+                childBox.depth = node->m_box.depth * 0.5f;
 
-                // 计算子节点中心
-                // childIdx 的二进制位： bit0=x, bit1=y, bit2=z (0=-, 1=+)
+                // 计算子节点中心偏移
+                // childIdx bits: 0=x, 1=y, 2=z
                 float dx = (childIdx & 1) ? 1.0f : -1.0f;
                 float dy = (childIdx & 2) ? 1.0f : -1.0f;
                 float dz = (childIdx & 4) ? 1.0f : -1.0f;
@@ -177,14 +315,22 @@ namespace ct
                 // 新节点初始化为叶子，分配 Block
                 newChild->m_block = std::make_shared<CloudBlock>();
 
+                // 【优化】根据配置预留内存，避免频繁 realloc
+                if (m_config.maxPointsPerBlock > 0) {
+                    newChild->m_block->m_points.reserve(m_config.maxPointsPerBlock);
+                }
+
                 // 继承父节点的属性状态 (如是否启用了颜色/法线)
-                // 注意：这里需要确保新 Block 的 m_colors/m_normals 指针被初始化
                 if (m_has_rgb) newChild->m_block->m_colors = std::make_unique<std::vector<RGB>>();
                 if (m_has_normals) newChild->m_block->m_normals = std::make_unique<std::vector<CompressedNormal>>();
 
+                // 处理颜色和法线的预留 (可选，如果内存允许)
+                if (m_has_rgb && m_config.maxPointsPerBlock > 0)
+                    newChild->m_block->m_colors->reserve(m_config.maxPointsPerBlock);
+
+                // 如果当前插入的点带有颜色，确保新 Block 启用颜色
                 if (color && !newChild->m_block->m_colors) {
                     newChild->m_block->m_colors = std::make_unique<std::vector<RGB>>();
-                    // 同时更新 Cloud 的状态
                     m_has_rgb = true;
                 }
                 if (normal && !newChild->m_block->m_normals) {
@@ -192,52 +338,82 @@ namespace ct
                     m_has_normals = true;
                 }
 
-                // 注册到列表
+                // 注册到全局列表
                 m_all_blocks.push_back(newChild->m_block);
 
                 node->m_children[childIdx] = newChild;
             }
 
-            // 递归
+            // 递归插入子节点
             return insertPointToOctree(node->m_children[childIdx], pt, color, normal);
         }
     }
 
     void Cloud::splitNode(OctreeNode* node)
     {
+        // 只有叶子节点才能分裂
         if (!node->isLeaf()) return;
 
-        // 获取原 Block 的数据所有权
+        // 1. 获取原 Block 的数据所有权，并将当前节点标记为内部节点
         auto oldBlock = node->m_block;
-
-        // 将当前节点标记为非叶子 (移除 Block 引用)
-        node->m_block = nullptr;
+        node->m_block = nullptr; // 移除引用，当前节点变为 Internal Node
 
         size_t n_points = oldBlock->size();
 
-        // 准备随机采样器用于 LOD
-        // 每 10 个点保留 1 个作为当前节点的 LOD 代理
-        int lod_interval = 30;
+        // 准备 LOD 参数
+        size_t lod_capacity = m_config.maxLODPoints;
 
-        // 分发数据
+        // 如果启用了 LOD，预分配内存以提升性能
+        if (lod_capacity > 0) {
+            node->m_lod_points.reserve(lod_capacity);
+        }
+
+        // 2. 遍历原 Block 中的所有点，分发到子节点并提取 LOD
         for (size_t i = 0; i < n_points; ++i) {
             const PointXYZ& pt = oldBlock->m_points[i];
 
-            // --- LOD 处理 ---
-            if (i % lod_interval == 0) {
+            // =========================================================
+            // A. LOD 提取 (蓄水池采样 Reservoir Sampling)
+            // =========================================================
+            // 逻辑：将旧块中的点作为“流”，从中均匀抽取 lod_capacity 个点保留在父节点
+            if (lod_capacity > 0) {
+
+                // 构造 LOD 点对象
                 PointXYZRGB lod_pt;
                 lod_pt.x = pt.x; lod_pt.y = pt.y; lod_pt.z = pt.z;
+
+                // 获取颜色
                 if (oldBlock->m_colors) {
                     const auto& c = (*oldBlock->m_colors)[i];
                     lod_pt.r = c.r; lod_pt.g = c.g; lod_pt.b = c.b;
                 } else {
                     lod_pt.r = 255; lod_pt.g = 255; lod_pt.b = 255;
                 }
-                node->m_lod_points.push_back(lod_pt);
+
+                // 采样逻辑
+                if (node->m_lod_points.size() < lod_capacity) {
+                    // 蓄水池未满，直接填入
+                    node->m_lod_points.push_back(lod_pt);
+                } else {
+                    // 蓄水池已满，以 (capacity / (i+1)) 的概率随机替换
+                    // 这里 i 是当前处理的第 i 个点，相当于流中的 index
+                    // 注意：rand() 并不是最高效的随机，但在分裂操作中通常不是瓶颈
+                    if ((size_t)rand() % (i + 1) < lod_capacity) {
+                        size_t replace_idx = rand() % lod_capacity;
+                        node->m_lod_points[replace_idx] = lod_pt;
+                    }
+                }
+
+                // 标记 LOD 数据变脏，需要更新渲染
+                node->m_lod_dirty = true;
             }
 
-            // --- 子节点查找与创建 ---
+            // =========================================================
+            // B. 子节点分发 (Distribution)
+            // =========================================================
             int childIdx = node->getChildIndex(pt);
+
+            // 如果子节点不存在，创建它
             if (!node->m_children[childIdx]) {
                 // 计算子节点包围盒
                 Box childBox;
@@ -255,19 +431,40 @@ namespace ct
                         dz * childBox.depth * 0.5f
                 );
 
-                // new OctreeNode(box, depth, parent)
+                // 创建子节点
                 auto newChild = new OctreeNode(childBox, node->m_depth + 1, node);
                 newChild->m_block = std::make_shared<CloudBlock>();
 
-                // 同步属性状态 (RGB/Normal)
-                if (m_has_rgb) newChild->m_block->m_colors = std::make_unique<std::vector<RGB>>();
-                if (m_has_normals) newChild->m_block->m_normals = std::make_unique<std::vector<CompressedNormal>>();
+                // 【配置驱动】根据 Config 预留内存，避免后续 push_back 导致频繁扩容
+                if (m_config.maxPointsPerBlock > 0) {
+                    newChild->m_block->m_points.reserve(m_config.maxPointsPerBlock);
+                }
 
-                // 同步标量场定义 (Key)
+                // 同步属性状态 (颜色/法线/标量场注册)
+                if (m_has_rgb) {
+                    newChild->m_block->m_colors = std::make_unique<std::vector<RGB>>();
+                    if (m_config.maxPointsPerBlock > 0) newChild->m_block->m_colors->reserve(m_config.maxPointsPerBlock);
+                }
+                if (m_has_normals) {
+                    newChild->m_block->m_normals = std::make_unique<std::vector<CompressedNormal>>();
+                    if (m_config.maxPointsPerBlock > 0) newChild->m_block->m_normals->reserve(m_config.maxPointsPerBlock);
+                }
+
+                // 同步标量场定义
                 if (!oldBlock->m_scalar_fields.isEmpty()) {
                     for(auto it = oldBlock->m_scalar_fields.begin(); it != oldBlock->m_scalar_fields.end(); ++it) {
                         newChild->m_block->registerScalarField(it.key());
+                        // 标量场 vector 也可以 reserve
+                        if (m_config.maxPointsPerBlock > 0) {
+                            newChild->m_block->m_scalar_fields[it.key()].reserve(m_config.maxPointsPerBlock);
+                        }
                     }
+                }
+
+                // 如果旧块有备份颜色，子块也需要初始化备份容器（虽然此时为空，待数据移入后可能需要处理）
+                // 通常 split 发生在加载阶段，备份颜色可能还不存在。如果是在编辑阶段 split，则需要处理。
+                if (oldBlock->m_backup_colors) {
+                    newChild->m_block->m_backup_colors = std::make_unique<std::vector<RGB>>();
                 }
 
                 // 注册到全局列表
@@ -275,47 +472,52 @@ namespace ct
                 node->m_children[childIdx] = newChild;
             }
 
-            // --- 数据移动 ---
+            // =========================================================
+            // C. 数据移动 (Move Data)
+            // =========================================================
             auto childBlock = node->m_children[childIdx]->m_block;
 
-            // 基础属性
+            // 1. 基础坐标
             childBlock->m_points.push_back(pt);
 
+            // 2. 颜色
             if (oldBlock->m_colors && childBlock->m_colors) {
                 childBlock->m_colors->push_back((*oldBlock->m_colors)[i]);
             } else if (childBlock->m_colors) {
-                // 异常情况补白
+                // 异常保护：补白
                 childBlock->m_colors->push_back(Color::White);
             }
 
+            // 3. 备份颜色 (如果在编辑模式下分裂)
+            if (oldBlock->m_backup_colors && childBlock->m_backup_colors) {
+                childBlock->m_backup_colors->push_back((*oldBlock->m_backup_colors)[i]);
+            }
+
+            // 4. 法线
             if (oldBlock->m_normals && childBlock->m_normals) {
                 childBlock->m_normals->push_back((*oldBlock->m_normals)[i]);
             } else if (childBlock->m_normals) {
                 childBlock->m_normals->push_back(CompressedNormal());
             }
 
-            // 标量场 (高效批量处理)
-            // 由于 registerScalarField 已经保证了 Key 存在，这里直接查找并 push_back
+            // 5. 标量场 (批量处理所有字段)
             if (!oldBlock->m_scalar_fields.isEmpty()) {
-                // 遍历 oldBlock 的所有标量场
+                // 遍历 oldBlock 的所有标量场字段
                 auto it_old = oldBlock->m_scalar_fields.begin();
-                auto it_child = childBlock->m_scalar_fields.begin();
-
-                // 假设 map 的 key 顺序是一致的 (通常 QMap 是排序的)，可以同步迭代优化
-                // 但为了安全，还是标准查找
                 for (; it_old != oldBlock->m_scalar_fields.end(); ++it_old) {
                     float val = it_old.value()[i];
-                    // 在 childBlock 中找到对应的 vector 并 push_back
-                    // operator[] 会自动创建（如果不存在），但我们已经在创建节点时 register 了
+                    // childBlock 必定已注册该字段 (在创建节点时已同步)
                     childBlock->m_scalar_fields[it_old.key()].push_back(val);
                 }
             }
+
+            // 标记子节点 Block 为脏 (需要上传 GPU)
+            childBlock->markDirty();
         }
 
-        // 清空旧块，释放内存
+        // 3. 清理旧块资源
         oldBlock->clear();
-
-        // 标记旧块为 dirty，虽然为空，但在某些渲染逻辑中可能需要刷新状态
+        // 标记旧块为脏 (虽然它空了，但需要通知 Renderer 移除对应的显存资源)
         oldBlock->m_is_dirty = true;
     }
 
@@ -1090,17 +1292,18 @@ namespace ct
         return new_node;
     }
 
-    void Cloud::generateLODRecursive(ct::OctreeNode *node) {
-
+    void Cloud::generateLODRecursive(OctreeNode* node)
+    {
         if (!node) return;
 
-        // 1. 如果是叶子节点，清空 LOD 数据（叶子节点直接渲染 Block，不需要 LOD 代理）
+        // 1. 如果是叶子节点，清空其 LOD 数据
+        // 叶子节点直接渲染 Block，不需要 LOD 代理点；LOD 仅存在于内部节点
         if (node->isLeaf()) {
             node->clearLOD();
             return;
         }
 
-        // 2. 递归处理所有子节点
+        // 2. 先递归处理所有子节点（自底向上构建）
         for (int i = 0; i < 8; ++i) {
             if (node->m_children[i]) {
                 generateLODRecursive(node->m_children[i]);
@@ -1108,73 +1311,85 @@ namespace ct
         }
 
         // 3. 收集候选点 (Candidates)
-        // 我们需要从子节点中收集点，汇聚到当前节点
+        // 我们需要从 8 个子节点中汇聚点，然后选出代表当前节点的 LOD
         std::vector<pcl::PointXYZRGB> candidates;
-        candidates.reserve(MAX_LOD_POINTS * 8); // 预估大小
+
+        // 预估容量：8个子节点，每个最多贡献 maxLODPoints 个点
+        // 如果子节点是叶子，可能贡献更多，但我们会限制采样
+        size_t target_lod_size = m_config.maxLODPoints;
+        if (target_lod_size == 0) return; // 配置禁用了 LOD
+
+        candidates.reserve(target_lod_size * 8);
 
         for (int i = 0; i < 8; ++i) {
-            OctreeNode *child = node->m_children[i];
+            OctreeNode* child = node->m_children[i];
             if (!child) continue;
 
             if (child->isLeaf()) {
-                // 子节点是叶子：从 Block 中采样
-                // 为了性能，不要把 Block 所有点都拿来，只拿一部分
+                // --- 情况 A: 子节点是叶子 (取 Block 数据) ---
                 auto block = child->m_block;
                 if (!block || block->empty()) continue;
 
+                size_t block_size = block->size();
+
+                // 为了防止内存爆炸，如果 Block 很大，不要把所有点都拿来
+                // 我们只需要采集一部分代表点。
+                // 假设我们希望从每个子节点至少拿到 target_lod_size 的点用于混合（如果够的话）
+                // 计算采样步长：
                 size_t step = 1;
-                // 如果 Block 点太多，我们只取 MAX_LOD_POINTS 那么多就够了
-                if (block->size() > MAX_LOD_POINTS) {
-                    step = block->size() / MAX_LOD_POINTS;
+                if (block_size > target_lod_size) {
+                    step = block_size / target_lod_size;
                 }
                 if (step < 1) step = 1;
 
-                for (size_t k = 0; k < block->size(); k += step) {
+                for (size_t k = 0; k < block_size; k += step) {
                     pcl::PointXYZRGB p;
-                    const auto &src_pt = block->m_points[k];
-                    p.x = src_pt.x;
-                    p.y = src_pt.y;
-                    p.z = src_pt.z;
+                    const auto& src_pt = block->m_points[k];
+                    p.x = src_pt.x; p.y = src_pt.y; p.z = src_pt.z;
 
                     if (block->m_colors) {
-                        const auto &c = (*block->m_colors)[k];
-                        p.r = c.r;
-                        p.g = c.g;
-                        p.b = c.b;
+                        const auto& c = (*block->m_colors)[k];
+                        p.r = c.r; p.g = c.g; p.b = c.b;
                     } else {
-                        p.r = 255;
-                        p.g = 255;
-                        p.b = 255;
+                        p.r = 255; p.g = 255; p.b = 255;
                     }
                     candidates.push_back(p);
                 }
-            } else {
-                // 子节点是内部节点：直接继承它的 LOD 点
-                // 因为子节点的 LOD 已经是下采样过的了，数量可控
+            }
+            else {
+                // --- 情况 B: 子节点是内部节点 (取 LOD 数据) ---
+                // 直接继承子节点已经生成的 LOD 点
+                // 子节点的 LOD 已经是下采样过的，数量不超过 target_lod_size
                 candidates.insert(candidates.end(),
                                   child->m_lod_points.begin(),
                                   child->m_lod_points.end());
             }
         }
 
-        // 4. 对候选点进行降采样 (Downsampling)
-        // 如果候选点数量超过了当前节点的最大容量，随机打乱并截断
-        if (candidates.size() > MAX_LOD_POINTS) {
-            // 使用随机洗牌来实现均匀采样
+        // 4. 对候选点进行最终降采样 (Downsampling)
+        // 如果收集到的点总数超过了当前节点的预算，随机打乱并截断
+        if (candidates.size() > target_lod_size) {
+            // 使用随机洗牌来实现均匀采样，避免只保留了前几个子节点的点
             static std::random_device rd;
             static std::mt19937 g(rd());
             std::shuffle(candidates.begin(), candidates.end(), g);
 
-            candidates.resize(MAX_LOD_POINTS);
+            candidates.resize(target_lod_size);
         }
 
         // 5. 存入当前节点
+        // 使用 std::move 避免拷贝
         node->m_lod_points = std::move(candidates);
         node->m_lod_dirty = true;
 
-        // 清理旧的缓存，等待渲染器上传
+        // 清理旧的 VTK 缓存，等待渲染器上传
         node->m_vtk_lod_polydata.reset();
+    }
 
+    bool Cloud::isStructureSplit() const {
+        if (!m_octree_root) return false;
+        // 如果根节点不是叶子（说明有子节点），那就是分裂了
+        return !m_octree_root->isLeaf();
     }
 
     void Cloud::append(const Cloud& other)

@@ -12,6 +12,7 @@
 #include <vector>
 #include <map>
 #include <unordered_set>
+#include <queue>
 
 // VTK 前向声明
 class vtkRenderer;
@@ -35,6 +36,9 @@ namespace ct{
         void update();
         void invalidateCache();
 
+        // 设置交互状态 (true=正在拖拽/缩放, false=静止)
+        void setInteractionState(bool is_interacting);
+
         std::vector<vtkActor*> getActiveActors() const;
         CloudBlock::Ptr getBlockFromActor(vtkActor* actor);
         ct::Cloud::Ptr getCloud() const {return m_cloud; }
@@ -46,11 +50,21 @@ namespace ct{
             Eigen::Vector3f camPos;
             float pixelsPerUnit;
             std::vector<OctreeNode*>* visibleNodes;
-            int currentActorCount = 0; // 【新增】计数器
-            int maxActors = 300;       // 【新增】最大允许渲染的块数
+
+            size_t currentPointCount = 0; // 当前帧已收集的点数
+            size_t maxPointBudget = 0;    // 最大允许点数
+            float threshold = 0.0f;       // 当前使用的屏幕阈值
         };
 
-        void traverse(OctreeNode* node, TraversalContext& ctx);
+        struct PriorityNode {
+            OctreeNode* node;
+            float screenSize;
+
+            // 优先级比较：screenSize 大的在堆顶 (优先分裂)
+            bool operator<(const PriorityNode& other) const {
+                return screenSize < other.screenSize;
+            }
+        };
 
         // 为节点创建或获取缓存的 Actor
         vtkActor* getOrCreateActor(OctreeNode* node, bool is_lod);
@@ -74,13 +88,17 @@ namespace ct{
         // 记录上一帧显示的节点，用于差量更新
         std::unordered_set<OctreeNode*> m_current_visible_nodes;
 
-        // --- 调度参数 ---
-        float m_lod_threshold = 400.0f; // 屏幕投影像素阈值 (大于此值递归，小于此值画LOD)
-
-        // 缓存上一帧的视点信息，减少不必要的更新
+        // 相机状态
         Eigen::Vector3f m_last_cam_pos;
         double m_last_cam_dir[3];
         bool m_force_update = false;
+
+        // 交互状态与动态阈值
+        bool m_is_interacting = false;
+        // 分裂阈值，屏幕上小于这个像素宽度的方块，就不再加载细节，直接看 LOD。值越小细节越丰富，CPU 遍历压力越大。
+        float m_base_threshold = 100.0f; // 基础阈值 (像素)
+        // 限制同屏渲染的最大点数
+        size_t m_point_budget = 20000000; // 默认 1000万点
     };
 
 }// namespace ct

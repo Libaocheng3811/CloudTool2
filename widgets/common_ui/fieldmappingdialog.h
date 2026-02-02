@@ -15,17 +15,57 @@
 #include <QLabel>
 #include <QHeaderView>
 
+#include <algorithm>
+
 namespace ct {
     class FieldMappingDialog : public QDialog {
     Q_OBJECT
     public:
-        explicit FieldMappingDialog(const QList<ct::FieldInfo> &fields, QWidget *parent = nullptr)
+        explicit FieldMappingDialog(const QList<ct::FieldInfo> &input_fields, QWidget *parent = nullptr)
                 : QDialog(parent) {
             setWindowTitle("Field Mapping");
             resize(500, 400);
+            setFixedSize(500, 400);
 
             QVBoxLayout *layout = new QVBoxLayout(this);
             layout->addWidget(new QLabel("Map file fields to Cloud properties:"));
+
+            QList<ct::FieldInfo> fields = input_fields; // 创建副本进行排序
+
+            // 定义优先级计算函数 (越小越靠前)
+            auto getFieldRank = [](const QString& rawName) -> int {
+                QString n = rawName.toLower();
+                // Rank 0: 坐标
+                if (n == "x") return 0;
+                if (n == "y") return 1;
+                if (n == "z") return 2;
+
+                // Rank 1: 颜色
+                if (n == "r" || n == "red" || n.contains("red")) return 10;
+                if (n == "g" || n == "green" || n.contains("green")) return 11;
+                if (n == "b" || n == "blue" || n.contains("blue")) return 12;
+                if (n == "rgb" || n == "rgba") return 13;
+
+                // Rank 2: 法线
+                if (n == "nx" || n == "normal_x") return 20;
+                if (n == "ny" || n == "normal_y") return 21;
+                if (n == "nz" || n == "normal_z") return 22;
+
+                // Rank 3: 常用属性
+                if (n == "intensity") return 30;
+                if (n == "curvature") return 31;
+                if (n == "time" || n == "gps_time") return 32;
+
+                // Rank 4: 其他杂项 (放在最后)
+                return 100;
+            };
+
+            std::sort(fields.begin(), fields.end(), [&](const ct::FieldInfo& a, const ct::FieldInfo& b){
+                int rankA = getFieldRank(a.name);
+                int rankB = getFieldRank(b.name);
+                if (rankA != rankB) return rankA < rankB;
+                return a.name < b.name; // 同级按字母序
+            });
 
             m_table = new QTableWidget(fields.size(), 3);
             m_table->setHorizontalHeaderLabels({"File Field", "Type", "Map To"});

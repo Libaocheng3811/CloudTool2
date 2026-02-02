@@ -63,11 +63,21 @@ namespace ct
 
         m_viewer->setupInteractor(this->interactor(), this->renderWindow());
         if (this->interactor()) {
-            vtkNew<vtkCallbackCommand> callback;
-            callback->SetCallback(CloudView::OnRenderEvent);
-            callback->SetClientData(this);
+            // 1. 渲染回调 (已存在)
+            vtkNew<vtkCallbackCommand> renderCallback;
+            renderCallback->SetCallback(CloudView::OnRenderEvent);
+            renderCallback->SetClientData(this);
+            m_observer_tag = this->interactor()->AddObserver(vtkCommand::RenderEvent, renderCallback);
 
-            m_observer_tag = this->interactor()->AddObserver(vtkCommand::RenderEvent, callback);
+            // 2. 【新增】交互回调 (监听开始和结束)
+            vtkNew<vtkCallbackCommand> interactionCallback;
+            interactionCallback->SetCallback(CloudView::OnInteractionEvent);
+            interactionCallback->SetClientData(this);
+
+            // 监听 StartInteractionEvent (鼠标按下准备移动)
+            this->interactor()->AddObserver(vtkCommand::StartInteractionEvent, interactionCallback);
+            // 监听 EndInteractionEvent (鼠标松开停止移动)
+            this->interactor()->AddObserver(vtkCommand::EndInteractionEvent, interactionCallback);
         }
 
         m_render->GradientBackgroundOn();
@@ -123,6 +133,18 @@ namespace ct
         }
     }
 
+    void CloudView::OnInteractionEvent(vtkObject* caller, unsigned long eventId, void* clientData, void* callData)
+    {
+        CloudView* self = static_cast<CloudView*>(clientData);
+        if (!self) return;
+
+        if (eventId == vtkCommand::StartInteractionEvent) {
+            self->onInteraction(true);
+        } else if (eventId == vtkCommand::EndInteractionEvent) {
+            self->onInteraction(false);
+        }
+    }
+
     void CloudView::updateRenderers() {
         // 只在相机移动时更新
         static vtkCamera* lastCam = nullptr;
@@ -152,6 +174,22 @@ namespace ct
 
         for (auto& renderer : m_OctreeRenders) {
             renderer->update();
+        }
+    }
+
+    void CloudView::onInteraction(bool is_interacting)
+    {
+        // 遍历所有八叉树渲染器，通知它们改变状态
+        for (auto& renderer : m_OctreeRenders) {
+            if (renderer) {
+                renderer->setInteractionState(is_interacting);
+            }
+        }
+
+        // 如果是停止交互（松手），强制刷新一帧以加载高精度细节
+        // (开始交互时不需要强制刷新，因为 VTK 交互本身就会触发连续渲染)
+        if (!is_interacting && m_auto_render) {
+            m_viewer->getRenderWindow()->Render();
         }
     }
 

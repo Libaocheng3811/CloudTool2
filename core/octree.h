@@ -12,12 +12,6 @@
 #include <QMap>
 
 namespace ct{
-    // 每个数据块的最大点数 (建议 30k-60k)
-    static const size_t MAX_POINTS_PER_BLOCK = 60000;
-
-    // 每个内部节点保留的 LOD 代理点最大数量
-    static const size_t MAX_LOD_POINTS = 30000;
-
     /**
      * @brief 数据块 (Data Block) - 八叉树叶子负载
      */
@@ -27,8 +21,6 @@ namespace ct{
         using Ptr = std::shared_ptr<CloudBlock>;
 
         CloudBlock() {
-            // 预分配内存以优化性能
-            m_points.reserve(MAX_POINTS_PER_BLOCK);
             m_box.width = m_box.height = m_box.depth = 0;
         }
 
@@ -57,7 +49,6 @@ namespace ct{
         // --- 辅助方法 ---
         size_t size() const { return m_points.size(); }
         bool empty() const { return m_points.empty(); }
-        bool isFull() const { return m_points.size() >= MAX_POINTS_PER_BLOCK; }
 
         /**
          * @brief 添加一个点，并保持所有属性向量的大小同步
@@ -146,7 +137,6 @@ namespace ct{
             if (!m_scalar_fields.contains(name)) {
                 // 创建新向量，并预分配内存
                 std::vector<float>& vec = m_scalar_fields[name];
-                vec.reserve(MAX_POINTS_PER_BLOCK);
 
                 // 如果当前 Block 已经有点了，需要补齐 0，保持对齐
                 if (!m_points.empty()) {

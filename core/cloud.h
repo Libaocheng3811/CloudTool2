@@ -21,8 +21,6 @@
 #define BOX_PRE_FLAG         "-box"
 #define NORMALS_PRE_FLAG     "-normals"
 
-// #define PREVIEW_LIMIT       8000000
-
 namespace ct
 {
     class CT_EXPORT Cloud :public std::enable_shared_from_this<Cloud>
@@ -42,15 +40,34 @@ namespace ct
 
         void swap(Cloud& other);
 
-        // ===== 八叉树构建与数据加载 =====
+        // ===== 配置接口 =====
+        /**
+         * @brief 根据点数自动计算最佳配置
+         * @param totalPoints 点云总点数
+         */
+        static CloudConfig calculateAdaptiveConfig(size_t totalPoints);
 
+        /**
+         * @brief 自适应完成点云构建
+         * @details 统一执行：更新统计 -> 智能计算配置 -> 应用配置 -> 生成LOD
+         * 无论点云来源如何，填充完数据后调用一次此函数即可。
+         */
+        void makeAdaptive();
+
+        /**
+         * @brief 设置配置 (需要在 initOctree 之前调用)
+         */
+        void setConfig(const CloudConfig& config) { m_config = config; }
+        const CloudConfig& getConfig() const { return m_config; }
+
+        // ===== 八叉树构建与数据加载 =====
         /**
          * @brief 初始化八叉树空间范围
          * @details 在加载数据前必须调用。如果是文件加载，先读 Header 获取 BBox。
          * @param globalBox 全局包围盒
          * @param maxDepth 最大深度 (建议 8-10)
          */
-        void initOctree(const Box& globalBox, int maxDepth = 8);
+        void initOctree(const Box& globalBox);
 
         /**
          * @brief 添加一个点 (自动路由到对应 Block)
@@ -270,9 +287,13 @@ namespace ct
         * @return 该节点贡献给父节点的采样点列表
         */
         void generateLODRecursive(OctreeNode* node);
+
+        // 内部辅助：检查当前八叉树结构是否已经发生分裂
+        bool isStructureSplit() const;
     private:
         // ===== 核心数据（私有）=====
         // 八叉树根节点
+        CloudConfig m_config;
         OctreeNode::Ptr m_octree_root;
         std::vector<CloudBlock::Ptr> m_all_blocks;
         size_t m_point_count = 0;

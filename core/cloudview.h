@@ -402,9 +402,16 @@ namespace ct {
     private:
         void setView(const Eigen::Vector3f& direction, const Eigen::Vector3f& up);
 
-        // VTK 交互/渲染回调
+        // 渲染回调
         static void OnRenderEvent(vtkObject* caller, unsigned long eventId, void* clientData, void* callData);
+
+        // VTK交互回调
+        static void OnInteractionEvent(vtkObject* caller, unsigned long eventId, void* clientData, void* callData);
+
         void updateRenderers();
+
+        // 处理交互状态切换
+        void onInteraction(bool is_interacting);
 
     private:
         struct InfoData{
@@ -433,6 +440,7 @@ namespace ct {
 
         QMap<QString, std::shared_ptr<OctreeRenderer>> m_OctreeRenders;
         unsigned long m_observer_tag = 0; // 回调 ID
+        unsigned long m_interaction_tag = 0; //保存交互回调的 ID
 
     };
 } // namespace ct

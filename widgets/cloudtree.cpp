@@ -351,7 +351,7 @@ namespace ct
         }
         merge_cloud->setId(MERGE_ADD_FLAG + clouds.front()->id());
         merge_cloud->setInfo(clouds.front()->info());
-        merge_cloud->update();
+        merge_cloud->makeAdaptive();
 
         QString merge_id = clouds[0]->id() + QTime::currentTime().toString();
         QTreeWidgetItem* groupItem = addItem(nullptr, "Merged_" + merge_id);

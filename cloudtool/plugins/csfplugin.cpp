@@ -91,6 +91,16 @@ void CSFPlugin::onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud
         off_ground_cloud->setCloudColor(ct::RGB{255, 0, 0}); // Red
     }
 
+    // 处理地面点云
+    if (ground_cloud && !ground_cloud->empty()) {
+        ground_cloud->makeAdaptive();
+    }
+
+    // 处理非地面点云
+    if (off_ground_cloud && !off_ground_cloud->empty()) {
+        off_ground_cloud->makeAdaptive();
+    }
+
     std::vector<ct::Cloud::Ptr> results;
     results.push_back(ground_cloud);
     results.push_back(off_ground_cloud);

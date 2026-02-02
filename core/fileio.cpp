@@ -157,11 +157,6 @@ namespace ct
         cloud->setInfo(fileInfo);
         cloud->update(); //更新包围盒，统计信息
 
-        emit progress(95);
-        // 生成LOD数据
-        cloud->generateLOD();
-
-
         emit progress(100);
         emit loadCloudResult(true, cloud, time.toc());
     }
@@ -456,7 +451,7 @@ namespace ct
         cloud->setHasColors(has_color);
         cloud->setHasNormals(has_normal);
 
-        cloud->update();
+        cloud->makeAdaptive();
 
         return true;
     }
@@ -715,7 +710,7 @@ namespace ct
         }
 
         // 更新点云统计信息
-        cloud->update();
+        cloud->makeAdaptive();
         emit progress(100);
 
         return true;
@@ -973,6 +968,7 @@ namespace ct
         emit progress(50);
 
         size_t num_points = temp_cloud->size();
+
         const auto& p0 = temp_cloud->points[0];
         const double THRESHOLD_XY = 10000.0;
 
@@ -1067,7 +1063,7 @@ namespace ct
         cloud->setHasColors(true);
         cloud->setHasNormals(true);
 
-        cloud->update();
+        cloud->makeAdaptive();
         emit progress(100);
 
         return true;
@@ -1224,8 +1220,7 @@ namespace ct
 
         cloud->setHasColors(has_color);
 
-        // 更新统计信息 (此时点已全部插入)
-        cloud->update();
+        cloud->makeAdaptive();
 
         lasreader->close();
         delete lasreader;

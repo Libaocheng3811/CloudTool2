@@ -40,7 +40,18 @@ namespace ct {
     }
 
     OctreeRenderer::OctreeRenderer(Cloud::Ptr cloud, vtkRenderer *renderer)
-            : m_cloud(cloud), m_vtk_renderer(renderer) {}
+            : m_cloud(cloud), m_vtk_renderer(renderer) {
+        // 初始化时读取 CloudConfig
+        if (m_cloud) {
+            // 读取预算
+            m_point_budget = m_cloud->getConfig().pointBudget; // 默认 1000w
+            if (m_point_budget == 0) m_point_budget = 10000000; // 保底
+
+            // 如果是直通模式(无八叉树)，不需要阈值
+            // 如果有八叉树，设置一个合理的基础阈值
+            m_base_threshold = 80.0f;
+        }
+    }
 
     OctreeRenderer::~OctreeRenderer() {
         // 移除所有 Actor
@@ -74,6 +85,16 @@ namespace ct {
         m_force_update = true;
     }
 
+    void OctreeRenderer::setInteractionState(bool is_interacting)
+    {
+        if (m_is_interacting != is_interacting) {
+            m_is_interacting = is_interacting;
+            // 状态改变意味着渲染策略改变，强制更新一帧
+            m_force_update = true;
+            // 注意：这里不直接调用 update()，而是设置标记等待下一次 RenderEvent
+        }
+    }
+
     std::vector<vtkActor*> OctreeRenderer::getActiveActors() const {
         std::vector<vtkActor*> actors;
         for (auto* node : m_current_visible_nodes) {
@@ -96,91 +117,141 @@ namespace ct {
 
     void OctreeRenderer::update()
     {
-        // 0. 基础检查：如果没有点云、没有根节点或被设为不可见，直接返回
-        if (!m_cloud || !m_cloud->getOctreeRoot() || !m_visible) return;
+        if (!m_cloud || !m_visible) return;
 
+        OctreeNode* root = m_cloud->getOctreeRoot(); // 获取根节点
+
+        // 直通模式处理
+        if (!m_cloud->getConfig().enableOctree && root && root->isLeaf()) {
+            if (m_current_visible_nodes.empty()) {
+                vtkActor* actor = getOrCreateActor(root, false);
+                if (actor) {
+                    actor->SetVisibility(1);
+                    m_current_visible_nodes.insert(root);
+                }
+            }
+            return;
+        }
+
+        if (!root) return;
+
+        // 获取相机参数
         vtkCamera* cam = m_vtk_renderer->GetActiveCamera();
-
-        // ---------------------------------------------------------
-        // 1. 相机状态检测 (Camera Change Detection)
-        // ---------------------------------------------------------
-        // 目的：如果画面静止，完全跳过计算，CPU占用降为0
         double* pos = cam->GetPosition();
         double* dir = cam->GetDirectionOfProjection();
         Eigen::Vector3f camPos(pos[0], pos[1], pos[2]);
 
-        // 计算差异
+        // 相机未动检测
         bool camChanged = (m_last_cam_pos - camPos).norm() > 0.01 ||
-                          std::abs(m_last_cam_dir[0] - dir[0]) > 0.001 ||
-                          std::abs(m_last_cam_dir[1] - dir[1]) > 0.001 ||
-                          std::abs(m_last_cam_dir[2] - dir[2]) > 0.001;
+                          std::abs(m_last_cam_dir[0] - dir[0]) > 0.001;
 
-        // 如果相机没动，且没有收到强制更新指令，直接退出
         if (!camChanged && !m_force_update) return;
 
-        // 更新缓存
         m_last_cam_pos = camPos;
         m_last_cam_dir[0] = dir[0]; m_last_cam_dir[1] = dir[1]; m_last_cam_dir[2] = dir[2];
         m_force_update = false;
 
-        // ---------------------------------------------------------
-        // 2. 准备遍历参数 (Traversal Setup)
-        // ---------------------------------------------------------
+        // 准备投影参数
         double planes[24];
         cam->GetFrustumPlanes(m_vtk_renderer->GetTiledAspectRatio(), planes);
 
         int* winSize = m_vtk_renderer->GetSize();
         int height = winSize[1];
+        if (height < 1) height = 1;
         double fov = cam->GetViewAngle();
-        // 计算像素密度系数：用于将 3D 尺寸转换为屏幕像素大小
         float pixelsPerUnit = height / (2.0f * std::tan(fov * 0.5 * 0.0174532925));
 
-        // 使用 Vector 进行遍历收集（保持遍历速度）
+        // =========================================================
+        // 动态策略配置
+        // =========================================================
+        float effective_threshold;
+        size_t effective_budget;
+
+        if (m_is_interacting) {
+            // 交互模式：阈值大，预算低
+            effective_threshold = 300.0f;
+            effective_budget = 5000000;
+        } else {
+            // 静止模式：阈值小，预算高
+            effective_threshold = m_base_threshold; // e.g. 80.0f
+            effective_budget = m_point_budget;      // e.g. 1000w
+        }
+
+        // 3. 基于优先级的遍历
         std::vector<OctreeNode*> visibleNodeVector;
-        // todo 将块的数量写死，不太好
-        visibleNodeVector.reserve(2000); // 预估容量
+        visibleNodeVector.reserve(2000);
 
-        TraversalContext ctx;
-        ctx.planes = planes;
-        ctx.camPos = camPos;
-        ctx.pixelsPerUnit = pixelsPerUnit;
-        ctx.visibleNodes = &visibleNodeVector;
+        std::priority_queue<PriorityNode> queue;
 
-        // ---------------------------------------------------------
-        // 3. 执行八叉树遍历 (Traverse)
-        // ---------------------------------------------------------
-        traverse(m_cloud->getOctreeRoot(), ctx);
+        // 根节点入队
+        float rootSize = projectSize(m_cloud->getOctreeRoot()->m_box, camPos, pixelsPerUnit);
+        queue.push({m_cloud->getOctreeRoot(), rootSize});
 
-        // ---------------------------------------------------------
-        // 4. 差异化更新可见性 (Diff Update) - 核心优化
-        // ---------------------------------------------------------
+        size_t current_points = 0;
 
-        // 构建下一帧的集合 (Set)，用于 O(1) 查找
+        while (!queue.empty()) {
+            PriorityNode top = queue.top();
+            queue.pop();
+
+            OctreeNode* node = top.node;
+            float size = top.screenSize;
+
+            // 视锥体剔除
+            if (!isBoxInFrustum(node->m_box, planes)) continue;
+
+            // 【关键修复】预算检查
+            // 我们不再因为超预算而 break，而是用它来决定“是否继续分裂”
+            bool budget_allows_split = (current_points < effective_budget);
+
+            // 分裂决策：
+            // 1. 屏幕投影够大 (需要细节)
+            // 2. 有子节点 (可以分裂)
+            // 3. 还有预算 (没钱就不分了，直接画糊的)
+            bool should_split = (size > effective_threshold) && node->hasChildren() && budget_allows_split;
+
+            if (should_split) {
+                // 分裂：将子节点加入队列，争取更好的画质
+                for (int i = 0; i < 8; ++i) {
+                    if (node->m_children[i]) {
+                        float childSize = projectSize(node->m_children[i]->m_box, camPos, pixelsPerUnit);
+                        queue.push({node->m_children[i], childSize});
+                    }
+                }
+            }
+            else {
+                // 渲染：
+                // 情况 A: 已经是叶子，没法分了 -> 渲染
+                // 情况 B: 距离够远(size小)，不需要分 -> 渲染 LOD
+                // 情况 C: 【重点】虽然离得近，但没预算了 -> 只能渲染当前的 LOD 兜底！
+                // 这样保证了所有视野内的块，至少会画出一个 LOD，绝不会出现“空洞”。
+
+                visibleNodeVector.push_back(node);
+
+                // 统计点数
+                if (node->isLeaf()) {
+                    if (node->m_block) current_points += node->m_block->size();
+                } else {
+                    current_points += node->m_lod_points.size();
+                }
+            }
+        }
+
+        // 4. 差异化更新 Actor (Diff Update)
         std::unordered_set<OctreeNode*> next_visible_set;
         next_visible_set.reserve(visibleNodeVector.size());
 
-        // A. 处理【新增显示】的节点
         for (OctreeNode* node : visibleNodeVector) {
-            next_visible_set.insert(node); // 填充 Set
-
-            // 如果该节点上一帧不在显示列表中 -> 它是新来的，需要显示
+            next_visible_set.insert(node);
+            // 新增显示
             if (m_current_visible_nodes.find(node) == m_current_visible_nodes.end()) {
-                // 获取或创建 Actor (如果 Actor 已缓存，这里非常快)
-                // is_lod = true 如果不是叶子节点
                 vtkActor* actor = getOrCreateActor(node, !node->isLeaf());
-                if (actor) {
-                    actor->SetVisibility(1);
-                }
+                if (actor) actor->SetVisibility(1);
             }
-            // 如果上一帧已经在显示列表中 -> 什么都不做 (Keep)，避免调用 VTK 造成开销
         }
 
-        // B. 处理【需要隐藏】的节点
-        // 遍历上一帧的所有节点
         for (OctreeNode* oldNode : m_current_visible_nodes) {
-            // 如果旧节点不在新集合中 -> 它移出了视野或被 LOD 替换，需要隐藏
+            // 隐藏旧的
             if (next_visible_set.find(oldNode) == next_visible_set.end()) {
-                // 查找 Actor 并隐藏 (不要销毁！保留在显存中供下次使用)
                 auto it = m_actor_cache.find(oldNode);
                 if (it != m_actor_cache.end()) {
                     it->second->SetVisibility(0);
@@ -188,74 +259,27 @@ namespace ct {
             }
         }
 
-        // ---------------------------------------------------------
-        // 5. 交换状态
-        // ---------------------------------------------------------
-        // 使用 move 避免拷贝，将当前帧状态更新为下一帧
         m_current_visible_nodes = std::move(next_visible_set);
-
-        // 提示：此处不建议做 m_actor_cache 的清理（GC）。
-        // 为了 CloudCompare 的那种流畅感，我们允许显存占用随浏览过的区域增加。
-        // 只有在 Close 文件时才清理 m_actor_cache。
-    }
-
-    void OctreeRenderer::traverse(OctreeNode* node, TraversalContext& ctx)
-    {
-        if (!node) return;
-
-        // 视锥体剔除
-        if (!isBoxInFrustum(node->m_box, ctx.planes)) return;
-
-        float size = projectSize(node->m_box, ctx.camPos, ctx.pixelsPerUnit);
-        bool is_leaf = node->isLeaf();
-
-        // 决策逻辑：
-        // 如果投影像素 > 阈值 (例如 100px)，说明离得很近，需要看细节 -> 递归
-        // 否则 -> 渲染当前节点的 LOD
-        if (size > m_lod_threshold && node->hasChildren() && ctx.currentActorCount < ctx.maxActors) {
-            for (int i=0; i<8; ++i) {
-                if (node->m_children[i]) traverse(node->m_children[i], ctx);
-            }
-        } else {
-            // 渲染当前节点
-            // 如果是叶子，肯定渲染 Block
-            // 如果是内部节点，渲染 LOD
-            // 只要数据不为空就加入
-            if (is_leaf) {
-                if (node->m_block && !node->m_block->empty()) {
-                    ctx.visibleNodes->push_back(node);
-                    ctx.currentActorCount++;
-                }
-            } else {
-                if (!node->m_lod_points.empty()) {
-                    ctx.visibleNodes->push_back(node);
-                    ctx.currentActorCount++;
-                }
-            }
-        }
     }
 
     vtkActor* OctreeRenderer::getOrCreateActor(OctreeNode* node, bool is_lod)
     {
-        // 1. 查找缓存
         auto it = m_actor_cache.find(node);
-        if (it != m_actor_cache.end()) {
-            return it->second;
-        }
+        if (it != m_actor_cache.end()) return it->second;
 
-        // 2. 创建新 Actor
+        // 创建数据
         auto points = vtkSmartPointer<vtkPoints>::New();
         auto colors = vtkSmartPointer<vtkUnsignedCharArray>::New();
         colors->SetNumberOfComponents(3);
         colors->SetName("Colors");
 
-        // 根据类型填充数据
         if (is_lod) {
             const auto& src = node->m_lod_points;
             size_t n = src.size();
             points->SetNumberOfPoints(n);
             colors->SetNumberOfTuples(n);
 
+            // 即使是 LOD，如果点数很多，也可以考虑并行
             float* ptr_xyz = static_cast<float*>(points->GetVoidPointer(0));
             unsigned char* ptr_rgb = colors->GetPointer(0);
 
@@ -264,28 +288,35 @@ namespace ct {
                 ptr_xyz[0]=p.x; ptr_xyz[1]=p.y; ptr_xyz[2]=p.z; ptr_xyz+=3;
                 ptr_rgb[0]=p.r; ptr_rgb[1]=p.g; ptr_rgb[2]=p.b; ptr_rgb+=3;
             }
-        } else {
-            // Block
+        }
+        else {
             auto block = node->m_block;
+            if (!block) return nullptr;
             size_t n = block->size();
-            const auto& pts = block->m_points;
-            const auto* cols = (block->m_colors) ? block->m_colors.get() : nullptr;
-
             points->SetNumberOfPoints(n);
             colors->SetNumberOfTuples(n);
 
             float* ptr_xyz = static_cast<float*>(points->GetVoidPointer(0));
             unsigned char* ptr_rgb = colors->GetPointer(0);
+            const auto& pts = block->m_points;
+            const auto* cols = (block->m_colors) ? block->m_colors.get() : nullptr;
 
-            for (size_t i = 0; i < n; ++i) {
+            // Block 数据拷贝通常是大数据量，使用 OpenMP 加速
+            // 注意：VTK 指针操作并非线程安全，但写入不同的内存地址是安全的
+            // 这里的 ptr_xyz 是原始 float 指针
+#pragma omp parallel for
+            for (int i = 0; i < (int)n; ++i) {
                 const auto& p = pts[i];
-                ptr_xyz[0]=p.x; ptr_xyz[1]=p.y; ptr_xyz[2]=p.z; ptr_xyz+=3;
+                // 手动计算偏移
+                float* local_xyz = ptr_xyz + i * 3;
+                unsigned char* local_rgb = ptr_rgb + i * 3;
+
+                local_xyz[0]=p.x; local_xyz[1]=p.y; local_xyz[2]=p.z;
                 if(cols) {
-                    ptr_rgb[0]=(*cols)[i].r; ptr_rgb[1]=(*cols)[i].g; ptr_rgb[2]=(*cols)[i].b;
+                    local_rgb[0]=(*cols)[i].r; local_rgb[1]=(*cols)[i].g; local_rgb[2]=(*cols)[i].b;
                 } else {
-                    ptr_rgb[0]=255; ptr_rgb[1]=255; ptr_rgb[2]=255;
+                    local_rgb[0]=255; local_rgb[1]=255; local_rgb[2]=255;
                 }
-                ptr_rgb+=3;
             }
         }
 
@@ -293,14 +324,18 @@ namespace ct {
         polyData->SetPoints(points);
         polyData->GetPointData()->SetScalars(colors);
 
-        // 生成 Vertex Cells (为了兼容性)
+        // 构造顶点 Cells
         vtkNew<vtkIdTypeArray> cells;
         cells->SetNumberOfValues(points->GetNumberOfPoints() * 2);
         vtkIdType* ids = cells->GetPointer(0);
+
+        // 这里也可以并行填充
+#pragma omp parallel for
         for (vtkIdType i = 0; i < points->GetNumberOfPoints(); ++i) {
             ids[i*2] = 1;
             ids[i*2+1] = i;
         }
+
         vtkNew<vtkCellArray> cellArray;
         cellArray->SetCells(points->GetNumberOfPoints(), cells);
         polyData->SetVerts(cellArray);
@@ -309,14 +344,13 @@ namespace ct {
         mapper->SetInputData(polyData);
         mapper->SetScalarModeToUsePointData();
         mapper->SetColorModeToDirectScalars();
+        mapper->StaticOn(); // 【重要】开启静态优化
 
-        mapper->StaticOn();
         auto actor = vtkSmartPointer<vtkActor>::New();
         actor->SetMapper(mapper);
         actor->GetProperty()->SetPointSize(m_cloud->pointSize());
         actor->GetProperty()->SetOpacity(m_cloud->opacity());
-        actor->GetProperty()->BackfaceCullingOff();
-        actor->SetVisibility(0); // 初始不可见
+        actor->SetVisibility(0);
 
         m_vtk_renderer->AddActor(actor);
         m_actor_cache[node] = actor;

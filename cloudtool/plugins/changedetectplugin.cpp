@@ -283,6 +283,16 @@ void ChangeDetectPlugin::onFilterDone(const std::vector<float>& distances, float
     changed->update();
     unchanged->update();
 
+    // 1. 处理变化点云
+    if (!changed->empty()) {
+        changed->makeAdaptive();
+    }
+
+    // 2. 处理未变化点云
+    if (!unchanged->empty()) {
+        unchanged->makeAdaptive();
+    }
+
     // 结果处理
     std::vector<ct::Cloud::Ptr> results;
 
