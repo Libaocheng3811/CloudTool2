@@ -1163,6 +1163,15 @@ namespace ct
         Eigen::Vector3f center = 0.5f * (m_min.getVector3fMap() + m_max.getVector3fMap());
         m_box.pose.translation() = center;
 
+        m_box.width = m_max.x - m_min.x;
+        m_box.height = m_max.y - m_min.y;
+        m_box.depth = m_max.z - m_min.z;
+
+        // 防止包围盒过扁（可选）
+        if (m_box.width < 0.1) m_box.width = 0.1;
+        if (m_box.height < 0.1) m_box.height = 0.1;
+        if (m_box.depth < 0.1) m_box.depth = 0.1;
+
         // 更新类型字符串
         if (m_has_normals && m_has_rgb) m_type = CLOUD_TYPE_XYZRGBN;
         else if (m_has_normals) m_type = CLOUD_TYPE_XYZN;

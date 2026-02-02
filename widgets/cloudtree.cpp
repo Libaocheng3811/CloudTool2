@@ -350,11 +350,129 @@ namespace ct
             printW("The number of clouds to merge is not enough!");
             return;
         }
-        Cloud::Ptr merge_cloud(new Cloud);
-        for (auto& i : clouds) {
-            *merge_cloud += *i;
 
+        // 1. 确定主坐标系 (以第一个点云为基准)
+        Eigen::Vector3d master_shift = clouds[0]->getGlobalShift();
+
+        // =========================================================
+        // 【智能修正】防止包围盒爆炸
+        // =========================================================
+        // 检查是否存在极其遥远的点云 (例如 Rabbit 和 城市地图)
+        // 如果它们相距超过 100km，我们假设用户并不想保留真实的地理关系，
+        // 而是想把它们强行放在一起查看。
+        bool force_local_merge = false;
+        for (const auto& c : clouds) {
+            double dist = (c->getGlobalShift() - master_shift).norm();
+            if (dist > 100000.0) { // 100 km 阈值
+                force_local_merge = true;
+                printW("Detected large distance between clouds. Forcing local merge to avoid huge bounding box.");
+                break;
+            }
         }
+
+        // 2. 预计算合并后的包围盒 (用于初始化八叉树)
+        // 使用 double 防止大坐标溢出
+        Eigen::Vector3d target_min(DBL_MAX, DBL_MAX, DBL_MAX);
+        Eigen::Vector3d target_max(-DBL_MAX, -DBL_MAX, -DBL_MAX);
+        bool has_valid_data = false;
+
+        for (const auto& c : clouds) {
+            if (!c || c->empty()) continue;
+
+            // 获取当前点云的本地包围盒
+            Eigen::Vector3d c_min = c->min().getVector3fMap().cast<double>();
+            Eigen::Vector3d c_max = c->max().getVector3fMap().cast<double>();
+
+            Eigen::Vector3d offset = Eigen::Vector3d::Zero();
+
+            // 只有在保留地理关系时，才计算偏移
+            if (!force_local_merge) {
+                // 公式：Offset = CurrentShift - MasterShift
+                // 解释：把 Current 的点移动到 Master 的坐标系下
+                offset = c->getGlobalShift() - master_shift;
+            }
+
+            // 预测合并后的位置
+            target_min = target_min.cwiseMin(c_min + offset);
+            target_max = target_max.cwiseMax(c_max + offset);
+
+            has_valid_data = true;
+        }
+
+        if (!has_valid_data) return;
+
+        // 3. 初始化合并点云
+        Cloud::Ptr merge_cloud(new Cloud);
+
+        // 如果是地理合并，继承 Master Shift 以保持精度
+        merge_cloud->setGlobalShift(master_shift);
+
+        ct::Box box;
+        box.width = target_max.x() - target_min.x();
+        box.height = target_max.y() - target_min.y();
+        box.depth = target_max.z() - target_min.z();
+
+        // 增加 buffer
+        box.width *= 1.05; box.height *= 1.05; box.depth *= 1.05;
+        if (box.width < 1.0) box.width = 10.0;
+        if (box.height < 1.0) box.height = 10.0;
+        if (box.depth < 1.0) box.depth = 10.0;
+
+        // 设置中心
+        box.translation = (target_min + target_max).cast<float>() * 0.5f;
+
+        // 显式初始化
+        merge_cloud->initOctree(box);
+
+        // 启用属性
+        bool has_color = false;
+        bool has_normal = false;
+        for(const auto& c : clouds) {
+            if(c->hasColors()) has_color = true;
+            if(c->hasNormals()) has_normal = true;
+        }
+        if(has_color) merge_cloud->enableColors();
+        if(has_normal) merge_cloud->enableNormals();
+
+        // 4. 执行合并
+        showProgress("Merging clouds...");
+
+        for (auto& c : clouds) {
+            if (c->empty()) continue;
+
+            // 计算偏移
+            Eigen::Vector3f offset(0,0,0);
+            if (!force_local_merge) {
+                offset = (c->getGlobalShift() - master_shift).cast<float>();
+            }
+
+            bool need_shift = (offset.norm() > 1e-5);
+
+            const auto& blocks = c->getBlocks();
+            for (const auto& block : blocks) {
+                if (block->empty()) continue;
+
+                // 拷贝数据
+                std::vector<ct::PointXYZ> pts = block->m_points;
+
+                // 应用偏移
+                if (need_shift) {
+                    for (auto& p : pts) {
+                        p.x += offset.x();
+                        p.y += offset.y();
+                        p.z += offset.z();
+                    }
+                }
+
+                const std::vector<ct::RGB>* colors = (has_color && block->m_colors) ? block->m_colors.get() : nullptr;
+                const std::vector<ct::CompressedNormal>* normals = (has_normal && block->m_normals) ? block->m_normals.get() : nullptr;
+                const QMap<QString, std::vector<float>>* scalars = (!block->m_scalar_fields.isEmpty()) ? &block->m_scalar_fields : nullptr;
+
+                merge_cloud->addPoints(pts, colors, normals, scalars);
+            }
+        }
+        closeProgress();
+
         merge_cloud->setId(MERGE_ADD_FLAG + clouds.front()->id());
         merge_cloud->setInfo(clouds.front()->info());
         merge_cloud->makeAdaptive();
