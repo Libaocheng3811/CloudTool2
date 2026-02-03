@@ -1246,6 +1246,9 @@ namespace ct
         if (any_restored) {
             m_has_rgb = true; // 确保 Cloud 状态正确
             m_color_modified = false; // 颜色已恢复到原始状态（或上一次备份的状态）
+            if (m_octree_root && m_config.enableOctree) {
+                this->generateLOD();
+            }
             m_current_color_mode = "RGB (Default)";
             invalidateRenderCache();
         }
