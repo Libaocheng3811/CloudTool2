@@ -89,15 +89,24 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionShowID, &QAction::triggered, ui->cloudview, &ct::CloudView::setShowId);
     connect(ui->actionShowAxes, &QAction::triggered, ui->cloudview, &ct::CloudView::setShowAxes);
     connect(ui->actionShowFPS, &QAction::triggered, ui->cloudview, &ct::CloudView::setShowFPS);
+    ui->actionShowFPS->setChecked(true);
+    ui->actionShowAxes->setChecked(true);
+    ui->actionShowID->setChecked(true);
     connect(ui->actionShowDataTree, &QAction::toggled, [=](bool checked){
         ui->DataDock->setVisible(checked); });
-    connect(ui->DataDock, &QDockWidget::visibilityChanged, ui->actionShowDataTree, &QAction::setChecked);
+    connect(ui->DataDock, &QDockWidget::visibilityChanged, [=](bool visible){
+        if (!this->isMinimized()) ui->actionShowDataTree->setChecked(visible);
+    });
     connect(ui->actionShowProperties, &QAction::toggled, [=](bool checked){
         ui->PropertiesDock->setVisible(checked); });
-    connect(ui->PropertiesDock, &QDockWidget::visibilityChanged, ui->actionShowProperties, &QAction::setChecked);
+    connect(ui->PropertiesDock, &QDockWidget::visibilityChanged, [=](bool visible){
+        if (!this->isMinimized()) ui->actionShowProperties->setChecked(visible);
+    });
     connect(ui->actionShowConsole, &QAction::toggled, [=](bool checked){
         ui->ConsoleDock->setVisible(checked); });
-    connect(ui->ConsoleDock, &QDockWidget::visibilityChanged, ui->actionShowConsole, &QAction::setChecked);
+    connect(ui->ConsoleDock, &QDockWidget::visibilityChanged, [=](bool visible){
+        if (!this->isMinimized()) ui->actionShowConsole->setChecked(visible);
+    });
 
     // tools
     connect(ui->actionCutting, &QAction::triggered, [=] { this->createDialog<Cutting>("Cutting"); });
@@ -122,15 +131,32 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // plugins
     connect(ui->actionCSF, &QAction::triggered, [=] {
-        this->createModalDialog<CSFPlugin>("Cloth Simulation Filter");
-    });
-
+        this->createModalDialog<CSFPlugin>("Cloth Simulation Filter");});
     connect(ui->actionVegetation_Filters, &QAction::triggered, [=] {
-        this->createModalDialog<VegPlugin>("Vegetation Filters");
+        this->createModalDialog<VegPlugin>("Vegetation Filters");});
+    connect(ui->actionChange_Detection, &QAction::triggered, [=] {
+        this->createModalDialog<ChangeDetectPlugin>("Change Detection");});
+
+    connect(ui->actionDark, &QAction::triggered, [=]{
+        QFile styleFile(":/res/theme/darkstyle.qss");
+        if (styleFile.open(QIODevice::ReadOnly)) {
+            QTextStream ts(&styleFile);
+            this->setStyleSheet(ts.readAll());
+            styleFile.close();
+        }
     });
 
-    connect(ui->actionChange_Detection, &QAction::triggered, [=] {
-        this->createModalDialog<ChangeDetectPlugin>("Change Detection");
+    connect(ui->actionLight, &QAction::triggered, [=]{
+        QFile styleFile(":/res/theme/lightstyle.qss");
+        if (styleFile.open(QIODevice::ReadOnly)) {
+            QTextStream ts(&styleFile);
+            this->setStyleSheet(ts.readAll());
+            styleFile.close();
+        }
+    });
+
+    connect(ui->actionOrigin, &QAction::triggered, [=]{
+        this->setStyleSheet("");  // 清空样式表，恢复默认
     });
 
 }

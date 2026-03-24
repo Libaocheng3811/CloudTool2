@@ -2,9 +2,8 @@
     <qresource prefix="/res">
         <file>trans/zh_CN.qm</file>
         <file>trans/zh_CN.ts</file>
-        <file>theme/dark.qss</file>
-        <file>theme/light.qss</file>
-        <file>theme/origin.qss</file>
+        <file>theme/darkstyle.qss</file>
+        <file>theme/lightstyle.qss</file>
         <file>logo/logo.ico</file>
         <file>logo/logo.svg</file>
         <file>images/CSF_ft.png</file>
