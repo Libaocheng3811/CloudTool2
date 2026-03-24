@@ -3,6 +3,7 @@
 
 #include <pcl/common/io.h>
 #include <pcl/common/common.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <random>
 #include <numeric>
 #include <queue>
@@ -1177,6 +1178,57 @@ namespace ct
         else if (m_has_normals) m_type = CLOUD_TYPE_XYZN;
         else if (m_has_rgb) m_type = CLOUD_TYPE_XYZRGB;
         else m_type = CLOUD_TYPE_XYZ;
+
+        // 自动估算分辨率
+        if (m_resolution <= 0.0001f && m_point_count > 0) {
+            m_resolution = computeResolution();
+        }
+    }
+
+    float Cloud::computeResolution(int sampleCount)
+    {
+        if (m_all_blocks.empty()) return 0.0f;
+
+        // 策略：随机选取一个点数较多的 Block，计算其局部密度作为全局代表
+        // 这样可以避免为千万级大点云构建全局 KdTree，性能极高 (ms 级)
+        CloudBlock::Ptr targetBlock = nullptr;
+        for (const auto& block : m_all_blocks) {
+            if (block && block->size() > 100) {
+                targetBlock = block;
+                break;
+            }
+        }
+
+        if (!targetBlock) targetBlock = m_all_blocks[0];
+        if (targetBlock->empty()) return 0.0f;
+
+        size_t n = targetBlock->size();
+        auto cloud_pcl = std::make_shared<pcl::PointCloud<PointXYZ>>();
+        cloud_pcl->points.assign(targetBlock->m_points.begin(), targetBlock->m_points.end());
+        cloud_pcl->width = n;
+        cloud_pcl->height = 1;
+
+        pcl::KdTreeFLANN<PointXYZ> kdtree;
+        kdtree.setInputCloud(cloud_pcl);
+
+        double totalDist = 0;
+        int validPoints = 0;
+        int samples = std::min((int)n, sampleCount);
+
+        std::vector<int> indices(2);
+        std::vector<float> dists(2);
+
+        for (int i = 0; i < samples; ++i) {
+            // 随机采样
+            int idx = rand() % n;
+            // 搜索最近的 2 个点 (第 0 个是点自己)
+            if (kdtree.nearestKSearch(cloud_pcl->points[idx], 2, indices, dists) > 1) {
+                totalDist += std::sqrt(dists[1]);
+                validPoints++;
+            }
+        }
+
+        return (validPoints > 0) ? (float)(totalDist / validPoints) : 0.0f;
     }
 
     void Cloud::updateRecursive(OctreeNode* node, PointXYZ& min_pt, PointXYZ& max_pt, size_t& count)
@@ -1355,21 +1407,21 @@ namespace ct
     {
         if (!node) return;
 
-        // 1. 如果是叶子节点，清空其 LOD 数据
+        // 如果是叶子节点，清空其 LOD 数据
         // 叶子节点直接渲染 Block，不需要 LOD 代理点；LOD 仅存在于内部节点
         if (node->isLeaf()) {
             node->clearLOD();
             return;
         }
 
-        // 2. 先递归处理所有子节点（自底向上构建）
+        // 先递归处理所有子节点（自底向上构建）
         for (int i = 0; i < 8; ++i) {
             if (node->m_children[i]) {
                 generateLODRecursive(node->m_children[i]);
             }
         }
 
-        // 3. 收集候选点 (Candidates)
+        // 收集候选点 (Candidates)
         // 我们需要从 8 个子节点中汇聚点，然后选出代表当前节点的 LOD
         std::vector<pcl::PointXYZRGB> candidates;
 
@@ -1425,7 +1477,7 @@ namespace ct
             }
         }
 
-        // 4. 对候选点进行最终降采样 (Downsampling)
+        // 对候选点进行最终降采样 (Downsampling)
         // 如果收集到的点总数超过了当前节点的预算，随机打乱并截断
         if (candidates.size() > target_lod_size) {
             // 使用随机洗牌来实现均匀采样，避免只保留了前几个子节点的点
@@ -1436,7 +1488,7 @@ namespace ct
             candidates.resize(target_lod_size);
         }
 
-        // 5. 存入当前节点
+        // 存入当前节点
         // 使用 std::move 避免拷贝
         node->m_lod_points = std::move(candidates);
         node->m_lod_dirty = true;

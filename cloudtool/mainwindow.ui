@@ -43,15 +43,20 @@
      <x>0</x>
      <y>0</y>
      <width>1300</width>
-     <height>29</height>
+     <height>30</height>
     </rect>
    </property>
    <property name="font">
     <font>
-     <pointsize>10</pointsize>
+     <pointsize>11</pointsize>
     </font>
    </property>
    <widget class="QMenu" name="menuFile">
+    <property name="font">
+     <font>
+      <pointsize>9</pointsize>
+     </font>
+    </property>
     <property name="title">
      <string>File</string>
     </property>
@@ -61,7 +66,6 @@
     <addaction name="actionClose_All"/>
     <addaction name="actionMerge"/>
     <addaction name="actionClone"/>
-    <addaction name="actionSample"/>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
@@ -91,6 +95,9 @@
     <addaction name="actionShowFPS"/>
     <addaction name="actionShowAxes"/>
     <addaction name="actionShowID"/>
+    <addaction name="actionShowDataTree"/>
+    <addaction name="actionShowProperties"/>
+    <addaction name="actionShowConsole"/>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -198,6 +205,12 @@
      <height>165</height>
     </size>
    </property>
+   <property name="font">
+    <font>
+     <family>Microsoft YaHei UI</family>
+     <pointsize>11</pointsize>
+    </font>
+   </property>
    <property name="features">
     <set>QDockWidget::DockWidgetClosable|QDockWidget::DockWidgetMovable</set>
    </property>
@@ -220,6 +233,12 @@
      </property>
      <item>
       <widget class="ct::CloudTree" name="cloudtree">
+       <property name="font">
+        <font>
+         <family>Microsoft YaHei UI</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
        <property name="styleSheet">
         <string notr="true">QTreeWidget{
 	border: 2px solid lightgray;
@@ -259,8 +278,10 @@ QHeaderView {
         </property>
         <property name="font">
          <font>
-          <weight>75</weight>
-          <bold>true</bold>
+          <family>Microsoft YaHei UI</family>
+          <pointsize>10</pointsize>
+          <weight>50</weight>
+          <bold>false</bold>
          </font>
         </property>
         <property name="textAlignment">
@@ -278,6 +299,12 @@ QHeaderView {
      <width>260</width>
      <height>149</height>
     </size>
+   </property>
+   <property name="font">
+    <font>
+     <family>Microsoft YaHei UI</family>
+     <pointsize>11</pointsize>
+    </font>
    </property>
    <property name="features">
     <set>QDockWidget::DockWidgetClosable|QDockWidget::DockWidgetMovable</set>
@@ -383,15 +410,33 @@ QScrollBar::sub-line:horizontal {
         <property name="text">
          <string>Properties</string>
         </property>
+        <property name="font">
+         <font>
+          <family>Microsoft YaHei UI</family>
+          <pointsize>10</pointsize>
+         </font>
+        </property>
        </column>
        <column>
         <property name="text">
          <string>Value</string>
         </property>
+        <property name="font">
+         <font>
+          <family>Microsoft YaHei UI</family>
+          <pointsize>10</pointsize>
+         </font>
+        </property>
        </column>
        <item row="0" column="0">
         <property name="text">
          <string>Id</string>
+        </property>
+        <property name="font">
+         <font>
+          <family>Microsoft YaHei UI</family>
+          <pointsize>10</pointsize>
+         </font>
         </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
@@ -402,6 +447,11 @@ QScrollBar::sub-line:horizontal {
         <property name="text">
          <string>Type</string>
         </property>
+        <property name="font">
+         <font>
+          <pointsize>10</pointsize>
+         </font>
+        </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
           <normaloff>:/res/icon/view-calendar-week.svg</normaloff>:/res/icon/view-calendar-week.svg</iconset>
@@ -410,6 +460,11 @@ QScrollBar::sub-line:horizontal {
        <item row="2" column="0">
         <property name="text">
          <string>Size</string>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>10</pointsize>
+         </font>
         </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
@@ -420,6 +475,11 @@ QScrollBar::sub-line:horizontal {
         <property name="text">
          <string>Resolution</string>
         </property>
+        <property name="font">
+         <font>
+          <pointsize>10</pointsize>
+         </font>
+        </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
           <normaloff>:/res/icon/zoom.svg</normaloff>:/res/icon/zoom.svg</iconset>
@@ -428,6 +488,11 @@ QScrollBar::sub-line:horizontal {
        <item row="4" column="0">
         <property name="text">
          <string>PointSize</string>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>10</pointsize>
+         </font>
         </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
@@ -438,6 +503,11 @@ QScrollBar::sub-line:horizontal {
         <property name="text">
          <string>Opacity</string>
         </property>
+        <property name="font">
+         <font>
+          <pointsize>10</pointsize>
+         </font>
+        </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
           <normaloff>:/res/icon/view-reveal-symbolic.svg</normaloff>:/res/icon/view-reveal-symbolic.svg</iconset>
@@ -447,6 +517,11 @@ QScrollBar::sub-line:horizontal {
         <property name="text">
          <string>Normals</string>
         </property>
+        <property name="font">
+         <font>
+          <pointsize>10</pointsize>
+         </font>
+        </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
           <normaloff>:/res/icon/normal.svg</normaloff>:/res/icon/normal.svg</iconset>
@@ -455,6 +530,11 @@ QScrollBar::sub-line:horizontal {
        <item row="7" column="0">
         <property name="text">
          <string>Color</string>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>10</pointsize>
+         </font>
         </property>
         <property name="icon">
          <iconset resource="resources/res.qrc">
@@ -472,6 +552,12 @@ QScrollBar::sub-line:horizontal {
      <width>134</width>
      <height>149</height>
     </size>
+   </property>
+   <property name="font">
+    <font>
+     <family>Microsoft YaHei UI</family>
+     <pointsize>10</pointsize>
+    </font>
    </property>
    <property name="windowTitle">
     <string>Console</string>
@@ -493,8 +579,8 @@ QScrollBar::sub-line:horizontal {
    </property>
    <property name="iconSize">
     <size>
-     <width>30</width>
-     <height>30</height>
+     <width>35</width>
+     <height>35</height>
     </size>
    </property>
    <attribute name="toolBarArea">
@@ -507,13 +593,18 @@ QScrollBar::sub-line:horizontal {
    <addaction name="actionClose"/>
    <addaction name="actionClose_All"/>
    <addaction name="actionSave"/>
-   <addaction name="actionSample"/>
    <addaction name="actionMerge"/>
    <addaction name="actionClone"/>
   </widget>
   <widget class="QToolBar" name="EditBar">
    <property name="windowTitle">
     <string>toolBar</string>
+   </property>
+   <property name="iconSize">
+    <size>
+     <width>35</width>
+     <height>35</height>
+    </size>
    </property>
    <attribute name="toolBarArea">
     <enum>TopToolBarArea</enum>
@@ -531,6 +622,12 @@ QScrollBar::sub-line:horizontal {
   <widget class="QToolBar" name="ToolBar">
    <property name="windowTitle">
     <string>toolBar</string>
+   </property>
+   <property name="iconSize">
+    <size>
+     <width>35</width>
+     <height>35</height>
+    </size>
    </property>
    <attribute name="toolBarArea">
     <enum>TopToolBarArea</enum>
@@ -554,6 +651,12 @@ QScrollBar::sub-line:horizontal {
    <property name="windowTitle">
     <string>toolBar</string>
    </property>
+   <property name="iconSize">
+    <size>
+     <width>35</width>
+     <height>35</height>
+    </size>
+   </property>
    <attribute name="toolBarArea">
     <enum>TopToolBarArea</enum>
    </attribute>
@@ -576,6 +679,12 @@ QScrollBar::sub-line:horizontal {
    </property>
    <property name="text">
     <string>Open</string>
+   </property>
+   <property name="font">
+    <font>
+     <family>Microsoft YaHei UI</family>
+     <pointsize>10</pointsize>
+    </font>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>
@@ -630,15 +739,6 @@ QScrollBar::sub-line:horizontal {
    </property>
    <property name="text">
     <string>Clone</string>
-   </property>
-  </action>
-  <action name="actionSample">
-   <property name="icon">
-    <iconset resource="resources/res.qrc">
-     <normaloff>:/res/icon/kstars_constellationart.svg</normaloff>:/res/icon/kstars_constellationart.svg</iconset>
-   </property>
-   <property name="text">
-    <string>Sample</string>
    </property>
   </action>
   <action name="actionQuit">
@@ -1066,6 +1166,30 @@ QScrollBar::sub-line:horizontal {
    </property>
    <property name="text">
     <string>Change Detection</string>
+   </property>
+  </action>
+  <action name="actionShowDataTree">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>ShowDataTree</string>
+   </property>
+  </action>
+  <action name="actionShowProperties">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>ShowProperties</string>
+   </property>
+  </action>
+  <action name="actionShowConsole">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>ShowConsole</string>
    </property>
   </action>
  </widget>

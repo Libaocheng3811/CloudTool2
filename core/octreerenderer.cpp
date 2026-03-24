@@ -220,7 +220,7 @@ namespace ct {
             // 分裂决策：
             // 1. 屏幕投影够大 (需要细节)
             // 2. 有子节点 (可以分裂)
-            // 3. 还有预算 (没钱就不分了，直接画糊的)
+            // 3. 还有预算
             bool should_split = (size > effective_threshold) && node->hasChildren() && budget_allows_split;
 
             if (should_split) {
@@ -358,7 +358,7 @@ namespace ct {
         mapper->SetInputData(polyData);
         mapper->SetScalarModeToUsePointData();
         mapper->SetColorModeToDirectScalars();
-        mapper->StaticOn(); // 【重要】开启静态优化
+        mapper->StaticOn(); // 开启静态优化
 
         auto actor = vtkSmartPointer<vtkActor>::New();
         actor->SetMapper(mapper);

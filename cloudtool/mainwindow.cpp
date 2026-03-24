@@ -89,6 +89,15 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionShowID, &QAction::triggered, ui->cloudview, &ct::CloudView::setShowId);
     connect(ui->actionShowAxes, &QAction::triggered, ui->cloudview, &ct::CloudView::setShowAxes);
     connect(ui->actionShowFPS, &QAction::triggered, ui->cloudview, &ct::CloudView::setShowFPS);
+    connect(ui->actionShowDataTree, &QAction::toggled, [=](bool checked){
+        ui->DataDock->setVisible(checked); });
+    connect(ui->DataDock, &QDockWidget::visibilityChanged, ui->actionShowDataTree, &QAction::setChecked);
+    connect(ui->actionShowProperties, &QAction::toggled, [=](bool checked){
+        ui->PropertiesDock->setVisible(checked); });
+    connect(ui->PropertiesDock, &QDockWidget::visibilityChanged, ui->actionShowProperties, &QAction::setChecked);
+    connect(ui->actionShowConsole, &QAction::toggled, [=](bool checked){
+        ui->ConsoleDock->setVisible(checked); });
+    connect(ui->ConsoleDock, &QDockWidget::visibilityChanged, ui->actionShowConsole, &QAction::setChecked);
 
     // tools
     connect(ui->actionCutting, &QAction::triggered, [=] { this->createDialog<Cutting>("Cutting"); });

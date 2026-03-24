@@ -215,6 +215,7 @@ namespace ct
          * @brief 获取点云分辨率
          */
         float resolution() const {return m_resolution;}
+        void setResolution(float res) { m_resolution = res; }
 
         /**
          * @brief 获取点云类型
@@ -268,6 +269,7 @@ namespace ct
         friend class FileIO;
 
     private:
+        float computeResolution(int sampleCount = 1000);
         void initColorTable();
         void copyFrom(const Cloud& other);
         void invalidateCache();
