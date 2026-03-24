@@ -10,6 +10,7 @@ set(Srcs
         tool/rangeimage.cpp
         tool/registration.cpp
         tool/descriptor.cpp
+        tool/sampling.cpp
         plugins/csfplugin.cpp
         plugins/vegplugin.cpp
         plugins/changedetectplugin.cpp
@@ -26,6 +27,7 @@ set(Hdrs
         tool/rangeimage.h
         tool/registration.h
         tool/descriptor.h
+        tool/sampling.h
         plugins/csfplugin.h
         plugins/vegplugin.h
         plugins/changedetectplugin.h

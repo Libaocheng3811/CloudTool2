@@ -372,4 +372,277 @@ namespace ct
 
         emit filterResult(cloud_filtered, time.toc());
     }
+
+    void Filters::DownSampling(float radius)
+    {
+        m_is_canceled = false;
+
+        TicToc time;
+        time.tic();
+
+        if (!cloud_) return;
+        if (m_is_canceled) return;
+        emit progress(10);
+
+        // 转换输入点云
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::VoxelGrid<PointXYZRGBN> vfilter;
+        vfilter.setInputCloud(pcl_cloud);
+        vfilter.setLeafSize(radius, radius, radius);
+        vfilter.setFilterLimitsNegative(negative_);
+
+        if (m_is_canceled) return;
+        emit progress(20);
+
+        vfilter.filter(*pcl_filtered);
+
+        if (m_is_canceled) return;
+        emit progress(80);
+
+        if (pcl_filtered->empty())
+        {
+            emit progress(100);
+            return;
+        }
+
+        // 从 PCL 结果构造 Cloud
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
+        if (!cloud_filtered || cloud_filtered->empty())
+        {
+            emit progress(100);
+            return;
+        }
+
+        cloud_filtered->setId(cloud_->id());
+        cloud_filtered->setHasColors(cloud_->hasColors());
+        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->backupColors();
+
+        if (m_is_canceled) return;
+        emit progress(100);
+
+        emit filterResult(cloud_filtered, time.toc());
+    }
+
+    void Filters::UniformSampling(float radius)
+    {
+        m_is_canceled = false;
+
+        TicToc time;
+        time.tic();
+
+        if (!cloud_) return;
+        if (m_is_canceled) return;
+        emit progress(10);
+
+        // 转换输入点云
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::UniformSampling<PointXYZRGBN> sfilter;
+        sfilter.setInputCloud(pcl_cloud);
+        sfilter.setRadiusSearch(radius);
+        sfilter.filter(*pcl_filtered);
+
+        if (m_is_canceled) return;
+        emit progress(80);
+
+        if (negative_)
+        {
+            pcl::PointCloud<PointXYZRGBN>::Ptr pcl_neg_filtered(new pcl::PointCloud<PointXYZRGBN>);
+            pcl::ExtractIndices<PointXYZRGBN> extract;
+            extract.setInputCloud(pcl_cloud);
+            extract.setIndices(sfilter.getRemovedIndices());
+            extract.filter(*pcl_neg_filtered);
+            pcl_filtered = pcl_neg_filtered;
+        }
+
+        if (m_is_canceled) return;
+
+        // 从 PCL 结果构造 Cloud
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
+        cloud_filtered->setId(cloud_->id());
+        cloud_filtered->setHasColors(cloud_->hasColors());
+        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->backupColors();
+
+        emit progress(100);
+
+        emit filterResult(cloud_filtered, time.toc());
+    }
+
+    void Filters::RandomSampling(int sample, int seed)
+    {
+        m_is_canceled = false;
+
+        TicToc time;
+        time.tic();
+
+        if (!cloud_) return;
+        if (m_is_canceled) return;
+        emit progress(10);
+
+        // 转换输入点云
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::RandomSample<PointXYZRGBN> rfilter;
+        rfilter.setInputCloud(pcl_cloud);
+        rfilter.setSample(sample);
+        rfilter.setSeed(seed);
+        rfilter.setNegative(negative_);
+        rfilter.filter(*pcl_filtered);
+
+        if (m_is_canceled) return;
+        emit progress(80);
+
+        // 从 PCL 结果构造 Cloud
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
+        cloud_filtered->setId(cloud_->id());
+        cloud_filtered->setHasColors(cloud_->hasColors());
+        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->backupColors();
+
+        if (m_is_canceled) return;
+        emit progress(100);
+
+        emit filterResult(cloud_filtered, time.toc());
+    }
+
+    void Filters::ReSampling(float radius, int polynomial_order)
+    {
+        m_is_canceled = false;
+
+        TicToc time;
+        time.tic();
+
+        if (!cloud_) return;
+        if (m_is_canceled) return;
+        emit progress(10);
+
+        // 转换输入点云
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
+
+        pcl::MovingLeastSquares<PointXYZRGBN, PointXYZRGBN> mfilter;
+        mfilter.setInputCloud(pcl_cloud);
+        mfilter.setSearchRadius(radius);
+        if (!cloud_->hasNormals()) mfilter.setComputeNormals(true);
+        mfilter.setPolynomialOrder(polynomial_order);
+        mfilter.setSearchMethod(tree);
+        mfilter.setNumberOfThreads(14);
+
+        if (m_is_canceled) return;
+        emit progress(20);
+
+        mfilter.process(*pcl_filtered);
+
+        if (m_is_canceled) return;
+        emit progress(80);
+
+        // 从 PCL 结果构造 Cloud
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
+        cloud_filtered->setId(cloud_->id());
+        cloud_filtered->setHasColors(cloud_->hasColors());
+        cloud_filtered->setHasNormals(true); // MLS 会计算法线
+        cloud_filtered->backupColors();
+
+        if (m_is_canceled) return;
+        emit progress(100);
+
+        emit filterResult(cloud_filtered, time.toc());
+    }
+
+    void Filters::SamplingSurfaceNormal(int sample, int seed, float ratio)
+    {
+        m_is_canceled = false;
+
+        TicToc time;
+        time.tic();
+
+        if (!cloud_) return;
+        if (m_is_canceled) return;
+        emit progress(10);
+
+        // 转换输入点云
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::SamplingSurfaceNormal<PointXYZRGBN> rfilter;
+        rfilter.setInputCloud(pcl_cloud);
+        rfilter.setSample(sample);
+        rfilter.setSeed(seed);
+        rfilter.setRatio(ratio);
+        rfilter.filter(*pcl_filtered);
+
+        if (m_is_canceled) return;
+        emit progress(80);
+
+        if (negative_)
+        {
+            pcl::PointCloud<PointXYZRGBN>::Ptr pcl_neg_filtered(new pcl::PointCloud<PointXYZRGBN>);
+            pcl::ExtractIndices<PointXYZRGBN> extract;
+            extract.setInputCloud(pcl_cloud);
+            extract.setIndices(rfilter.getRemovedIndices());
+            extract.filter(*pcl_neg_filtered);
+            pcl_filtered = pcl_neg_filtered;
+        }
+
+        if (m_is_canceled) return;
+
+        // 从 PCL 结果构造 Cloud
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
+        cloud_filtered->setId(cloud_->id());
+        cloud_filtered->setHasColors(cloud_->hasColors());
+        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->backupColors();
+
+        emit progress(100);
+
+        emit filterResult(cloud_filtered, time.toc());
+    }
+
+    void Filters::NormalSpaceSampling(int sample, int seed, int bin)
+    {
+        m_is_canceled = false;
+
+        TicToc time;
+        time.tic();
+
+        if (!cloud_) return;
+        if (m_is_canceled) return;
+        emit progress(10);
+
+        // 转换输入点云
+        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+
+        pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
+        pcl::NormalSpaceSampling<PointXYZRGBN, PointXYZRGBN> filter;
+        filter.setInputCloud(pcl_cloud);
+        filter.setNormals(pcl_cloud);
+        filter.setSample(sample);
+        filter.setSeed(seed);
+        filter.setBins(bin, bin, bin);
+        filter.setNegative(negative_);
+        filter.filter(*pcl_filtered);
+
+        if (m_is_canceled) return;
+        emit progress(80);
+
+        // 从 PCL 结果构造 Cloud
+        Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
+        cloud_filtered->setId(cloud_->id());
+        cloud_filtered->setHasColors(cloud_->hasColors());
+        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->backupColors();
+
+        if (m_is_canceled) return;
+        emit progress(100);
+
+        emit filterResult(cloud_filtered, time.toc());
+    }
 }

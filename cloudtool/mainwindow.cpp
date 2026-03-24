@@ -9,6 +9,7 @@
 #include "tool/cutting.h"
 #include "tool/pickpoints.h"
 #include "tool/filters.h"
+#include "tool/sampling.h"
 #include "tool/rangeimage.h"
 #include "tool/keypoints.h"
 #include "tool/registration.h"
@@ -24,6 +25,7 @@
 #include <QDateTime>
 #include <QFileDialog>
 #include <QComboBox>
+#include <QHeaderView>
 
 #define  PARENT_ICON_PATH   ":/res/icon/document-open.svg"
 #define  CHILD_ICON_PATH    ":/res/icon/view-calendar.svg"
@@ -51,6 +53,17 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->cloudtree->setPropertiesTable(ui->cloudtable);
     ui->cloudtree->setParentIcon(QIcon(PARENT_ICON_PATH));
     ui->cloudtree->setChildIcon(QIcon(CHILD_ICON_PATH));
+
+    // 设置属性表格列宽 - 第一列固定，第二列拉伸
+    ui->cloudtable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    ui->cloudtable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    ui->cloudtable->setColumnWidth(0, 120);
+
+    // 设置属性表格列宽自适应
+    // 第一列（属性名）固定宽度，第二列（值）可拉伸填充
+    ui->cloudtable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    ui->cloudtable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    ui->cloudtable->setColumnWidth(0, 140);  // 第一列固定宽度，确保属性名显示完整
 
     // file
     connect(ui->actionOpen, &QAction::triggered, ui->cloudtree, &ct::CloudTree::addCloud);
@@ -81,6 +94,9 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionCutting, &QAction::triggered, [=] { this->createDialog<Cutting>("Cutting"); });
     connect(ui->actionPickPoints, &QAction::triggered, [=] {this->createDialog<PickPoints>("PickPoints"); });
     connect(ui->actionFilters, &QAction::triggered, [=] {this->createLeftDock<Filters>("Filters"); });
+    connect(ui->actionSampling, &QAction::triggered, [=] {
+        this->createModalDialog<Sampling>("Point Cloud Sampling");
+    });
     connect(ui->actionRangeImage, &QAction::triggered, [=]{this->createDialog<RangeImage>("RangeImage");});
     connect(ui->actionDescriptor, &QAction::triggered, [=]
     {

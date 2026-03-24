@@ -19,7 +19,8 @@ namespace ct
     {
         Q_OBJECT
     public:
-        explicit CustomDialog(QWidget* parent = nullptr) : QDialog(parent) {}
+        explicit CustomDialog(QWidget* parent = nullptr)
+            : QDialog(parent), m_cloudview(nullptr), m_cloudtree(nullptr), m_console(nullptr) {}
 
         ~CustomDialog() {}
 

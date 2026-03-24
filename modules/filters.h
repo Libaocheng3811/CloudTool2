@@ -144,6 +144,55 @@ namespace ct
          */
         void ShadowPoints(float threshold);
 
+        /* sample */
+        /**
+        * @brief 体素网格降采样，使用 VoxelGrid 滤波器对点云进行下采样
+        * @param radius 体素大小（Voxel leaf size），单位与点云坐标单位一致
+        * @note 在 3D 空间创建体素网格，每个体素内保留一个代表点（通常为重心）
+        */
+        void DownSampling(float radius);
+
+        /**
+         * @brief 均匀采样，使用 UniformSampling 滤波器在 3D 空间网格上进行下采样
+         * @param radius 搜索半径，用于确定 3D 空间网格的大小
+         * @note 与 DownSampling 类似，但使用不同的采样策略，基于网格中心进行采样
+         */
+        void UniformSampling(float radius);
+
+        /**
+         * @brief 随机采样，从点云中随机抽取指定数量的点
+         * @param sample 采样点数（保留的点数）
+         * @param seed 随机种子，用于可重复的随机采样
+         * @note 使用均匀概率进行随机抽样，适合快速预览或测试
+         */
+        void RandomSampling(int sample, int seed);
+
+        /**
+         * @brief 移动最小二乘重采样，用于点云平滑和法线计算
+         * @param radius 搜索半径，用于查找 k 近邻点
+         * @param polynomial_order 多项式阶数（1-5），用于局部表面拟合
+         * @note 使用 MLS (Moving Least Squares) 算法平滑点云并重新采样，可同时计算法线
+         */
+        void ReSampling(float radius, int polynomial_order);
+
+        /**
+         * @brief 表面法线空间采样，在法线方向空间均匀采样点云
+         * @param sample 每个网格中的最大样本数
+         * @param seed 随机种子
+         * @param ratio 每个网格中要采样的点的比率（0-1）
+         * @note 将空间划分为网格，考虑表面法线方向进行采样，保留几何特征
+         */
+        void SamplingSurfaceNormal(int sample, int seed, float ratio);
+
+        /**
+         * @brief 法线空间采样，在法线方向空间均匀采样以保留特征
+         * @param sample 采样点数
+         * @param seed 随机种子
+         * @param bin x,y,z 方向的 bin 数量（法线空间分割数）
+         * @note 在法线方向空间进行均匀采样，更好地保留点云的几何特征
+         */
+        void NormalSpaceSampling(int sample, int seed, int bin);
+
         /**
          * @brief 取消操作
          */

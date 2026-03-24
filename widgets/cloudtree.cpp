@@ -24,6 +24,7 @@
 #include <QComboBox>
 #include <QApplication>
 #include <QTime>
+#include <QSizePolicy>
 
 namespace ct
 {
@@ -716,6 +717,7 @@ namespace ct
                     QSpinBox *point_size = new QSpinBox;
                     point_size->setRange(1, 99);
                     point_size->setValue(update_cloud->pointSize());
+                    point_size->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
                     connect(point_size, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
                             [=](int value){
                                 update_cloud->setPointSize(value);
@@ -728,6 +730,7 @@ namespace ct
                     opacity->setSingleStep(0.1);
                     opacity->setRange(0, 1);
                     opacity->setValue(update_cloud->opacity());
+                    opacity->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
                     connect(opacity, static_cast<void (QDoubleSpinBox::*)(double )>(&QDoubleSpinBox::valueChanged),
                             [=](double value){
                                 update_cloud->setOpacity(value);
@@ -738,7 +741,7 @@ namespace ct
                     // 5. Normals (Checkbox + Scale)
                     QWidget* normals_widget = new QWidget;
                     QHBoxLayout* layout = new QHBoxLayout(normals_widget);
-                    layout->setContentsMargins(0,0,0,0); // 修正布局边距，防止显示不全
+                    layout->setContentsMargins(0,0,0,0);
                     layout->setSpacing(5);
 
                     QCheckBox* show_normals = new QCheckBox;
@@ -746,6 +749,7 @@ namespace ct
                     scale->setSingleStep(0.01);
                     scale->setRange(0, 9999);
                     scale->setValue(0.05);
+                    scale->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
                     show_normals->setEnabled(update_cloud->hasNormals());
 
@@ -763,7 +767,7 @@ namespace ct
 
                     layout->addWidget(show_normals);
                     layout->addWidget(scale);
-                    layout->addStretch(); // 靠左对齐
+                    layout->addStretch();
                     m_table->setCellWidget(6, 1, normals_widget);
 
                     // 6. Color Mode (ComboBox)
@@ -788,6 +792,8 @@ namespace ct
                         // 如果没找到（异常情况），默认选 RGB
                         color_mode->setCurrentIndex(0);
                     }
+
+                    color_mode->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
                     connect(color_mode, &QComboBox::currentTextChanged,
                             [=](const QString& text){
