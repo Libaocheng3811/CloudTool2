@@ -93,6 +93,9 @@ namespace ct{
         double m_last_cam_dir[3];
         bool m_force_update = false;
 
+        int m_last_point_size = -1;
+        float m_last_opacity = -1.0f;
+
         // 交互状态与动态阈值
         bool m_is_interacting = false;
         // 分裂阈值，屏幕上小于这个像素宽度的方块，就不再加载细节，直接看 LOD。值越小细节越丰富，CPU 遍历压力越大。

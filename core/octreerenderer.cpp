@@ -50,6 +50,9 @@ namespace ct {
             // 如果是直通模式(无八叉树)，不需要阈值
             // 如果有八叉树，设置一个合理的基础阈值
             m_base_threshold = 80.0f;
+
+            m_last_point_size = m_cloud->pointSize();
+            m_last_opacity = m_cloud->opacity();
         }
     }
 
@@ -118,6 +121,17 @@ namespace ct {
     void OctreeRenderer::update()
     {
         if (!m_cloud || !m_visible) return;
+
+        // 属性同步
+        if (m_last_point_size != m_cloud->pointSize() || m_last_opacity != m_cloud->opacity()) {
+            m_last_point_size = m_cloud->pointSize();
+            m_last_opacity = m_cloud->opacity();
+            for (auto& pair : m_actor_cache) {
+                pair.second->GetProperty()->SetPointSize(m_last_point_size);
+                pair.second->GetProperty()->SetOpacity(m_last_opacity);
+            }
+            m_force_update = true;
+        }
 
         OctreeNode* root = m_cloud->getOctreeRoot(); // 获取根节点
 

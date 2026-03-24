@@ -718,10 +718,11 @@ namespace ct
                     point_size->setRange(1, 99);
                     point_size->setValue(update_cloud->pointSize());
                     point_size->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-                    connect(point_size, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
-                            [=](int value){
+                    connect(point_size, QOverload<int>::of(&QSpinBox::valueChanged),
+                            this, [=](int value){
                                 update_cloud->setPointSize(value);
                                 m_cloudview->setPointCloudSize(update_cloud->id(), value);
+                                m_cloudview->refresh();
                             });
                     m_table->setCellWidget(4, 1, point_size);
 
@@ -731,10 +732,11 @@ namespace ct
                     opacity->setRange(0, 1);
                     opacity->setValue(update_cloud->opacity());
                     opacity->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-                    connect(opacity, static_cast<void (QDoubleSpinBox::*)(double )>(&QDoubleSpinBox::valueChanged),
-                            [=](double value){
+                    connect(opacity, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                            this, [=](double value){
                                 update_cloud->setOpacity(value);
                                 m_cloudview->setPointCloudOpacity(update_cloud->id(), value);
+                                m_cloudview->refresh();
                             });
                     m_table->setCellWidget(5, 1, opacity);
 
