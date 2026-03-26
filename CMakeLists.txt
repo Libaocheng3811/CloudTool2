@@ -89,9 +89,22 @@ else ()
     message(STATUS "Not found OpenMP")
 endif ()
 
+# 标准python环境，为避免多个python版本冲突，指定路径
+set(MY_NATIVE_PYTHON_DIR "F:/Program Files/Python39")
+set(Python3_ROOT_DIR ${MY_NATIVE_PYTHON_DIR})
+set(Python3_FIND_STRATEGY LOCATION)
+set(Python3_FIND_REGISTRY NEVER)
+
+find_package(Python3 3.9 EXACT COMPONENTS Interpreter Development.Embed REQUIRED)
+
+message(STATUS "Python Include: ${Python3_INCLUDE_DIRS}")
+message(STATUS "Python Libs: ${Python3_LIBRARIES}")
+
+link_directories(${Python3_LIBRARY_DIRS})
+set(PYBIND11_FINDPYTHON ON CACHE BOOL "" FORCE)
+
 # QT路径
 #set(CMAKE_PREFIX_PATH "D:/LibCommunity/Qt5.15/5.15.2/msvc2019_64")
-
 find_package(QT NAMES Qt5 COMPONENTS Core Widgets OpenGL Gui REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
 
@@ -158,6 +171,7 @@ set(LASZIP_BUILD_STATIC ON CACHE BOOL "Build static laszip" FORCE)
 set(LASLIB_BUILD_STATIC ON CACHE BOOL "Build static laslib" FORCE)
 set(BUILD_TOOLS OFF CACHE BOOL "Build tools" FORCE)
 
+add_subdirectory(3rdparty/pybind11)
 add_subdirectory(3rdparty/LASTools)
 add_subdirectory(3rdparty/CSF)
 add_subdirectory(core)
