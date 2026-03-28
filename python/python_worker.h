@@ -1,0 +1,51 @@
+#ifndef CLOUDTOOL2_PYTHON_WORKER_H
+#define CLOUDTOOL2_PYTHON_WORKER_H
+
+#include <QThread>
+#include <QString>
+#include <atomic>
+
+namespace ct
+{
+
+class PythonBridge;
+
+class PythonWorker : public QThread
+{
+    Q_OBJECT
+
+public:
+    explicit PythonWorker(PythonBridge* bridge, QObject* parent = nullptr);
+
+    /// 设置要执行的脚本内容
+    void execScript(const QString& script, const QString& filename = "");
+
+    /// 设置要执行的脚本文件路径
+    void execFile(const QString& filepath);
+
+    /// 请求取消执行（协作式）
+    void cancel();
+
+    bool isBusy() const { return m_busy.load(); }
+
+signals:
+    void scriptStarted();
+    void scriptFinished(bool success, QString error);
+
+protected:
+    void run() override;
+
+private:
+    void executePythonCode();
+
+    PythonBridge* m_bridge;
+    QString m_script;
+    QString m_filename;
+    std::atomic<bool> m_cancel_flag{false};
+    std::atomic<bool> m_busy{false};
+    bool m_is_file{false};
+};
+
+} // namespace ct
+
+#endif // CLOUDTOOL2_PYTHON_WORKER_H
