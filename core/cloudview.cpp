@@ -994,6 +994,17 @@ namespace ct
         m_viewer->getRenderWindow()->Render();
     }
 
+    void CloudView::invalidateCloudRender(const QString& cloud_id)
+    {
+        auto it = m_OctreeRenders.find(cloud_id);
+        if (it != m_OctreeRenders.end() && it.value()) {
+            it.value()->invalidateCache();  // 清除 Actor 缓存 + m_force_update = true
+            it.value()->update();           // 重新遍历八叉树，重建可见 Actor
+        }
+        m_render->ResetCameraClippingRange();
+        m_viewer->getRenderWindow()->Render();
+    }
+
     void CloudView::mousePressEvent(QMouseEvent *event)
     {
         if (event->button() == Qt::LeftButton)

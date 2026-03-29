@@ -382,6 +382,12 @@ namespace ct {
          */
         void refresh();
 
+        /**
+         * @brief 使指定点云的渲染缓存失效并强制重绘
+         * @param cloud_id 点云 ID（与 m_OctreeRenders 的 key 对应）
+         */
+        void invalidateCloudRender(const QString& cloud_id);
+
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     protected:

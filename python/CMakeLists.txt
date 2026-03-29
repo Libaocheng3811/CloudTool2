@@ -1,7 +1,7 @@
 file(GLOB Python_Srcs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 file(GLOB Python_Hdrs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 
-add_library(ct_python STATIC ${Python_Srcs} ${Python_Hdrs})
+add_library(ct_python OBJECT ${Python_Srcs} ${Python_Hdrs})
 
 target_link_libraries(ct_python
     PUBLIC

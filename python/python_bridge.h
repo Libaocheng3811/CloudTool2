@@ -23,6 +23,7 @@ public:
     void closeProgress() { emit signalCloseProgress(); }
 
     void refreshView() { emit signalRefreshView(); }
+    void cloudChanged(const QString& id) { emit signalCloudChanged(id); }
     void resetCamera() { emit signalResetCamera(); }
     void zoomToBounds() { emit signalZoomToBounds(); }
 
@@ -42,6 +43,7 @@ signals:
     void signalCloseProgress();
 
     // 视图控制
+    void signalCloudChanged(QString cloud_id);
     void signalResetCamera();
     void signalRefreshView();
     void signalZoomToBounds();

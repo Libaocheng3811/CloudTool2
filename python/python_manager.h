@@ -36,6 +36,8 @@ private:
 
     void redirectStdio();
     void addSearchPaths();
+    void setupPythonHome();
+    void addDllDirectories();
 
     PythonBridge* m_bridge = nullptr;
     PythonWorker* m_worker = nullptr;

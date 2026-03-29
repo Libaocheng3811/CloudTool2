@@ -18,6 +18,9 @@
 #include "plugins/vegplugin.h"
 #include "plugins/changedetectplugin.h"
 
+#include "python/python_manager.h"
+#include "python/python_bridge.h"
+
 #include <QDesktopWidget>
 #include <QDebug>
 #include <QDir>
@@ -158,6 +161,15 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionOrigin, &QAction::triggered, [=]{
         this->setStyleSheet("");  // 清空样式表，恢复默认
     });
+
+    // === Python Bridge 信号连接 ===
+    auto* bridge = ct::PythonManager::instance().bridge();
+    if (bridge) {
+        // Python 数据变更 → 刷新对应点云的渲染缓存
+        connect(bridge, &ct::PythonBridge::signalCloudChanged,
+                ui->cloudview, &ct::CloudView::invalidateCloudRender,
+                Qt::QueuedConnection);
+    }
 
 }
 

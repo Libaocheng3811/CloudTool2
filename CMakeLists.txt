@@ -165,6 +165,7 @@ include_directories(${PROJECT_SOURCE_DIR})
 file(TO_CMAKE_PATH "${PROJECT_SOURCE_DIR}" PROJECT_ROOT_PATH)
 add_definitions(-DROOT_PATH="${PROJECT_SOURCE_DIR}")
 add_definitions(-DDATA_PATH="${PROJECT_SOURCE_DIR}/data/")
+add_definitions(-DPYTHON_HOME="${MY_NATIVE_PYTHON_DIR}")
 
 # 3rdParty 编译选项
 set(LASZIP_BUILD_STATIC ON CACHE BOOL "Build static laszip" FORCE)
