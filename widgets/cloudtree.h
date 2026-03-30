@@ -8,6 +8,7 @@
 
 #include <QMenu>
 #include <QMap>
+#include <QSet>
 #include <QInputDialog>
 #include <QThread>
 
@@ -164,11 +165,24 @@ namespace ct
          */
         void removedCloudId(const QString&);
 
+        /**
+         * @brief 点云插入完成（Bridge 用于同步注册表）
+         */
+        void cloudInserted(Cloud::Ptr cloud);
+
     private slots:
         /**
          * @brief 加载点云文件的结果
          */
         void loadCloudResult(bool success, const Cloud::Ptr& cloud, float time);
+
+    public slots:
+        /// 标记点云为"脚本使用中"
+        void markCloudInUse(const QString& id);
+        /// 取消"脚本使用中"标记
+        void unmarkCloudInUse(const QString& id);
+        /// 释放所有 in-use 标记
+        void releaseAllInUse();
 
         /**
          * @brief 保存点云文件的结果
@@ -214,6 +228,9 @@ namespace ct
 
         // 用于记录加载队列中的点云数量
         int m_loading_queue_count = 0;
+
+        // 被脚本使用中的点云 ID 集合（删除保护）
+        QSet<QString> m_clouds_in_use;
     };
 }
 

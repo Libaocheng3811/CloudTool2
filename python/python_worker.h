@@ -23,7 +23,7 @@ public:
     /// 设置要执行的脚本文件路径
     void execFile(const QString& filepath);
 
-    /// 请求取消执行（协作式）
+    /// 强制取消执行（向 Python 线程注入 KeyboardInterrupt）
     void cancel();
 
     bool isBusy() const { return m_busy.load(); }
@@ -43,6 +43,7 @@ private:
     QString m_filename;
     std::atomic<bool> m_cancel_flag{false};
     std::atomic<bool> m_busy{false};
+    std::atomic<unsigned long> m_py_thread_id{0};
     bool m_is_file{false};
 };
 

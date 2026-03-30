@@ -183,6 +183,9 @@ namespace ct
         }
 
         printI(QString("Add cloud[id:%1] done.").arg(cloud->id()));
+
+        // 通知 Bridge 注册该云
+        emit cloudInserted(cloud);
     }
 
     void CloudTree::updateCloud(const Cloud::Ptr &cloud, const Cloud::Ptr &new_cloud, bool update_name)
@@ -221,6 +224,15 @@ namespace ct
         getAllChildItems(item, allChildren);
         allChildren.append(item);
 
+        // 删除保护：检查是否有被脚本使用的点云
+        for (QTreeWidgetItem* c : allChildren){
+            Cloud::Ptr cloud = getCloud(c);
+            if (cloud && m_clouds_in_use.contains(cloud->id())) {
+                printW(QString("Cloud[%1] is in use by script, cannot delete").arg(cloud->id()));
+                return;
+            }
+        }
+
         m_cloudview->setAutoRender(false);
 
         for (QTreeWidgetItem* c : allChildren){
@@ -243,6 +255,12 @@ namespace ct
 
     void CloudTree::removeAllClouds()
     {
+        // 检查是否有任何点云正在被脚本使用
+        if (!m_clouds_in_use.isEmpty()) {
+            printW(QString("Cannot remove all: %1 cloud(s) in use by script").arg(m_clouds_in_use.size()));
+            return;
+        }
+
         m_cloudview->setAutoRender(false);
 
         // 遍历所有 TopLevel Items 并移除
@@ -938,6 +956,25 @@ namespace ct
         } else {
             m_cloudview->resetCamera();
         }
+    }
+
+    // ================================================================
+    // 脚本使用中保护
+    // ================================================================
+
+    void CloudTree::markCloudInUse(const QString& id)
+    {
+        m_clouds_in_use.insert(id);
+    }
+
+    void CloudTree::unmarkCloudInUse(const QString& id)
+    {
+        m_clouds_in_use.remove(id);
+    }
+
+    void CloudTree::releaseAllInUse()
+    {
+        m_clouds_in_use.clear();
     }
 
     void CloudTree::onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result)

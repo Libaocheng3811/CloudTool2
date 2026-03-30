@@ -282,6 +282,21 @@ PYBIND11_EMBEDDED_MODULE(ct, m)
         return py::cast(PyCloud(*cloud_ptr));
     }, py::arg("cap"), "Internal: wrap Cloud::Ptr into ct.Cloud");
 
+    // --- 按名称获取点云（线程安全，自动持有引用 + 标记 in-use） ---
+    m.def("get_cloud", [](const std::string& name) -> py::object {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (!bridge) throw std::runtime_error("Python bridge not initialized");
+
+        auto cloud = bridge->getCloud(QString::fromStdString(name));
+        if (!cloud) return py::none();
+
+        // 持有引用 + 标记 in-use
+        bridge->holdCloud(cloud);
+        bridge->markCloudInUse(cloud->id());
+
+        return py::cast(PyCloud(cloud));
+    }, py::arg("name"), "Get cloud by name, returns ct.Cloud or None");
+
     // --- PyCloud ---
     py::class_<PyCloud>(m, "Cloud")
         .def(py::init<ct::Cloud::Ptr>())

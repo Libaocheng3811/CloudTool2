@@ -169,6 +169,20 @@ MainWindow::MainWindow(QWidget *parent) :
         connect(bridge, &ct::PythonBridge::signalCloudChanged,
                 ui->cloudview, &ct::CloudView::invalidateCloudRender,
                 Qt::QueuedConnection);
+
+        // CloudTree 增删 → Bridge 注册表同步
+        connect(ui->cloudtree, &ct::CloudTree::cloudInserted,
+                bridge, &ct::PythonBridge::registerCloud, Qt::QueuedConnection);
+        connect(ui->cloudtree, &ct::CloudTree::removedCloudId,
+                bridge, &ct::PythonBridge::unregisterCloud, Qt::QueuedConnection);
+
+        // Bridge in-use 信号 → CloudTree 删除保护
+        connect(bridge, &ct::PythonBridge::signalMarkCloudInUse,
+                ui->cloudtree, &ct::CloudTree::markCloudInUse, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalUnmarkCloudInUse,
+                ui->cloudtree, &ct::CloudTree::unmarkCloudInUse, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalReleaseAllInUse,
+                ui->cloudtree, &ct::CloudTree::releaseAllInUse, Qt::QueuedConnection);
     }
 
 }

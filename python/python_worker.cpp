@@ -43,14 +43,27 @@ void PythonWorker::execFile(const QString& filepath)
 void PythonWorker::cancel()
 {
     m_cancel_flag.store(true);
+
+    // 向 Worker 的 Python 线程注入 KeyboardInterrupt 异常
+    unsigned long tid = m_py_thread_id.load();
+    if (tid != 0) {
+        PyThreadState_SetAsyncExc(tid, PyExc_KeyboardInterrupt);
+    }
 }
 
 void PythonWorker::run()
 {
     m_busy.store(true);
+    m_py_thread_id.store(0);
     emit scriptStarted();
 
     executePythonCode();
+
+    // 脚本执行完毕，释放所有持有的云引用并通知 UI
+    if (m_bridge) {
+        m_bridge->releaseAllHeld();
+        m_bridge->releaseAllInUse();
+    }
 
     m_busy.store(false);
 }
@@ -60,24 +73,21 @@ void PythonWorker::executePythonCode()
     // 获取 GIL
     PyGILState_STATE gstate = PyGILState_Ensure();
 
+    // 记录当前线程在 Python 解释器中的 ID（用于 cancel 注入异常）
+    m_py_thread_id.store(PyThreadState_Get()->thread_id);
+
     try {
         if (m_cancel_flag.load()) {
             emit scriptFinished(false, "Script canceled before execution");
+            m_py_thread_id.store(0);
             PyGILState_Release(gstate);
             return;
         }
 
         if (m_is_file) {
-            // 执行文件
             py::eval_file(m_filename.toStdString());
         } else {
-            // 执行脚本字符串
             py::exec(m_script.toStdString(), py::globals(), py::dict());
-        }
-
-        // 检查是否被取消
-        if (m_cancel_flag.load()) {
-            emit m_bridge->signalLog(1, "Script execution was interrupted");
         }
 
         emit scriptFinished(true, "");
@@ -96,6 +106,7 @@ void PythonWorker::executePythonCode()
         emit scriptFinished(false, "Unknown error during script execution");
     }
 
+    m_py_thread_id.store(0);
     // 释放 GIL
     PyGILState_Release(gstate);
 }
