@@ -297,6 +297,205 @@ PYBIND11_EMBEDDED_MODULE(ct, m)
         return py::cast(PyCloud(cloud));
     }, py::arg("name"), "Get cloud by name, returns ct.Cloud or None");
 
+    // ================================================================
+    // 视图控制
+    // ================================================================
+
+    m.def("refresh_view", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->refreshView();
+    }, "Refresh the 3D view");
+
+    m.def("reset_camera", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->resetCamera();
+    }, "Reset camera to default position");
+
+    m.def("zoom_to_bounds", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->zoomToBounds();
+    }, "Zoom to fit all visible clouds");
+
+    m.def("set_auto_render", [](bool enable) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setAutoRender(enable);
+    }, py::arg("enable"), "Enable or disable auto rendering");
+
+    m.def("zoom_to_selected", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->zoomToSelected();
+    }, "Zoom to selected clouds");
+
+    m.def("set_top_view", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setTopView();
+    }, "Set camera to top view");
+
+    m.def("set_front_view", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setFrontView();
+    }, "Set camera to front view");
+
+    m.def("set_back_view", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setBackView();
+    }, "Set camera to back view");
+
+    m.def("set_left_view", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setLeftSideView();
+    }, "Set camera to left side view");
+
+    m.def("set_right_view", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setRightSideView();
+    }, "Set camera to right side view");
+
+    m.def("set_bottom_view", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setBottomView();
+    }, "Set camera to bottom view");
+
+    // ================================================================
+    // 点云外观
+    // ================================================================
+
+    m.def("set_point_size", [](const std::string& id, float size) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setPointSize(QString::fromStdString(id), size);
+    }, py::arg("id"), py::arg("size"), "Set point size for a cloud");
+
+    m.def("set_opacity", [](const std::string& id, float value) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setOpacity(QString::fromStdString(id), value);
+    }, py::arg("id"), py::arg("value"), "Set cloud opacity (0.0 - 1.0)");
+
+    m.def("set_cloud_color", [](const std::string& id, float r, float g, float b) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setCloudColorRGB(QString::fromStdString(id), r, g, b);
+    }, py::arg("id"), py::arg("r"), py::arg("g"), py::arg("b"),
+       "Set cloud color by RGB (0.0 - 1.0)");
+
+    m.def("set_color_by_axis", [](const std::string& id, const std::string& axis) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setCloudColorByAxis(QString::fromStdString(id), QString::fromStdString(axis));
+    }, py::arg("id"), py::arg("axis"), "Color cloud by axis (X/Y/Z)");
+
+    m.def("reset_cloud_color", [](const std::string& id) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->resetCloudColor(QString::fromStdString(id));
+    }, py::arg("id"), "Reset cloud to original colors");
+
+    m.def("set_cloud_visibility", [](const std::string& id, bool visible) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setCloudVisibility(QString::fromStdString(id), visible);
+    }, py::arg("id"), py::arg("visible"), "Show or hide a cloud");
+
+    // ================================================================
+    // 场景外观
+    // ================================================================
+
+    m.def("set_background_color", [](float r, float g, float b) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setBackgroundColor(r, g, b);
+    }, py::arg("r"), py::arg("g"), py::arg("b"),
+       "Set background color (0.0 - 1.0)");
+
+    m.def("reset_background_color", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->resetBackgroundColor();
+    }, "Reset background to default color");
+
+    // ================================================================
+    // 显示开关
+    // ================================================================
+
+    m.def("show_id", [](bool show) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->showId(show);
+    }, py::arg("show"), "Show or hide cloud IDs");
+
+    m.def("show_axes", [](bool show) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->showAxes(show);
+    }, py::arg("show"), "Show or hide coordinate axes");
+
+    m.def("show_fps", [](bool show) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->showFPS(show);
+    }, py::arg("show"), "Show or hide FPS counter");
+
+    m.def("show_info", [](const std::string& text) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->showInfo(QString::fromStdString(text));
+    }, py::arg("text"), "Show info text overlay");
+
+    m.def("clear_info", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->clearInfo();
+    }, "Clear all info text overlays");
+
+    // ================================================================
+    // 叠加物
+    // ================================================================
+
+    m.def("add_cube", [](float cx, float cy, float cz, float size, const std::string& id) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->addCube(cx, cy, cz, size, QString::fromStdString(id));
+    }, py::arg("cx"), py::arg("cy"), py::arg("cz"),
+       py::arg("size"), py::arg("id") = "cube",
+       "Add a cube overlay at center (cx,cy,cz) with given size");
+
+    m.def("add_3d_label", [](const std::string& text, float x, float y, float z, const std::string& id) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->add3DLabel(QString::fromStdString(text), x, y, z, QString::fromStdString(id));
+    }, py::arg("text"), py::arg("x"), py::arg("y"), py::arg("z"),
+       py::arg("id") = "label",
+       "Add a 3D text label at position (x,y,z)");
+
+    m.def("remove_shape", [](const std::string& id) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->removeShape(QString::fromStdString(id));
+    }, py::arg("id"), "Remove a shape/overlay by ID");
+
+    m.def("remove_all_shapes", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->removeAllShapes();
+    }, "Remove all shapes/overlays");
+
+    // ================================================================
+    // 点云管理
+    // ================================================================
+
+    m.def("insert_cloud", [](ct::Cloud::Ptr cloud) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->insertCloud(cloud);
+    }, py::arg("cloud"), "Insert a cloud into the tree and view");
+
+    m.def("remove_selected_clouds", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->removeSelectedClouds();
+    }, "Remove currently selected clouds");
+
+    // ================================================================
+    // 进度
+    // ================================================================
+
+    m.def("show_progress", [](const std::string& title) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->showProgress(QString::fromStdString(title));
+    }, py::arg("title"), "Show a progress dialog");
+
+    m.def("set_progress", [](int percent) {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->setProgress(percent);
+    }, py::arg("percent"), "Update progress (0-100)");
+
+    m.def("close_progress", []() {
+        auto* bridge = ct::PythonManager::instance().bridge();
+        if (bridge) bridge->closeProgress();
+    }, "Close the progress dialog");
+
     // --- PyCloud ---
     py::class_<PyCloud>(m, "Cloud")
         .def(py::init<ct::Cloud::Ptr>())

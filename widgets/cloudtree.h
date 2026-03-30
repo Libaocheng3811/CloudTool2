@@ -109,6 +109,11 @@ namespace ct
         void closeProgress();
 
         /**
+         * @brief 设置进度条百分比
+         */
+        void setProgress(int percent);
+
+        /**
          * @brief 将任意后台 Worker (如 FileIO, GroundFilter) 绑定到当前进度条
          */
         void bindWorker(QObject* worker);

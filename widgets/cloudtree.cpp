@@ -859,6 +859,11 @@ namespace ct
         }
     }
 
+    void CloudTree::setProgress(int percent) {
+        if (m_processing_dialog)
+            m_processing_dialog->setProgress(percent);
+    }
+
     void CloudTree::bindWorker(QObject *worker) {
         if (!m_processing_dialog || !worker) return;
 

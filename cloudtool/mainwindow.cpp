@@ -21,6 +21,8 @@
 #include "python/python_manager.h"
 #include "python/python_bridge.h"
 
+#include <algorithm>
+
 #include <QDesktopWidget>
 #include <QDebug>
 #include <QDir>
@@ -165,24 +167,164 @@ MainWindow::MainWindow(QWidget *parent) :
     // === Python Bridge 信号连接 ===
     auto* bridge = ct::PythonManager::instance().bridge();
     if (bridge) {
-        // Python 数据变更 → 刷新对应点云的渲染缓存
+        // ---- 渲染缓存 ----
         connect(bridge, &ct::PythonBridge::signalCloudChanged,
                 ui->cloudview, &ct::CloudView::invalidateCloudRender,
                 Qt::QueuedConnection);
 
-        // CloudTree 增删 → Bridge 注册表同步
+        // ---- 注册表同步 ----
         connect(ui->cloudtree, &ct::CloudTree::cloudInserted,
                 bridge, &ct::PythonBridge::registerCloud, Qt::QueuedConnection);
         connect(ui->cloudtree, &ct::CloudTree::removedCloudId,
                 bridge, &ct::PythonBridge::unregisterCloud, Qt::QueuedConnection);
 
-        // Bridge in-use 信号 → CloudTree 删除保护
+        // ---- In-use 删除保护 ----
         connect(bridge, &ct::PythonBridge::signalMarkCloudInUse,
                 ui->cloudtree, &ct::CloudTree::markCloudInUse, Qt::QueuedConnection);
         connect(bridge, &ct::PythonBridge::signalUnmarkCloudInUse,
                 ui->cloudtree, &ct::CloudTree::unmarkCloudInUse, Qt::QueuedConnection);
         connect(bridge, &ct::PythonBridge::signalReleaseAllInUse,
                 ui->cloudtree, &ct::CloudTree::releaseAllInUse, Qt::QueuedConnection);
+
+        // ---- 日志 → Console ----
+        connect(bridge, &ct::PythonBridge::signalLog,
+                ui->console, [this](int level, const QString& msg) {
+            ui->console->print(static_cast<ct::log_level>(level), msg);
+        }, Qt::QueuedConnection);
+
+        // ---- 进度 → CloudTree ----
+        connect(bridge, &ct::PythonBridge::signalShowProgress,
+                ui->cloudtree, &ct::CloudTree::showProgress, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetProgress,
+                ui->cloudtree, &ct::CloudTree::setProgress, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalCloseProgress,
+                ui->cloudtree, &ct::CloudTree::closeProgress, Qt::QueuedConnection);
+
+        // ---- 视图控制 → CloudView ----
+        connect(bridge, &ct::PythonBridge::signalRefreshView,
+                ui->cloudview, [this]() { ui->cloudview->refresh(); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalResetCamera,
+                ui->cloudview, [this]() { ui->cloudview->resetCamera(); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalZoomToBounds,
+                ui->cloudtree, &ct::CloudTree::zoomToSelected, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetAutoRender,
+                ui->cloudview, [this](bool en) { ui->cloudview->setAutoRender(en); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalZoomToSelected,
+                ui->cloudtree, &ct::CloudTree::zoomToSelected, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetTopView,
+                ui->cloudview, [this]() { ui->cloudview->setTopView(); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetFrontView,
+                ui->cloudview, [this]() { ui->cloudview->setFrontView(); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetBackView,
+                ui->cloudview, [this]() { ui->cloudview->setBackView(); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetLeftSideView,
+                ui->cloudview, [this]() { ui->cloudview->setLeftSideView(); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetRightSideView,
+                ui->cloudview, [this]() { ui->cloudview->setRightSideView(); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetBottomView,
+                ui->cloudview, [this]() { ui->cloudview->setBottomView(); },
+                Qt::QueuedConnection);
+
+        // ---- 点云外观 → CloudView ----
+        connect(bridge, &ct::PythonBridge::signalSetPointSize,
+                ui->cloudview, [this](const QString& id, float s) {
+            ui->cloudview->setPointCloudSize(id, s);
+        }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetOpacity,
+                ui->cloudview, [this](const QString& id, float v) {
+            ui->cloudview->setPointCloudOpacity(id, v);
+        }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetCloudColorRGB,
+                ui->cloudview, [this](const QString& id, float r, float g, float b) {
+            ui->cloudview->setPointCloudColor(id, ct::RGB{
+                static_cast<uint8_t>(std::min(std::max(r * 255.f, 0.f), 255.f)),
+                static_cast<uint8_t>(std::min(std::max(g * 255.f, 0.f), 255.f)),
+                static_cast<uint8_t>(std::min(std::max(b * 255.f, 0.f), 255.f))});
+        }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetCloudColorByAxis,
+                this, [this, bridge](const QString& id, const QString& axis) {
+            auto cloud = bridge->getCloud(id);
+            if (cloud) ui->cloudview->setPointCloudColor(cloud, axis);
+        }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalResetCloudColor,
+                this, [this, bridge](const QString& id) {
+            auto cloud = bridge->getCloud(id);
+            if (cloud) ui->cloudview->resetPointCloudColor(cloud);
+        }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalSetCloudVisibility,
+                ui->cloudview, [this](const QString& id, bool v) {
+            ui->cloudview->setPointCloudVisibility(id, v);
+        }, Qt::QueuedConnection);
+
+        // ---- 场景外观 → CloudView ----
+        connect(bridge, &ct::PythonBridge::signalSetBackgroundColor,
+                ui->cloudview, [this](float r, float g, float b) {
+            ui->cloudview->setBackgroundColor(ct::RGB{
+                static_cast<uint8_t>(std::min(std::max(r * 255.f, 0.f), 255.f)),
+                static_cast<uint8_t>(std::min(std::max(g * 255.f, 0.f), 255.f)),
+                static_cast<uint8_t>(std::min(std::max(b * 255.f, 0.f), 255.f))});
+        }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalResetBackgroundColor,
+                ui->cloudview, [this]() { ui->cloudview->resetBackgroundColor(); },
+                Qt::QueuedConnection);
+
+        // ---- 显示开关 → CloudView ----
+        connect(bridge, &ct::PythonBridge::signalShowId,
+                ui->cloudview, [this](bool en) { ui->cloudview->setShowId(en); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalShowAxes,
+                ui->cloudview, [this](bool en) { ui->cloudview->setShowAxes(en); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalShowFPS,
+                ui->cloudview, [this](bool en) { ui->cloudview->setShowFPS(en); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalShowInfo,
+                ui->cloudview, [this](const QString& text) {
+            ui->cloudview->showInfo(text, 1);
+        }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalClearInfo,
+                ui->cloudview, [this]() { ui->cloudview->clearInfo(); },
+                Qt::QueuedConnection);
+
+        // ---- 叠加物 → CloudView ----
+        connect(bridge, &ct::PythonBridge::signalAddCube,
+                ui->cloudview, [this](float cx, float cy, float cz, float size, const QString& id) {
+            ct::Box box;
+            box.translation = Eigen::Vector3f(cx, cy, cz);
+            box.width = box.height = box.depth = size;
+            ui->cloudview->addCube(box, id);
+        }, Qt::QueuedConnection);
+        // TODO: CloudView::add3DLabel 未实现，暂时注释
+        // connect(bridge, &ct::PythonBridge::signalAdd3DLabel,
+        //         ui->cloudview, [this](const QString& text, float x, float y, float z, const QString& id) {
+        //     ct::PointXYZRGBN pos;
+        //     pos.x = x; pos.y = y; pos.z = z;
+        //     ui->cloudview->add3DLabel(pos, text, id);
+        // }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalRemoveShape,
+                ui->cloudview, [this](const QString& id) { ui->cloudview->removeShape(id); },
+                Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalRemoveAllShapes,
+                ui->cloudview, [this]() { ui->cloudview->removeAllShapes(); },
+                Qt::QueuedConnection);
+
+        // ---- 点云管理 → CloudTree ----
+        connect(bridge, &ct::PythonBridge::signalInsertCloud,
+                ui->cloudtree, [this](ct::Cloud::Ptr cloud) {
+            ui->cloudtree->insertCloud(cloud);
+            ui->cloudview->addPointCloud(cloud);
+            ui->cloudview->refresh();
+        }, Qt::QueuedConnection);
+        connect(bridge, &ct::PythonBridge::signalRemoveSelectedClouds,
+                ui->cloudtree, &ct::CloudTree::removeSelectedClouds, Qt::QueuedConnection);
     }
 
 }
