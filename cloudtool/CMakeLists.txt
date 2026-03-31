@@ -11,6 +11,8 @@ set(Srcs
         tool/registration.cpp
         tool/descriptor.cpp
         tool/sampling.cpp
+        tool/python_console.cpp
+        tool/python_editor.cpp
         plugins/csfplugin.cpp
         plugins/vegplugin.cpp
         plugins/changedetectplugin.cpp
@@ -28,6 +30,8 @@ set(Hdrs
         tool/registration.h
         tool/descriptor.h
         tool/sampling.h
+        tool/python_console.h
+        tool/python_editor.h
         plugins/csfplugin.h
         plugins/vegplugin.h
         plugins/changedetectplugin.h

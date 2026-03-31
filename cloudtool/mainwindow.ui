@@ -108,6 +108,8 @@
     <addaction name="actionShowDataTree"/>
     <addaction name="actionShowProperties"/>
     <addaction name="actionShowConsole"/>
+    <addaction name="actionPythonConsole"/>
+    <addaction name="actionPythonEditor"/>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="font">
@@ -600,12 +602,21 @@ QScrollBar::sub-line:horizontal {
    <attribute name="dockWidgetArea">
     <number>8</number>
    </attribute>
-   <widget class="QWidget" name="dockWidgetContents_4">
-    <layout class="QVBoxLayout" name="verticalLayout_4">
-     <item>
-      <widget class="ct::Console" name="console"/>
-     </item>
-    </layout>
+   <widget class="QTabWidget" name="consoleTabWidget">
+    <property name="tabPosition">
+     <enum>QTabWidget::North</enum>
+    </property>
+    <property name="tabsClosable">
+     <bool>true</bool>
+    </property>
+    <property name="currentIndex">
+     <number>0</number>
+    </property>
+    <widget class="ct::Console" name="console">
+     <attribute name="title">
+      <string>Console</string>
+     </attribute>
+    </widget>
    </widget>
   </widget>
   <widget class="QToolBar" name="FileBar">
@@ -1567,6 +1578,48 @@ QScrollBar::sub-line:horizontal {
    </property>
    <property name="text">
     <string>ShowConsole</string>
+   </property>
+   <property name="font">
+    <font>
+     <family>Microsoft YaHei UI</family>
+     <pointsize>10</pointsize>
+    </font>
+   </property>
+  </action>
+  <action name="actionPythonConsole">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="resources/res.qrc">
+     <normaloff>:/res/icon/dialog-scripts.svg</normaloff>:/res/icon/dialog-scripts.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Python Console</string>
+   </property>
+   <property name="font">
+    <font>
+     <family>Microsoft YaHei UI</family>
+     <pointsize>10</pointsize>
+    </font>
+   </property>
+  </action>
+  <action name="actionPythonEditor">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="resources/res.qrc">
+     <normaloff>:/res/icon/dialog-scripts.svg</normaloff>:/res/icon/dialog-scripts.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Python Editor</string>
    </property>
    <property name="font">
     <font>

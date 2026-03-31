@@ -10,6 +10,7 @@
 #include <QDockWidget>
 #include <QMainWindow>
 #include <QPushButton>
+#include <QCloseEvent>
 #include <map>
 #include <set>
 
@@ -42,11 +43,24 @@ namespace ct
         void printW(const QString& message) {m_console->print(LOG_WARNING, message); }
         void printE(const QString& message) {m_console->print(LOG_ERROR, message); }
 
-        void closeEvent(QCloseEvent* event)
+        void closeEvent(QCloseEvent* event) override
         {
             reset();
             deinit();
-            return QDockWidget::closeEvent(event);
+
+            // 先激活同 tab 组的其他 dock，防止整个 tab 组折叠
+            if (auto* mw = qobject_cast<QMainWindow*>(window())) {
+                for (auto* sibling : mw->tabifiedDockWidgets(this)) {
+                    if (sibling != this) {
+                        sibling->show();
+                        sibling->raise();
+                        break;
+                    }
+                }
+            }
+
+            event->ignore();
+            hide();
         }
     public:
         CloudView* m_cloudview;
@@ -82,12 +96,9 @@ namespace ct
                 registed_docks[label]->setCloudTree(cloudtree);
             if (console)
                 registed_docks[label]->setConsole(console);
-            registed_docks[label]->setAttribute(Qt::WA_DeleteOnClose);
             registed_docks[label]->init();
             QObject::connect(registed_docks[label], &QDockWidget::visibilityChanged, [=](bool state)
                             {docks_visible[label] = !state; });
-            QObject::connect(registed_docks[label], &QDockWidget::destroyed, [=]
-                            { registed_docks[label] = nullptr;});
             parent->addDockWidget(area, registed_docks[label]);
             if (area == Qt::LeftDockWidgetArea)
                 left_label.insert(label);
@@ -119,11 +130,13 @@ namespace ct
         {
             if (docks_visible.find(label) == docks_visible.end()) return;
             if (docks_visible.find(label)->second)
+            {
+                registed_docks[label]->show();
                 registed_docks[label]->raise();
+            }
             else
             {
-                registed_docks[label]->close();
-                registed_docks.erase(label);
+                registed_docks[label]->hide();
             }
         }
     }

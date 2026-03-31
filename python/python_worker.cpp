@@ -76,9 +76,51 @@ void PythonWorker::executePythonCode()
     // 记录当前线程在 Python 解释器中的 ID（用于 cancel 注入异常）
     m_py_thread_id.store(PyThreadState_Get()->thread_id);
 
+    // === 临时重定向 sys.stdout / sys.stderr 到 PythonBridge ===
+    py::object orig_stdout, orig_stderr;
+    try {
+        auto sys = py::module_::import("sys");
+        orig_stdout = sys.attr("stdout");
+        orig_stderr = sys.attr("stderr");
+
+        // 创建 stdout 回调 → PythonBridge::printStdout
+        auto stdout_cb = py::cpp_function([this](const std::string& text) {
+            if (m_bridge) m_bridge->printStdout(QString::fromStdString(text));
+        });
+        // 创建 stderr 回调 → PythonBridge::printStderr
+        auto stderr_cb = py::cpp_function([this](const std::string& text) {
+            if (m_bridge) m_bridge->printStderr(QString::fromStdString(text));
+        });
+
+        // 定义 _OutputRedirect 类（带 flush 的轻量 write-only stream）
+        py::exec(R"(
+class _OutputRedirect:
+    def __init__(self, callback):
+        self._cb = callback
+    def write(self, text):
+        if text:
+            self._cb(text)
+    def flush(self):
+        pass
+)", py::globals());
+
+        // 临时替换
+        sys.attr("stdout") = py::globals()["_OutputRedirect"](stdout_cb);
+        sys.attr("stderr") = py::globals()["_OutputRedirect"](stderr_cb);
+
+    } catch (...) {
+        // 重定向失败不阻塞脚本执行
+    }
+
     try {
         if (m_cancel_flag.load()) {
             emit scriptFinished(false, "Script canceled before execution");
+            // 恢复原始 stdio
+            try {
+                auto sys = py::module_::import("sys");
+                if (orig_stdout) sys.attr("stdout") = orig_stdout;
+                if (orig_stderr) sys.attr("stderr") = orig_stderr;
+            } catch (...) {}
             m_py_thread_id.store(0);
             PyGILState_Release(gstate);
             return;
@@ -105,6 +147,13 @@ void PythonWorker::executePythonCode()
     } catch (...) {
         emit scriptFinished(false, "Unknown error during script execution");
     }
+
+    // === 恢复原始 sys.stdout / sys.stderr ===
+    try {
+        auto sys = py::module_::import("sys");
+        if (orig_stdout) sys.attr("stdout") = orig_stdout;
+        if (orig_stderr) sys.attr("stderr") = orig_stderr;
+    } catch (...) {}
 
     m_py_thread_id.store(0);
     // 释放 GIL

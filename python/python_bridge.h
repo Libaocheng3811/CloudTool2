@@ -32,6 +32,13 @@ public:
     void closeProgress()                             { emit signalCloseProgress(); }
 
     // ================================================================
+    // Python stdio 输出路由（Python Console 用）
+    // ================================================================
+
+    void printStdout(const QString& text)                { emit signalPrintStdout(text); }
+    void printStderr(const QString& text)                { emit signalPrintStderr(text); }
+
+    // ================================================================
     // 视图控制
     // ================================================================
 
@@ -119,6 +126,10 @@ signals:
     // 日志
     void signalLog(int level, QString message);
     void signalPrint(QString message);
+
+    // Python stdio（Python Console 用）
+    void signalPrintStdout(QString text);
+    void signalPrintStderr(QString text);
 
     // 进度
     void signalShowProgress(QString title);

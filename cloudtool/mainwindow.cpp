@@ -21,6 +21,9 @@
 #include "python/python_manager.h"
 #include "python/python_bridge.h"
 
+#include "tool/python_console.h"
+#include "tool/python_editor.h"
+
 #include <algorithm>
 
 #include <QDesktopWidget>
@@ -51,6 +54,18 @@ MainWindow::MainWindow(QWidget *parent) :
     size.push_back(320);
     size.push_back(140);
     resizeDocks(docks, size, Qt::Orientation::Vertical);
+
+    // === Python Console（按需创建，默认不添加到 tab）===
+    auto* python_console = new ct::PythonConsole(nullptr);
+
+    // 处理 tab 关闭请求：关闭单个 tab
+    connect(ui->consoleTabWidget, &QTabWidget::tabCloseRequested, this, [this, python_console](int index) {
+        QString tabText = ui->consoleTabWidget->tabText(index);
+        ui->consoleTabWidget->removeTab(index);
+        if (tabText == "Python Console") {
+            ui->actionPythonConsole->setChecked(false);
+        }
+    });
 
     // connect pointer
     ui->cloudtree->setCloudView(ui->cloudview);
@@ -108,7 +123,18 @@ MainWindow::MainWindow(QWidget *parent) :
         if (!this->isMinimized()) ui->actionShowProperties->setChecked(visible);
     });
     connect(ui->actionShowConsole, &QAction::toggled, [=](bool checked){
-        ui->ConsoleDock->setVisible(checked); });
+        if (checked) {
+            // 确保 Console tab 存在
+            int idx = ui->consoleTabWidget->indexOf(ui->console);
+            if (idx < 0) {
+                ui->consoleTabWidget->insertTab(0, ui->console, "Console");
+            }
+            ui->ConsoleDock->show();
+            ui->consoleTabWidget->setCurrentIndex(0);
+        } else {
+            ui->ConsoleDock->hide();
+        }
+    });
     connect(ui->ConsoleDock, &QDockWidget::visibilityChanged, [=](bool visible){
         if (!this->isMinimized()) ui->actionShowConsole->setChecked(visible);
     });
@@ -141,6 +167,40 @@ MainWindow::MainWindow(QWidget *parent) :
         this->createModalDialog<VegPlugin>("Vegetation Filters");});
     connect(ui->actionChange_Detection, &QAction::triggered, [=] {
         this->createModalDialog<ChangeDetectPlugin>("Change Detection");});
+
+    // === Python Console（View 菜单，可勾选，默认不打开）===
+    connect(ui->actionPythonConsole, &QAction::toggled, this, [this, python_console](bool checked) {
+        if (checked) {
+            // 添加 Python Console tab（如果尚未添加）
+            int idx = ui->consoleTabWidget->indexOf(python_console);
+            if (idx < 0) {
+                idx = ui->consoleTabWidget->addTab(python_console, "Python Console");
+            }
+            ui->ConsoleDock->show();
+            ui->actionShowConsole->setChecked(true);
+            ui->consoleTabWidget->setCurrentIndex(idx);
+        } else {
+            // 移除 Python Console tab
+            int idx = ui->consoleTabWidget->indexOf(python_console);
+            if (idx >= 0) {
+                ui->consoleTabWidget->removeTab(idx);
+            }
+        }
+    });
+
+    connect(ui->actionPythonEditor, &QAction::toggled, this, [this](bool checked) {
+        auto* editor = ui->centralwidget->findChild<ct::PythonEditor*>();
+        if (checked) {
+            if (!editor) {
+                editor = new ct::PythonEditor(ui->centralwidget);
+            }
+            editor->showEditor();
+        } else {
+            if (editor) {
+                editor->hideEditor();
+            }
+        }
+    });
 
     connect(ui->actionDark, &QAction::triggered, [=]{
         QFile styleFile(":/res/theme/darkstyle.qss");

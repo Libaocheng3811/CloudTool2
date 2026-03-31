@@ -42,6 +42,13 @@ public:
     }
 
     template <class T>
+    void createBottomDock(const QString& label)
+    {
+        ct::createDock<T>(this, label, ui->cloudview, ui->cloudtree, ui->console,
+                          Qt::BottomDockWidgetArea, ui->ConsoleDock);
+    }
+
+    template <class T>
     void createDialog(const QString& label)
     {
         ct::createDialog<T>(this, label, ui->cloudview, ui->cloudtree, ui->console);
