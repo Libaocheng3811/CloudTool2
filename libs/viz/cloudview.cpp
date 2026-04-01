@@ -1,5 +1,4 @@
 #include "cloudview.h"
-#include "common.h"
 
 #include <vtkAutoInit.h>
 // VTK_MODULE_INIT 宏用于初始化 VTK 模块

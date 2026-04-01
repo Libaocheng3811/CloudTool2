@@ -2,7 +2,7 @@
 #define CLOUDTOOL2_FILEIO_H
 
 #include "cloud.h"
-#include "common.h"
+#include "field_types.h"
 #include "exports.h"
 
 #include <atomic>

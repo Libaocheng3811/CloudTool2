@@ -28,7 +28,7 @@ target_link_libraries(ct_core
         LASlib
         OpenMP::OpenMP_CXX)
 
-target_compile_definitions(ct_core PRIVATE CT_LIBRARY)
+target_compile_definitions(ct_core PRIVATE CT_BUILDING_CORE)
 
 set_target_properties(ct_core PROPERTIES PUBLIC_HEADER "${LibHdrs}")
 

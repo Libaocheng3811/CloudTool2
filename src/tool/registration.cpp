@@ -5,6 +5,7 @@
 #include "registration.h"
 #include "ui_registration.h"
 #include "core/cloud.h"
+#include "core/common.h"
 
 #define REG_TYPE_CorrespondenceEstimation               (0)
 #define REG_TYPE_CorrespondenceRejector                 (1)
@@ -701,7 +702,7 @@ void Registration::registrationResult(bool success, const ct::Cloud::Ptr& ail_cl
     ui->txt_matrix->clear();
     ui->txt_matrix->append(tr("Fitness Score: %1 ").arg(score));
     ui->txt_matrix->append(tr("Transformation Matrix:"));
-    ui->txt_matrix->append(ct::getTransformationQString(matrix, 6));
+    ui->txt_matrix->append(QString::fromStdString(ct::getTransformationString(matrix, 6)));
     m_reg_map[m_source_cloud->id() + m_target_cloud->id()] = ail_cloud;
 }
 

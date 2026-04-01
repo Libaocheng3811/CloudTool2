@@ -1,10 +1,10 @@
 #include "cloudtree.h"
 
-#include "core/common.h"
+#include "field_types.h"
 
-#include "common_ui/fieldmappingdialog.h"
-#include "common_ui/txtimportdialog.h"
-#include "common_ui/txtexportdialog.h"
+#include "dialog/fieldmappingdialog.h"
+#include "dialog/txtimportdialog.h"
+#include "dialog/txtexportdialog.h"
 
 #include <cfloat>
 

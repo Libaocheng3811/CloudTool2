@@ -5,7 +5,7 @@
 #ifndef CLOUDTOOL2_TXTEXPORTDIALOG_H
 #define CLOUDTOOL2_TXTEXPORTDIALOG_H
 
-#include "core/common.h"
+#include "field_types.h"
 
 #include <QDialog>
 #include <QCheckBox>

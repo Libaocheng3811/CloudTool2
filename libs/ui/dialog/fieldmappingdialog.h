@@ -5,7 +5,7 @@
 #ifndef CLOUDTOOL2_FIELDMAPPINGDIALOG_H
 #define CLOUDTOOL2_FIELDMAPPINGDIALOG_H
 
-#include "core/common.h"
+#include "field_types.h"
 
 #include <QDialog>
 #include <QTableWidget>

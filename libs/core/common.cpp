@@ -1,10 +1,14 @@
 
 #include "common.h"
 
-#include <QStringList>
+#include <pcl/common/angles.h>
+#include <pcl/common/transforms.h>
+#include <pcl/common/eigen.h>
 
-#define MATRIX_SIZE 16
-#define EULER_SIZE  6
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <cmath>
 
 namespace ct {
     void HSVtoRGB(float h, float s, float v, float &r, float &g, float &b) {
@@ -63,22 +67,22 @@ namespace ct {
 
     void getTransformation(float x, float y, float z, float roll, float pitch, float yaw, Eigen::Affine3f& t)
     {
-        // 这里这样写return返回对吗？---应该是不对的
         return pcl::getTransformation(x, y, z, pcl::deg2rad(roll), pcl::deg2rad(pitch), pcl::deg2rad(yaw), t);
     }
 
-    QString getTransformationQString(const Eigen::MatrixXf& mat, int decimals)
+    std::string getTransformationString(const Eigen::MatrixXf& mat, int decimals)
     {
-        QString str;
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(decimals);
         for (int i = 0; i < mat.rows(); i++)
         {
             for (int j = 0; j < mat.cols(); j++)
             {
-                str += QString::number(mat(i, j), 'f', decimals) + " ";
+                oss << mat(i, j) << " ";
             }
-            if (i < mat.rows() - 1) str += "\n";
+            if (i < mat.rows() - 1) oss << "\n";
         }
-        return str;
+        return oss.str();
     }
 
     Eigen::Affine3f getTransformation(float x, float y, float z, float roll, float pitch, float yaw)

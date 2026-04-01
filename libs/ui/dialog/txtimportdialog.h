@@ -5,7 +5,7 @@
 #ifndef CLOUDTOOL2_TXTIMPORTDIALOG_H
 #define CLOUDTOOL2_TXTIMPORTDIALOG_H
 
-#include "core/common.h"
+#include "field_types.h"
 
 #include <QDialog>
 #include <QTableWidget>

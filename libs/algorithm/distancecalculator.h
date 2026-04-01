@@ -8,7 +8,7 @@
 #include <QObject>
 #include <vector>
 #include "core/cloud.h"
-#include "core/common.h"
+#include "field_types.h"
 
 namespace ct {
     class CT_EXPORT DistanceCalculator : public QObject {
