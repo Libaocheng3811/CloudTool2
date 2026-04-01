@@ -16,9 +16,107 @@
 #include <QScrollBar>
 #include <QRegularExpression>
 #include <QApplication>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QResizeEvent>
 
 namespace ct
 {
+
+// ================================================================
+// CodeEditor
+// ================================================================
+
+CodeEditor::CodeEditor(QWidget* parent)
+    : QPlainTextEdit(parent)
+{
+    m_line_number_area = new LineNumberArea(this);
+
+    connect(this, &CodeEditor::blockCountChanged,
+            this, &CodeEditor::updateLineNumberAreaWidth);
+    connect(this, &CodeEditor::updateRequest,
+            this, &CodeEditor::updateLineNumberArea);
+    connect(this, &CodeEditor::cursorPositionChanged,
+            this, &CodeEditor::highlightCurrentLine);
+
+    updateLineNumberAreaWidth(0);
+    highlightCurrentLine();
+}
+
+int CodeEditor::lineNumberAreaWidth()
+{
+    int digits = 1;
+    int max = qMax(1, blockCount());
+    while (max >= 10) {
+        max /= 10;
+        ++digits;
+    }
+    int space = 3 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
+    return space;
+}
+
+void CodeEditor::updateLineNumberAreaWidth(int /*newBlockCount*/)
+{
+    setViewportMargins(lineNumberAreaWidth(), 0, 0, 0);
+}
+
+void CodeEditor::updateLineNumberArea(const QRect& rect, int dy)
+{
+    if (dy)
+        m_line_number_area->scroll(0, dy);
+    else
+        m_line_number_area->update(0, rect.y(), m_line_number_area->width(), rect.height());
+
+    if (rect.contains(viewport()->rect()))
+        updateLineNumberAreaWidth(0);
+}
+
+void CodeEditor::resizeEvent(QResizeEvent* event)
+{
+    QPlainTextEdit::resizeEvent(event);
+    QRect cr = contentsRect();
+    m_line_number_area->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
+}
+
+void CodeEditor::highlightCurrentLine()
+{
+    QList<QTextEdit::ExtraSelection> extraSelections;
+
+    QTextEdit::ExtraSelection selection;
+    QColor lineColor = QColor("#ffffcc");
+    selection.format.setBackground(lineColor);
+    selection.format.setProperty(QTextFormat::FullWidthSelection, true);
+    selection.cursor = textCursor();
+    selection.cursor.clearSelection();
+    extraSelections.append(selection);
+
+    setExtraSelections(extraSelections);
+}
+
+void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
+{
+    QPainter painter(m_line_number_area);
+    painter.fillRect(event->rect(), palette().color(QPalette::Window));
+
+    QTextBlock block = firstVisibleBlock();
+    int blockNumber = block.blockNumber();
+    int top = qRound(blockBoundingGeometry(block).translated(contentOffset()).top());
+    int bottom = top + qRound(blockBoundingRect(block).height());
+
+    while (block.isValid() && top <= event->rect().bottom()) {
+        if (block.isVisible() && bottom >= event->rect().top()) {
+            QString number = QString::number(blockNumber + 1);
+            painter.setPen(palette().color(QPalette::Text));
+            painter.drawText(0, top, m_line_number_area->width() - 2, fontMetrics().height(),
+                             Qt::AlignRight, number);
+        }
+
+        block = block.next();
+        top = bottom;
+        bottom = top + qRound(blockBoundingRect(block).height());
+        ++blockNumber;
+    }
+}
 
 // ================================================================
 // PythonSyntaxHighlighter
@@ -195,13 +293,6 @@ PythonEditor::PythonEditor(QWidget* parent)
 
     main_layout->addWidget(m_tabs, 1);
 
-    // === Status bar ===
-    m_status = new QLabel("Ready", this);
-    m_status->setStyleSheet(
-        "QLabel { color: palette(text); background: palette(window); "
-        "padding: 2px 6px; font-size: 10px; border-top: 1px solid palette(mid); }");
-    main_layout->addWidget(m_status);
-
     // === 快捷键 ===
     new QShortcut(QKeySequence("F5"), this, SLOT(onRun()));
     new QShortcut(QKeySequence("Shift+F5"), this, SLOT(onStop()));
@@ -231,7 +322,7 @@ PythonEditor::PythonEditor(QWidget* parent)
 EditorTab PythonEditor::createTab(const QString& title)
 {
     EditorTab tab;
-    tab.editor = new QPlainTextEdit(this);
+    tab.editor = new CodeEditor(this);
     tab.editor->setFont(QFont("Consolas", 10));
     tab.editor->setLineWrapMode(QPlainTextEdit::NoWrap);
     tab.editor->setTabStopWidth(40);
@@ -291,24 +382,6 @@ void PythonEditor::updateTabTitle(int index)
         : QFileInfo(tab.filepath).fileName();
     if (tab.modified) title += " *";
     m_tabs->setTabText(index, title);
-}
-
-void PythonEditor::updateStatus()
-{
-    int idx = m_tabs->currentIndex();
-    if (idx >= 0 && idx < m_tab_list.size()) {
-        auto& tab = m_tab_list[idx];
-        QString info;
-        if (tab.filepath.isEmpty())
-            info = "Untitled";
-        else
-            info = tab.filepath;
-        if (m_busy)
-            info += "  |  Running...";
-        else
-            info += "  |  Ready";
-        m_status->setText(info);
-    }
 }
 
 void PythonEditor::showEditor()
@@ -400,7 +473,6 @@ void PythonEditor::onOpen()
 
     int idx = m_tab_list.size() - 1;
     updateTabTitle(idx);
-    updateStatus();
 }
 
 void PythonEditor::onSave()
@@ -427,7 +499,6 @@ void PythonEditor::onSave()
     tab.modified = false;
     tab.editor->document()->setModified(false);
     updateTabTitle(idx);
-    updateStatus();
 }
 
 void PythonEditor::onSaveAs()
@@ -447,7 +518,7 @@ void PythonEditor::onSaveAs()
 
 void PythonEditor::onTabChanged(int index)
 {
-    updateStatus();
+    Q_UNUSED(index);
 }
 
 void PythonEditor::onTabCloseRequested(int index)
@@ -460,15 +531,15 @@ void PythonEditor::onScriptStarted()
     m_busy = true;
     m_action_run->setEnabled(false);
     m_action_stop->setEnabled(true);
-    updateStatus();
 }
 
 void PythonEditor::onScriptFinished(bool ok, QString error)
 {
+    Q_UNUSED(ok);
+    Q_UNUSED(error);
     m_busy = false;
     m_action_run->setEnabled(true);
     m_action_stop->setEnabled(false);
-    updateStatus();
 }
 
 void PythonEditor::keyPressEvent(QKeyEvent* event)

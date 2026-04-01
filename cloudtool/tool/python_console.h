@@ -4,7 +4,6 @@
 #include <QWidget>
 #include <QTextBrowser>
 #include <QLineEdit>
-#include <QLabel>
 #include <QToolBar>
 #include <QStringList>
 
@@ -29,7 +28,6 @@ private slots:
 private:
     QTextBrowser* m_output;
     QLineEdit*    m_input;
-    QLabel*       m_status;
     QToolBar*     m_toolbar;
     QStringList   m_history;
     int           m_history_index = -1;

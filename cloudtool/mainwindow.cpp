@@ -127,7 +127,7 @@ MainWindow::MainWindow(QWidget *parent) :
             // 确保 Console tab 存在
             int idx = ui->consoleTabWidget->indexOf(ui->console);
             if (idx < 0) {
-                ui->consoleTabWidget->insertTab(0, ui->console, "Console");
+                ui->consoleTabWidget->insertTab(0, ui->console, "Report Console");
             }
             ui->ConsoleDock->show();
             ui->consoleTabWidget->setCurrentIndex(0);

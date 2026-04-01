@@ -614,7 +614,7 @@ QScrollBar::sub-line:horizontal {
     </property>
     <widget class="ct::Console" name="console">
      <attribute name="title">
-      <string>Console</string>
+      <string>Report Console</string>
      </attribute>
     </widget>
    </widget>

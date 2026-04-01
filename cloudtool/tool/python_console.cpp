@@ -48,12 +48,6 @@ PythonConsole::PythonConsole(QWidget* parent)
     connect(m_input, &QLineEdit::returnPressed, this, &PythonConsole::onRunCommand);
     layout->addWidget(m_input);
 
-    // === Status bar ===
-    m_status = new QLabel("Idle", this);
-    m_status->setStyleSheet(
-        "QLabel { color: palette(text); background: palette(window); "
-        "padding: 2px 4px; font-size: 10px; }");
-    layout->addWidget(m_status);
 
     // === Worker & Bridge 信号连接 ===
     auto* worker = ct::PythonManager::instance().worker();
@@ -103,20 +97,12 @@ void PythonConsole::onClearConsole()
 void PythonConsole::onScriptStarted()
 {
     m_busy = true;
-    m_status->setText("Running...");
-    QPalette pal = m_status->palette();
-    pal.setColor(QPalette::WindowText, QColor("#d4a017"));
-    m_status->setPalette(pal);
     m_input->setEnabled(false);
 }
 
 void PythonConsole::onScriptFinished(bool ok, QString error)
 {
     m_busy = false;
-    m_status->setText("Idle");
-    QPalette pal = m_status->palette();
-    pal.setColor(QPalette::WindowText, QColor("#808080"));
-    m_status->setPalette(pal);
     m_input->setEnabled(true);
     m_input->setFocus();
 

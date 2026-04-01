@@ -5,7 +5,6 @@
 #include <QPlainTextEdit>
 #include <QTabWidget>
 #include <QToolBar>
-#include <QLabel>
 #include <QSyntaxHighlighter>
 #include <QRegularExpression>
 #include <QList>
@@ -36,10 +35,60 @@ private:
 };
 
 // ================================================================
+// 带行号 + 当前行高亮的代码编辑器
+// ================================================================
+class LineNumberArea;
+
+class CodeEditor : public QPlainTextEdit
+{
+    Q_OBJECT
+
+public:
+    explicit CodeEditor(QWidget* parent = nullptr);
+
+    void lineNumberAreaPaintEvent(QPaintEvent* event);
+    int lineNumberAreaWidth();
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
+private slots:
+    void updateLineNumberAreaWidth(int newBlockCount);
+    void highlightCurrentLine();
+    void updateLineNumberArea(const QRect& rect, int dy);
+
+private:
+    LineNumberArea* m_line_number_area;
+};
+
+// 行号面板 widget
+class LineNumberArea : public QWidget
+{
+    Q_OBJECT
+
+public:
+    LineNumberArea(CodeEditor* editor) : QWidget(editor), m_editor(editor) {}
+
+    QSize sizeHint() const override
+    {
+        return QSize(m_editor->lineNumberAreaWidth(), 0);
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        m_editor->lineNumberAreaPaintEvent(event);
+    }
+
+private:
+    CodeEditor* m_editor;
+};
+
+// ================================================================
 // 编辑器选项卡数据
 // ================================================================
 struct EditorTab {
-    QPlainTextEdit* editor = nullptr;
+    CodeEditor* editor = nullptr;
     PythonSyntaxHighlighter* highlighter = nullptr;
     QString filepath;       // 空表示未保存
     bool modified = false;
@@ -73,7 +122,6 @@ private slots:
 private:
     QToolBar*     m_toolbar;
     QTabWidget*   m_tabs;
-    QLabel*       m_status;
     QList<EditorTab> m_tab_list;
     QAction*      m_action_run;
     QAction*      m_action_stop;
@@ -82,7 +130,6 @@ private:
     EditorTab createTab(const QString& title = "Untitled");
     void closeTab(int index);
     void updateTabTitle(int index);
-    void updateStatus();
 
     void keyPressEvent(QKeyEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
