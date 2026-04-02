@@ -105,7 +105,7 @@ void CSFPlugin::onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud
     results.push_back(ground_cloud);
     results.push_back(off_ground_cloud);
 
-    QString groupName = m_cloud->id() + "_CSF";
+    QString groupName = QString::fromStdString(m_cloud->id()) + "_CSF";
     m_cloudtree->addResultGroup(m_cloud, results, groupName);
 
     this->accept();

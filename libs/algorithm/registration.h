@@ -214,8 +214,8 @@ namespace ct {
             pcl::CorrespondencesPtr corr(new pcl::Correspondences);
 
             pcl::registration::CorrespondenceRejectorFeatures::Ptr cj(new pcl::registration::CorrespondenceRejectorFeatures);
-            cj->setSourceFeature<Feature>(source, source_cloud_->id().toStdString());
-            cj->setTargetFeature<Feature>(target, target_cloud_->id().toStdString());
+            cj->setSourceFeature<Feature>(source, source_cloud_->id());
+            cj->setTargetFeature<Feature>(target, target_cloud_->id());
             cj->setDistanceThreshold<Feature>(thresh, key);
             cj->setInputCorrespondences(corr_);
             cj->getRemainingCorrespondences(*corr_, *corr);

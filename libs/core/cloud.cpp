@@ -69,7 +69,7 @@ namespace ct
 
         // 元数据
         std::swap(m_id, other.m_id);
-        std::swap(m_info, other.m_info);
+        std::swap(m_filepath, other.m_filepath);
         std::swap(m_box, other.m_box);
         std::swap(m_box_rgb, other.m_box_rgb);
         std::swap(m_normals_rgb, other.m_normals_rgb);
@@ -451,12 +451,12 @@ namespace ct
                 }
 
                 // 同步标量场定义
-                if (!oldBlock->m_scalar_fields.isEmpty()) {
+                if (!oldBlock->m_scalar_fields.empty()) {
                     for(auto it = oldBlock->m_scalar_fields.begin(); it != oldBlock->m_scalar_fields.end(); ++it) {
-                        newChild->m_block->registerScalarField(it.key());
+                        newChild->m_block->registerScalarField(it->first);
                         // 标量场 vector 也可以 reserve
                         if (m_config.maxPointsPerBlock > 0) {
-                            newChild->m_block->m_scalar_fields[it.key()].reserve(m_config.maxPointsPerBlock);
+                            newChild->m_block->m_scalar_fields[it->first].reserve(m_config.maxPointsPerBlock);
                         }
                     }
                 }
@@ -501,13 +501,13 @@ namespace ct
             }
 
             // 5. 标量场 (批量处理所有字段)
-            if (!oldBlock->m_scalar_fields.isEmpty()) {
+            if (!oldBlock->m_scalar_fields.empty()) {
                 // 遍历 oldBlock 的所有标量场字段
                 auto it_old = oldBlock->m_scalar_fields.begin();
                 for (; it_old != oldBlock->m_scalar_fields.end(); ++it_old) {
-                    float val = it_old.value()[i];
+                    float val = it_old->second[i];
                     // childBlock 必定已注册该字段 (在创建节点时已同步)
-                    childBlock->m_scalar_fields[it_old.key()].push_back(val);
+                    childBlock->m_scalar_fields[it_old->first].push_back(val);
                 }
             }
 
@@ -524,7 +524,7 @@ namespace ct
     void Cloud::addPoints(const std::vector<PointXYZ>& pts,
                           const std::vector<RGB>* colors,
                           const std::vector<CompressedNormal>* normals,
-                          const QMap<QString, std::vector<float>>* scalars)
+                          const std::map<std::string, std::vector<float>>* scalars)
     {
         if (pts.empty()) return;
 
@@ -547,7 +547,7 @@ namespace ct
         // 预处理标量场：检查维度是否一致
         if (scalars) {
             for (auto it = scalars->begin(); it != scalars->end(); ++it) {
-                if (it.value().size() != pts.size()) {
+                if (it->second.size() != pts.size()) {
                     continue;
                 }
             }
@@ -570,8 +570,8 @@ namespace ct
                 size_t idx_in_block = targetBlock->size() - 1;
 
                 for (auto it = scalars->begin(); it != scalars->end(); ++it) {
-                    const QString& name = it.key();
-                    float val = it.value()[i];
+                    const std::string& name = it->first;
+                    float val = it->second[i];
 
                     // 确保 Block 有这个字段 (自动注册)
                     targetBlock->registerScalarField(name);
@@ -815,7 +815,7 @@ namespace ct
         m_render_cache_valid = false;
     }
 
-    void Cloud::addScalarField(const QString& name, const std::vector<float>& data)
+    void Cloud::addScalarField(const std::string& name, const std::vector<float>& data)
     {
         if (data.size() != m_point_count) return;
 
@@ -831,7 +831,6 @@ namespace ct
             std::vector<float>& block_data = block->m_scalar_fields[name];
 
             // 拷贝数据片段
-            // 这里的 data.begin() + global_offset 是迭代器偏移
             std::copy(data.begin() + global_offset,
                       data.begin() + global_offset + n,
                       block_data.begin());
@@ -840,18 +839,18 @@ namespace ct
         }
 
         // 清理一下导出缓存，因为数据变了
-        m_scalar_cache.remove(name);
+        m_scalar_cache.erase(name);
     }
 
-    bool Cloud::removeScalarField(const QString& name)
+    bool Cloud::removeScalarField(const std::string& name)
     {
         bool found = false;
         for (auto& block : m_all_blocks) {
-            if (block->m_scalar_fields.remove(name) > 0) {
+            if (block->m_scalar_fields.erase(name) > 0) {
                 found = true;
             }
         }
-        m_scalar_cache.remove(name);
+        m_scalar_cache.erase(name);
         return found;
     }
 
@@ -863,35 +862,40 @@ namespace ct
         m_scalar_cache.clear();
     }
 
-    bool Cloud::hasScalarField(const QString& name) const
+    bool Cloud::hasScalarField(const std::string& name) const
     {
         // 只要第一个非空 Block 有这个字段，就认为有
         for (const auto& block : m_all_blocks) {
             if (!block->empty()) {
-                return block->m_scalar_fields.contains(name);
+                return block->m_scalar_fields.find(name) != block->m_scalar_fields.end();
             }
         }
         return false;
     }
 
-    QStringList Cloud::getScalarFieldNames() const
+    std::vector<std::string> Cloud::getScalarFieldNames() const
     {
         // 从第一个非空 Block 获取 keys
         for (const auto& block : m_all_blocks) {
             if (!block->empty()) {
-                return block->m_scalar_fields.keys();
+                std::vector<std::string> names;
+                names.reserve(block->m_scalar_fields.size());
+                for (const auto& pair : block->m_scalar_fields) {
+                    names.push_back(pair.first);
+                }
+                return names;
             }
         }
-        return QStringList();
+        return {};
     }
 
-    const std::vector<float>* Cloud::getScalarField(const QString& name) const
+    const std::vector<float>* Cloud::getScalarField(const std::string& name) const
     {
         // 检查缓存中是否已有拼接好的数据
-        if (m_scalar_cache.contains(name)) {
-            // 校验一下大小是否匹配 (防止数据更新后缓存未清理的极端情况)
-            if (m_scalar_cache[name].size() == m_point_count) {
-                return &m_scalar_cache[name];
+        auto cache_it = m_scalar_cache.find(name);
+        if (cache_it != m_scalar_cache.end()) {
+            if (cache_it->second.size() == m_point_count) {
+                return &cache_it->second;
             }
         }
 
@@ -908,7 +912,7 @@ namespace ct
             // 查找 Block 内的字段
             auto it = block->m_scalar_fields.find(name);
             if (it != block->m_scalar_fields.end()) {
-                const std::vector<float>& src = it.value();
+                const std::vector<float>& src = it->second;
                 std::copy(src.begin(), src.end(), full_data.begin() + global_offset);
             } else {
                 // 如果某个 Block 缺失该字段 (异常情况)，填充 0
@@ -944,7 +948,7 @@ namespace ct
         invalidateRenderCache(); // 通知视图更新
     }
 
-    void Cloud::setCloudColor(const QString& axis)
+    void Cloud::setCloudColor(const std::string& axis)
     {
         if (empty()) return;
         if (!m_has_rgb) enableColors();
@@ -1066,7 +1070,7 @@ namespace ct
         }
     }
 
-    void Cloud::updateColorByField(const QString& field_name)
+    void Cloud::updateColorByField(const std::string& field_name)
     {
         if (!hasScalarField(field_name)) return;
         if (s_jet_lut.empty()) initColorTable();
@@ -1074,7 +1078,6 @@ namespace ct
         backupColors();
 
         // 1. 计算全局 Min/Max
-        // 需要遍历所有 Block 才能得到全局极值
         float min_v = FLT_MAX;
         float max_v = -FLT_MAX;
 
@@ -1086,9 +1089,10 @@ namespace ct
 #pragma omp for
             for (int k = 0; k < m_all_blocks.size(); ++k) {
                 auto& block = m_all_blocks[k];
-                if (block->empty() || !block->m_scalar_fields.contains(field_name)) continue;
+                auto sf_it = block->m_scalar_fields.find(field_name);
+                if (block->empty() || sf_it == block->m_scalar_fields.end()) continue;
 
-                const std::vector<float>& data = block->m_scalar_fields[field_name];
+                const std::vector<float>& data = sf_it->second;
                 for (float v : data) {
                     if (v < local_min) local_min = v;
                     if (v > local_max) local_max = v;
@@ -1111,9 +1115,10 @@ namespace ct
 #pragma omp parallel for
         for (int k = 0; k < m_all_blocks.size(); ++k) {
             auto& block = m_all_blocks[k];
-            if (block->empty() || !block->m_scalar_fields.contains(field_name)) continue;
+            auto sf_it = block->m_scalar_fields.find(field_name);
+            if (block->empty() || sf_it == block->m_scalar_fields.end()) continue;
 
-            const std::vector<float>& data = block->m_scalar_fields[field_name];
+            const std::vector<float>& data = sf_it->second;
             size_t n = block->size();
 
             for (size_t i = 0; i < n; ++i) {
@@ -1320,7 +1325,7 @@ namespace ct
 
         // 基础属性拷贝
         this->m_id = other.m_id + "_clone";
-        this->m_info = other.m_info;
+        this->m_filepath = other.m_filepath;
         this->m_box = other.m_box;
         this->m_box_rgb = other.m_box_rgb;
         this->m_normals_rgb = other.m_normals_rgb;
@@ -1376,7 +1381,7 @@ namespace ct
             if (src_block->m_normals)
                 dst_block->m_normals = std::make_unique<std::vector<CompressedNormal>>(*src_block->m_normals);
 
-            // 标量场 (QMap 具有值语义，直接赋值会触发深拷贝)
+            // 标量场 (std::map 具有值语义，直接赋值会触发深拷贝)
             dst_block->m_scalar_fields = src_block->m_scalar_fields;
 
             // 备份颜色
@@ -1518,11 +1523,11 @@ namespace ct
             const std::vector<RGB>* c = (block->m_colors) ? block->m_colors.get() : nullptr;
             const std::vector<CompressedNormal>* n = (block->m_normals) ? block->m_normals.get() : nullptr;
 
-            // 标量场 (QMap 指针)
-            // addPoints 接受的是 const QMap<QString, vector<float>>*
+            // 标量场 (std::map 指针)
+            // addPoints 接受的是 const std::map<std::string, vector<float>>*
             // Block 中存储的正是这个类型，直接取地址即可
-            const QMap<QString, std::vector<float>>* s =
-                    (!block->m_scalar_fields.isEmpty()) ? &block->m_scalar_fields : nullptr;
+            const std::map<std::string, std::vector<float>>* s =
+                    (!block->m_scalar_fields.empty()) ? &block->m_scalar_fields : nullptr;
 
             // 批量插入
             this->addPoints(block->m_points, c, n, s);

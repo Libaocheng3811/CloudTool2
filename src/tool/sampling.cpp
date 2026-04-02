@@ -135,11 +135,11 @@ void Sampling::samplingResult(const ct::Cloud::Ptr& cloud, float time)
           .arg(cloud->size()));
 
     // 设置新点云的名称：原名称 + "-sampling"
-    QString new_id = m_current_cloud->id() + "-sampling";
-    cloud->setId(new_id);
+    QString new_id = QString::fromStdString(m_current_cloud->id()) + "-sampling";
+    cloud->setId(new_id.toStdString());
 
     // 获取原点云的树节点
-    QTreeWidgetItem* source_item = m_cloudtree->getItemById(m_current_cloud->id());
+    QTreeWidgetItem* source_item = m_cloudtree->getItemById(QString::fromStdString(m_current_cloud->id()));
     if (!source_item)
     {
         printW("Failed to find source cloud in tree!");
@@ -164,7 +164,7 @@ void Sampling::samplingResult(const ct::Cloud::Ptr& cloud, float time)
     // 在视图中显示新点云（保留原始颜色）
     m_cloudview->addPointCloud(cloud);
     // 不设置颜色，保留采样后的原始颜色
-    m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize() + 2);
+    m_cloudview->setPointCloudSize(QString::fromStdString(cloud->id()), cloud->pointSize() + 2);
 
     // 取消选中源点云，选中新生成的采样点云
     m_cloudtree->setCloudChecked(m_current_cloud, false);

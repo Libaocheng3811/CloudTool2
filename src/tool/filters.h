@@ -56,7 +56,7 @@ private:
     QThread m_thread;
     // 滤波器
     ct::Filters *m_filters;
-    std::map<QString, ct::Cloud::Ptr> m_filter_map;
+    std::map<std::string, ct::Cloud::Ptr> m_filter_map;
 };
 
 

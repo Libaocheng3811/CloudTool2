@@ -176,9 +176,9 @@ void Registration::setTarget()
         printW(tr("Please choose another cloud as target cloud!"));
         return;
     }
-    m_cloudview->removeShape(m_target_cloud->boxId());
+    m_cloudview->removeShape(QString::fromStdString(m_target_cloud->boxId()));
     m_cloudview->setPointCloudColor(m_target_cloud, ct::Color::Red);
-    m_cloudview->showInfo("Target cloud(Red): " + m_target_cloud->id(), 1);
+    m_cloudview->showInfo("Target cloud(Red): " + QString::fromStdString(m_target_cloud->id()), 1);
     if (m_source_cloud)
     {
         ui->btn_setTarget->setEnabled(false);
@@ -202,9 +202,9 @@ void Registration::setSource()
         printW(tr("Please choose another cloud as source cloud!"));
         return;
     }
-    m_cloudview->removeShape(m_source_cloud->boxId());
+    m_cloudview->removeShape(QString::fromStdString(m_source_cloud->boxId()));
     m_cloudview->setPointCloudColor(m_source_cloud, ct::Color::Green);
-    m_cloudview->showInfo("Source cloud(Green): " + m_source_cloud->id(), 1);
+    m_cloudview->showInfo("Source cloud(Green): " + QString::fromStdString(m_source_cloud->id()), 1);
     if (m_target_cloud)
     {
         ui->btn_setTarget->setEnabled(false);
@@ -270,7 +270,7 @@ void Registration::preview()
     switch (ui->cbox_type->currentIndex())
     {
         case REG_TYPE_CorrespondenceEstimation:
-            m_cloudview->removeCorrespondences(m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG);
+            m_cloudview->removeCorrespondences(QString::fromStdString(m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG));
             switch (ui->cbox_correEst->currentIndex())
             {
                 case REG_TYPE_CE_Base:
@@ -339,7 +339,7 @@ void Registration::preview()
             }
             break;
         case REG_TYPE_CorrespondenceRejector:
-            m_cloudview->removeCorrespondences(m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG);
+            m_cloudview->removeCorrespondences(QString::fromStdString(m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG));
             if (m_corr == nullptr)
             {
                 printW("please estimate target and source cloud correspondence first!");
@@ -390,7 +390,7 @@ void Registration::preview()
             }
             break;
         case REG_TYPE_TransformationEstimation:
-            m_cloudview->removePointCloud(m_source_cloud->id() + REG_TRANS_PRE_FLAG);
+            m_cloudview->removePointCloud(QString::fromStdString(m_source_cloud->id() + REG_TRANS_PRE_FLAG));
             switch (ui->cbox_TransEst->currentIndex())
             {
                 case REG_TYPE_TE_2D:
@@ -426,7 +426,7 @@ void Registration::preview()
             }
             break;
         case REG_TYPE_Registration:
-            m_cloudview->removePointCloud(m_source_cloud->id() + REG_ALIGN_PRE_FLAG);
+            m_cloudview->removePointCloud(QString::fromStdString(m_source_cloud->id() + REG_ALIGN_PRE_FLAG));
             if (ui->check_continus->isChecked() && m_reg_map.find(m_source_cloud->id() + m_target_cloud->id()) != m_reg_map.end())
             {
                 ct::Cloud::Ptr new_source_cloud = m_reg_map.find(m_source_cloud->id() + m_target_cloud->id())->second;
@@ -588,18 +588,18 @@ void Registration::add()
     }
     if (m_reg_map.find(m_source_cloud->id() + m_target_cloud->id()) == m_reg_map.end())
     {
-        printW(QString("Please registrate target cloud[id:%1] and source cloud[id:%2] first!").arg(m_target_cloud->id()).arg(m_source_cloud->id()));
+        printW(QString("Please registrate target cloud[id:%1] and source cloud[id:%2] first!").arg(QString::fromStdString(m_target_cloud->id())).arg(QString::fromStdString(m_source_cloud->id())));
         return;
     }
     // 将源点云和目标点云的 ID 连接起来，形成一个新的字符串。
     ct::Cloud::Ptr new_cloud = m_reg_map.find(m_source_cloud->id() + m_target_cloud->id())->second;
-    m_cloudview->removePointCloud(new_cloud->id());
+    m_cloudview->removePointCloud(QString::fromStdString(new_cloud->id()));
     new_cloud->setId(REG_ALIGN_ADD_FLAG + m_source_cloud->id());
-    QTreeWidgetItem *item = m_cloudtree->getItemById(m_source_cloud->id());
+    QTreeWidgetItem *item = m_cloudtree->getItemById(QString::fromStdString(m_source_cloud->id()));
     m_cloudtree->insertCloud(new_cloud, item, true);
 
     m_reg_map.erase(m_source_cloud->id() + m_target_cloud->id());
-    printI(QString("Add registrated cloud[id:%1] done.").arg(new_cloud->id()));
+    printI(QString("Add registrated cloud[id:%1] done.").arg(QString::fromStdString(new_cloud->id())));
     m_cloudview->clearInfo();
 }
 
@@ -612,14 +612,14 @@ void Registration::apply()
     }
     if (m_reg_map.find(m_source_cloud->id() + m_target_cloud->id()) == m_reg_map.end())
     {
-        printW(QString("Please registrate target cloud[id:%1] and source cloud[id:%2] first!").arg(m_target_cloud->id()).arg(m_source_cloud->id()));
+        printW(QString("Please registrate target cloud[id:%1] and source cloud[id:%2] first!").arg(QString::fromStdString(m_target_cloud->id())).arg(QString::fromStdString(m_source_cloud->id())));
         return;
     }
     ct::Cloud::Ptr new_cloud = m_reg_map.find(m_source_cloud->id() + m_target_cloud->id())->second;
-    m_cloudview->removePointCloud(new_cloud->id());
+    m_cloudview->removePointCloud(QString::fromStdString(new_cloud->id()));
     m_cloudtree->updateCloud(m_source_cloud, new_cloud);
     m_reg_map.erase(m_source_cloud->id() + m_target_cloud->id());
-    printI(QString("Apply registrated cloud[id:%1] done.").arg(new_cloud->id()));
+    printI(QString("Apply registrated cloud[id:%1] done.").arg(QString::fromStdString(new_cloud->id())));
     m_cloudview->clearInfo();
 }
 
@@ -633,9 +633,9 @@ void Registration::reset()
     if (m_source_cloud) m_cloudview->resetPointCloudColor(m_source_cloud);
     if (m_source_cloud && m_target_cloud)
     {
-        m_cloudview->removeCorrespondences(m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG);
-        m_cloudview->removePointCloud(m_source_cloud->id() + REG_TRANS_PRE_FLAG);
-        m_cloudview->removePointCloud(m_source_cloud->id() + REG_ALIGN_PRE_FLAG);
+        m_cloudview->removeCorrespondences(QString::fromStdString(m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG));
+        m_cloudview->removePointCloud(QString::fromStdString(m_source_cloud->id() + REG_TRANS_PRE_FLAG));
+        m_cloudview->removePointCloud(QString::fromStdString(m_source_cloud->id() + REG_ALIGN_PRE_FLAG));
     }
     m_target_cloud = nullptr;
     m_source_cloud = nullptr;
@@ -643,7 +643,7 @@ void Registration::reset()
     m_ce = nullptr;
     m_te = nullptr;
     for (auto& cloud : m_reg_map)
-        m_cloudview->removePointCloud(cloud.second->id());
+        m_cloudview->removePointCloud(QString::fromStdString(cloud.second->id()));
     m_reg_map.clear();
 }
 
@@ -651,8 +651,8 @@ void Registration::correspondenceEstimationResult(const ct::CorrespondencesPtr &
                                                   const ct::CorreEst::Ptr &ce)
 {
     m_cloudtree->closeProgress();
-    printI(QString("Estimate target cloud[id:%1] and source cloud[id:%2] correspondences done, take time %3 ms.").arg(m_target_cloud->id()).arg(m_source_cloud->id()).arg(time));
-    QString id = m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG;
+    printI(QString("Estimate target cloud[id:%1] and source cloud[id:%2] correspondences done, take time %3 ms.").arg(QString::fromStdString(m_target_cloud->id())).arg(QString::fromStdString(m_source_cloud->id())).arg(time));
+    QString id = QString::fromStdString(m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG);
     m_cloudview->addCorrespondences(m_source_cloud, m_target_cloud, corr, id);
     m_corr = corr;
     m_ce = ce;
@@ -662,8 +662,8 @@ void Registration::correspondenceRejectorResult(const ct::CorrespondencesPtr &co
                                                 const ct::CorreRej::Ptr &cj)
 {
     m_cloudtree->closeProgress();
-    printI(QString("Reject target cloud[id:%1] and source cloud[id:%2] correspondences done, take time %3 ms.").arg(m_target_cloud->id()).arg(m_source_cloud->id()).arg(time));
-    QString id = m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG;
+    printI(QString("Reject target cloud[id:%1] and source cloud[id:%2] correspondences done, take time %3 ms.").arg(QString::fromStdString(m_target_cloud->id())).arg(QString::fromStdString(m_source_cloud->id())).arg(time));
+    QString id = QString::fromStdString(m_target_cloud->id() + m_source_cloud->id() + REG_CORRE_PRE_FLAG);
     m_cloudview->addCorrespondences(m_source_cloud, m_target_cloud, corr, id);
     m_cr_map[ui->cbox_correRej->currentIndex()] = cj;
 }
@@ -671,7 +671,7 @@ void Registration::correspondenceRejectorResult(const ct::CorrespondencesPtr &co
 void Registration::transformationEstimationResult(const Eigen::Matrix4f& matrix, float time, const ct::TransEst::Ptr& te)
 {
     m_cloudtree->closeProgress();
-    printI(QString("Estimate target cloud[id:%1] and source cloud[id:%2] transformation done, take time %3 ms.").arg(m_target_cloud->id()).arg(m_source_cloud->id()).arg(time));
+    printI(QString("Estimate target cloud[id:%1] and source cloud[id:%2] transformation done, take time %3 ms.").arg(QString::fromStdString(m_target_cloud->id())).arg(QString::fromStdString(m_source_cloud->id())).arg(time));
 
     // 使用PCL transformPointCloud进行变换
     pcl::PointCloud<ct::PointXYZRGBN>::Ptr pcl_transformed(new pcl::PointCloud<ct::PointXYZRGBN>);
@@ -680,8 +680,8 @@ void Registration::transformationEstimationResult(const Eigen::Matrix4f& matrix,
     ct::Cloud::Ptr cloud = ct::Cloud::fromPCL_XYZRGBN(*pcl_transformed);
     cloud->setId(m_source_cloud->id() + REG_TRANS_PRE_FLAG);
     m_cloudview->addPointCloud(cloud);
-    m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize() + 2);
-    m_cloudview->setPointCloudColor(cloud->id(), ct::Color::Blue);
+    m_cloudview->setPointCloudSize(QString::fromStdString(cloud->id()), cloud->pointSize() + 2);
+    m_cloudview->setPointCloudColor(QString::fromStdString(cloud->id()), ct::Color::Blue);
     m_te = te;
 }
 
@@ -691,14 +691,14 @@ void Registration::registrationResult(bool success, const ct::Cloud::Ptr& ail_cl
     m_cloudtree->closeProgress();
     if (!success)
     {
-        printE(QString("Registrate target cloud[id:%1] and source cloud[id:%2] failed!").arg(m_target_cloud->id()).arg(m_source_cloud->id()));
+        printE(QString("Registrate target cloud[id:%1] and source cloud[id:%2] failed!").arg(QString::fromStdString(m_target_cloud->id())).arg(QString::fromStdString(m_source_cloud->id())));
         return;
     }
-    printI(QString("Registrate target cloud[id:%1] and source cloud[id:%2] done, take time %3 ms.").arg(m_target_cloud->id()).arg(m_source_cloud->id()).arg(time));
+    printI(QString("Registrate target cloud[id:%1] and source cloud[id:%2] done, take time %3 ms.").arg(QString::fromStdString(m_target_cloud->id())).arg(QString::fromStdString(m_source_cloud->id())).arg(time));
     ail_cloud->setId(m_source_cloud->id() + REG_ALIGN_PRE_FLAG);
     m_cloudview->addPointCloud(ail_cloud);
-    m_cloudview->setPointCloudSize(ail_cloud->id(), ail_cloud->pointSize() + 2);
-    m_cloudview->setPointCloudColor(ail_cloud->id(), ct::Color::Blue);
+    m_cloudview->setPointCloudSize(QString::fromStdString(ail_cloud->id()), ail_cloud->pointSize() + 2);
+    m_cloudview->setPointCloudColor(QString::fromStdString(ail_cloud->id()), ct::Color::Blue);
     ui->txt_matrix->clear();
     ui->txt_matrix->append(tr("Fitness Score: %1 ").arg(score));
     ui->txt_matrix->append(tr("Transformation Matrix:"));

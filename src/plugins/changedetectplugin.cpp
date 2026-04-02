@@ -17,7 +17,7 @@ void setupResultCloud(ct::Cloud::Ptr cloud, const QString& idSuffix){
     cloud->updateColorByField("C2C_Distance");
 
     // 设置其他属性
-    cloud->setId(cloud->id() + idSuffix);
+    cloud->setId(cloud->id() + idSuffix.toStdString());
     cloud->setHasColors(true); // 确保渲染器使用 RGB
 }
 
@@ -66,23 +66,24 @@ void ChangeDetectPlugin::init() {
     }
 
     for (const auto& cloud : allClouds){
-        ui->combo_reference->addItem(cloud->id(), QVariant::fromValue(cloud));
-        ui->combo_compare->addItem(cloud->id(), QVariant::fromValue(cloud));
+        QString cloudId = QString::fromStdString(cloud->id());
+        ui->combo_reference->addItem(cloudId, QVariant::fromValue(cloud));
+        ui->combo_compare->addItem(cloudId, QVariant::fromValue(cloud));
     }
 
     // 智能默认选项
     std::vector<ct::Cloud::Ptr> selectedClouds = m_cloudtree->getSelectedClouds();
     if (selectedClouds.size() >= 2){
         // 认为第一个选择的是参考点云，第二个选择的是待比较点云
-        int idxRef = ui->combo_reference->findText(selectedClouds[0]->id());
-        int idxComp = ui->combo_compare->findText(selectedClouds[1]->id());
+        int idxRef = ui->combo_reference->findText(QString::fromStdString(selectedClouds[0]->id()));
+        int idxComp = ui->combo_compare->findText(QString::fromStdString(selectedClouds[1]->id()));
 
         if (idxRef >= 0) ui->combo_reference->setCurrentIndex(idxRef);
         if (idxComp >= 0) ui->combo_compare->setCurrentIndex(idxComp);
     }
     else if (selectedClouds.size() == 1 && allClouds.size() >= 2){
         // 如果仅选择一个点云，则默认选择该点云为参考点云
-        int idxRef = ui->combo_reference->findText(selectedClouds[0]->id());
+        int idxRef = ui->combo_reference->findText(QString::fromStdString(selectedClouds[0]->id()));
         ui->combo_reference->setCurrentIndex(idxRef);
 
         // 选择剩余点云为待比较点云
@@ -311,7 +312,7 @@ void ChangeDetectPlugin::onFilterDone(const std::vector<float>& distances, float
     }
 
     if (!results.empty()) {
-        QString groupName = m_compCloud->id() + "_ChangeDetect";
+        QString groupName = QString::fromStdString(m_compCloud->id() + "_ChangeDetect");
         m_cloudtree->addResultGroup(m_compCloud, results, groupName);
     }
     this->accept();

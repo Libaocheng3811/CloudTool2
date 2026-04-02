@@ -26,9 +26,9 @@ public:
 
     int numBlocks() const { return static_cast<int>(m_cloud->getBlocks().size()); }
 
-    std::string name() const { return m_cloud->id().toStdString(); }
+    std::string name() const { return m_cloud->id(); }
 
-    void setName(const std::string& name) { m_cloud->setId(QString::fromStdString(name)); }
+    void setName(const std::string& name) { m_cloud->setId(name); }
 
     size_t blockSize(int idx) const
     {
@@ -292,7 +292,7 @@ PYBIND11_EMBEDDED_MODULE(ct, m)
 
         // 持有引用 + 标记 in-use
         bridge->holdCloud(cloud);
-        bridge->markCloudInUse(cloud->id());
+        bridge->markCloudInUse(QString::fromStdString(cloud->id()));
 
         return py::cast(PyCloud(cloud));
     }, py::arg("name"), "Get cloud by name, returns ct.Cloud or None");

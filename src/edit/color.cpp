@@ -127,8 +127,8 @@ void Color::apply()
                 // 为某个坐标轴设置颜色，例如x轴，就是颜色是根据点云点的x坐标变化的
                 if (m_field != "")
                 {
-                    cloud->setCloudColor(m_field);
-                    printI(QString("Apply cloud[id:%1] point color[axis:%2] done.").arg(cloud->id().arg(m_field)));
+                    cloud->setCloudColor(m_field.toStdString());
+                    printI(QString("Apply cloud[id:%1] point color[axis:%2] done.").arg(QString::fromStdString(cloud->id())).arg(m_field));
                 }
                 // 为所有点云设置统一颜色
                 else
@@ -137,7 +137,7 @@ void Color::apply()
                                          static_cast<uint8_t>(m_rgb.green()),
                                          static_cast<uint8_t>(m_rgb.blue())});
                     printI(QString("Apply cloud[id%1] point cloud[r:%2, g:%3, b:%4] done.")
-                            .arg(cloud->id()).arg(m_rgb.red()).arg(m_rgb.green()).arg(m_rgb.blue()));
+                            .arg(QString::fromStdString(cloud->id())).arg(m_rgb.red()).arg(m_rgb.green()).arg(m_rgb.blue()));
                 }
                 m_cloudview->addPointCloud(cloud);
                 break;
@@ -172,15 +172,15 @@ void Color::reset()
                 m_cloudview->resetPointCloudColor(cloud);
                 break;
             case CT_COLOR_NORMALS:
-                if (m_cloudview->contains(cloud->normalId()))
-                    m_cloudview->setPointCloudColor(cloud->normalId(), cloud->normalColor());
+                if (m_cloudview->contains(QString::fromStdString(cloud->normalId())))
+                    m_cloudview->setPointCloudColor(QString::fromStdString(cloud->normalId()), cloud->normalColor());
                 break;
             case CT_COLOR_BOUNDINGBOX:
-                if (m_cloudview->contains(cloud->boxId()))
-                    m_cloudview->setShapeColor(cloud->boxId(), cloud->boxColor());
+                if (m_cloudview->contains(QString::fromStdString(cloud->boxId())))
+                    m_cloudview->setShapeColor(QString::fromStdString(cloud->boxId()), cloud->boxColor());
                 break;
         }
-        printI(QString("Reset cloud[id:%1] color done.").arg(cloud->id()));
+        printI(QString("Reset cloud[id:%1] color done.").arg(QString::fromStdString(cloud->id())));
     }
     if (ui->cbox_type->currentIndex() == CT_COLOR_BACKGROUND)
         m_cloudview->resetBackgroundColor();
@@ -212,15 +212,15 @@ void Color::setColorRGB(const QColor &rgb)
             break;
         case CT_COLOR_NORMALS:
             for (auto& cloud : selected_clouds)
-                if (m_cloudview->contains(cloud->normalId()))
-                    m_cloudview->setPointCloudColor(cloud->normalId(), {static_cast<uint8_t>(m_rgb.red()),
+                if (m_cloudview->contains(QString::fromStdString(cloud->normalId())))
+                    m_cloudview->setPointCloudColor(QString::fromStdString(cloud->normalId()), {static_cast<uint8_t>(m_rgb.red()),
                                                                         static_cast<uint8_t>(m_rgb.green()),
                                                                         static_cast<uint8_t>(m_rgb.blue())});
             break;
         case CT_COLOR_BOUNDINGBOX:
             for (auto& cloud : selected_clouds)
-                if (m_cloudview->contains(cloud->boxId()))
-                    m_cloudview->setShapeColor(cloud->boxId(), {static_cast<uint8_t>(m_rgb.red()),
+                if (m_cloudview->contains(QString::fromStdString(cloud->boxId())))
+                    m_cloudview->setShapeColor(QString::fromStdString(cloud->boxId()), {static_cast<uint8_t>(m_rgb.red()),
                                                                 static_cast<uint8_t>(m_rgb.green()),
                                                                 static_cast<uint8_t>(m_rgb.blue())});
             break;

@@ -14,6 +14,7 @@
 #include <string>
 #include <iomanip> // std::setprecision
 #include <cstdlib>
+#include <algorithm> // std::find
 
 namespace ct
 {
@@ -153,8 +154,8 @@ namespace ct
 
         emit progress(90);
 
-        cloud->setId(fileInfo.baseName());
-        cloud->setInfo(fileInfo);
+        cloud->setId(fileInfo.baseName().toStdString());
+        cloud->setFilepath(fileInfo.absoluteFilePath().toStdString());
         cloud->update(); //更新包围盒，统计信息
 
         emit progress(100);
@@ -388,7 +389,7 @@ namespace ct
             for (const auto& t : tasks) {
                 if (t.type == ExtractInfo::Scalar) {
                     float val = getFieldValueAsFloat(pt_ptr + t.offset, t.datatype, remaining);
-                    batch.scalars[t.saveName].push_back(val);
+                    batch.scalars[t.saveName.toStdString()].push_back(val);
                 }
                 else if (t.type == ExtractInfo::ColorPacked) {
                     // 处理打包颜色 (如 float rgba)
@@ -686,7 +687,7 @@ namespace ct
                     if ((int)parser.tokens.size() > col) {
                         val = std::strtof(parser.tokens[col], nullptr);
                     }
-                    batch.scalars[name].push_back(val);
+                    batch.scalars[name.toStdString()].push_back(val);
                 }
             }
 
@@ -927,10 +928,11 @@ namespace ct
                 // 解析 Scalar Fields
                 for (auto it = scalar_map.begin(); it != scalar_map.end(); ++it) {
                     int col_idx = it.key();
+                    const std::string sname = it.value().toStdString();
                     if (col_idx < parts.size()) {
-                        batch.scalars[it.value()].push_back(parts[col_idx].toFloat());
+                        batch.scalars[sname].push_back(parts[col_idx].toFloat());
                     } else {
-                        batch.scalars[it.value()].push_back(0.0f);
+                        batch.scalars[sname].push_back(0.0f);
                     }
                 }
             }
@@ -1273,7 +1275,7 @@ namespace ct
 
             // 预取当前 Block 的 Intensity 数据 (如果存在)
             const std::vector<float>* intensity_ptr = nullptr;
-            if (block->m_scalar_fields.contains("Intensity")) {
+            if (block->m_scalar_fields.find("Intensity") != block->m_scalar_fields.end()) {
                 intensity_ptr = &block->m_scalar_fields["Intensity"];
             }
 
@@ -1324,7 +1326,10 @@ namespace ct
         if (cloud->hasNormals()) available_fields << "nx" << "ny" << "nz";
 
         // 获取标量场名称
-        available_fields.append(cloud->getScalarFieldNames());
+        auto scalar_names_vec = cloud->getScalarFieldNames();
+        for (const auto& name : scalar_names_vec) {
+            available_fields.append(QString::fromStdString(name));
+        }
 
         // 请求 UI 配置 (阻塞式)
         ct::TxtExportParams params;
@@ -1402,9 +1407,10 @@ namespace ct
             std::vector<const std::vector<float>*> scalar_ptrs(field_descs.size(), nullptr);
             for (size_t k = 0; k < field_descs.size(); ++k) {
                 if (field_descs[k].type == FieldDesc::Scalar) {
-                    const QString& name = field_descs[k].scalar_name;
-                    if (block->m_scalar_fields.contains(name)) {
-                        scalar_ptrs[k] = &block->m_scalar_fields[name];
+                    const std::string sname = field_descs[k].scalar_name.toStdString();
+                    auto sf_it = block->m_scalar_fields.find(sname);
+                    if (sf_it != block->m_scalar_fields.end()) {
+                        scalar_ptrs[k] = &sf_it->second;
                     }
                 }
             }
@@ -1529,10 +1535,10 @@ namespace ct
         }
 
         // --- Scalar Fields (自定义标量场) ---
-        QStringList scalar_names = cloud->getScalarFieldNames();
-        for (const QString& name : scalar_names) {
+        std::vector<std::string> scalar_names = cloud->getScalarFieldNames();
+        for (const std::string& name : scalar_names) {
             pcl::PCLPointField f;
-            f.name = name.toStdString();
+            f.name = name;
             f.offset = current_offset;
             f.datatype = pcl::PCLPointField::FLOAT32;
             f.count = 1;
@@ -1582,7 +1588,7 @@ namespace ct
             else if (f.name == "normal_z") off_nz = f.offset;
             else {
                 // 检查是否是标量场
-                if (scalar_names.contains(QString::fromStdString(f.name))) {
+                if (std::find(scalar_names.begin(), scalar_names.end(), f.name) != scalar_names.end()) {
                     off_scalars.push_back(f.offset);
                 }
             }
@@ -1610,11 +1616,12 @@ namespace ct
 
             // 标量场指针预取
             std::vector<const std::vector<float>*> scalar_ptrs;
-            if (!scalar_names.isEmpty()) {
+            if (!scalar_names.empty()) {
                 scalar_ptrs.reserve(scalar_names.size());
-                for (const QString& name : scalar_names) {
-                    if (block->m_scalar_fields.contains(name)) {
-                        scalar_ptrs.push_back(&block->m_scalar_fields[name]);
+                for (const std::string& name : scalar_names) {
+                    auto sf_it = block->m_scalar_fields.find(name);
+                    if (sf_it != block->m_scalar_fields.end()) {
+                        scalar_ptrs.push_back(&sf_it->second);
                     } else {
                         scalar_ptrs.push_back(nullptr); // 缺失字段处理
                     }

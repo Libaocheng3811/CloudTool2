@@ -31,7 +31,7 @@ public:
 
     virtual void reset();
 
-    ct::FeatureType::Ptr getDescriptor(const QString &id) {
+    ct::FeatureType::Ptr getDescriptor(const std::string &id) {
         if (m_descriptor_map.find(id) == m_descriptor_map.end())
             return nullptr;
         else
@@ -89,8 +89,8 @@ private:
     // 一个来自PCL（Point Cloud Library）库中的类，用于创建和管理2D绘图窗口.
     // PCLPlotter 类主要用于绘制直方图、散点图、曲线等二维图形
     pcl::visualization::PCLPlotter::Ptr m_plotter;
-    std::map<QString, ct::FeatureType::Ptr> m_descriptor_map;
-    std::map<QString, ct::ReferenceFrame::Ptr> m_lrf_map;
+    std::map<std::string, ct::FeatureType::Ptr> m_descriptor_map;
+    std::map<std::string, ct::ReferenceFrame::Ptr> m_lrf_map;
 };
 
 

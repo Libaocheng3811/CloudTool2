@@ -20,6 +20,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType)
 #include <QUrl>
 
 #include <cmath>
+#include <map>
 
 #define INFO_CLOUD_ID  "info_cloud_id"
 #define INFO_TEXT      "info_text"
@@ -203,12 +204,13 @@ namespace ct
         }
         if (!found) m_visible_clouds.push_back(cloud);
 
-        if (m_OctreeRenders.contains(cloud->id())) {
-            m_OctreeRenders.remove(cloud->id());
+        QString qid = QString::fromStdString(cloud->id());
+        if (m_OctreeRenders.contains(qid)) {
+            m_OctreeRenders.remove(qid);
         }
 
         auto renderer = std::make_shared<OctreeRenderer>(cloud, m_viewer->getRendererCollection()->GetFirstRenderer());
-        m_OctreeRenders.insert(cloud->id(), renderer);
+        m_OctreeRenders.insert(qid, renderer);
 
         renderer->update();
 
@@ -234,7 +236,7 @@ namespace ct
         if (cloud->volume() <= 0.0f || cloud->box().width <= 0.0f){
             return;
         }
-        std::string id = cloud->boxId().toStdString();
+        std::string id = cloud->boxId();
         if (!m_viewer->contains(id))
         {
             m_viewer->addCube(cloud->box().translation, cloud->box().rotation,
@@ -254,7 +256,7 @@ namespace ct
     void CloudView::addPointCloudNormals(const Cloud::Ptr &cloud, int level, float scale)
     {
         // TODO 只显示一定数量的法线，不全部显示
-        std::string id = cloud->normalId().toStdString();
+        std::string id = cloud->normalId();
 
         if (!cloud->hasNormals()) return;
 
@@ -494,9 +496,9 @@ namespace ct
                     }
 
                     // 获取标量数据
-                    if (!block->m_scalar_fields.isEmpty()) {
+                    if (!block->m_scalar_fields.empty()) {
                         for(auto sit = block->m_scalar_fields.begin(); sit != block->m_scalar_fields.end(); ++sit) {
-                            result.scalars.insert(sit.key(), sit.value()[pointId]);
+                            result.scalars.insert(QString::fromStdString(sit->first), sit->second[pointId]);
                         }
                     }
 
@@ -519,7 +521,7 @@ namespace ct
         if (cloud->hasNormals()) result_cloud->enableNormals();
 
         // 复制标量场定义
-        QStringList scalar_names = cloud->getScalarFieldNames();
+        std::vector<std::string> scalar_names = cloud->getScalarFieldNames();
 
         // 1. 预计算多边形参数 (PIP算法)
         int size = poly_points.size();
@@ -550,7 +552,7 @@ namespace ct
         std::vector<PointXYZ> batch_pts;
         std::vector<RGB> batch_colors;
         std::vector<CompressedNormal> batch_normals;
-        QMap<QString, std::vector<float>> batch_scalars;
+        std::map<std::string, std::vector<float>> batch_scalars;
 
         size_t batch_limit = 50000;
         batch_pts.reserve(batch_limit);
@@ -589,7 +591,7 @@ namespace ct
                         batch_normals.push_back((*block->m_normals)[k]);
 
                     for (const auto& name : scalar_names) {
-                        if (block->m_scalar_fields.contains(name)) {
+                        if (block->m_scalar_fields.count(name)) {
                             batch_scalars[name].push_back(block->m_scalar_fields[name][k]);
                         } else {
                             batch_scalars[name].push_back(0.0f);
@@ -601,7 +603,7 @@ namespace ct
                         result_cloud->addPoints(batch_pts,
                                                 batch_colors.empty() ? nullptr : &batch_colors,
                                                 batch_normals.empty() ? nullptr : &batch_normals,
-                                                batch_scalars.isEmpty() ? nullptr : &batch_scalars);
+                                                batch_scalars.empty() ? nullptr : &batch_scalars);
 
                         batch_pts.clear(); batch_colors.clear(); batch_normals.clear();
                         for(auto& v : batch_scalars) v.clear();
@@ -615,7 +617,7 @@ namespace ct
             result_cloud->addPoints(batch_pts,
                                     batch_colors.empty() ? nullptr : &batch_colors,
                                     batch_normals.empty() ? nullptr : &batch_normals,
-                                    batch_scalars.isEmpty() ? nullptr : &batch_scalars);
+                                    batch_scalars.empty() ? nullptr : &batch_scalars);
         }
 
         result_cloud->update();
@@ -626,8 +628,9 @@ namespace ct
     // remove
     void CloudView::removePointCloud(const QString &id)
     {
+        std::string sid = id.toStdString();
         auto it = std::remove_if(m_visible_clouds.begin(), m_visible_clouds.end(),
-                                 [&](const Cloud::Ptr& cloud) { return cloud->id() == id; });
+                                 [&](const Cloud::Ptr& cloud) { return cloud->id() == sid; });
         m_visible_clouds.erase(it, m_visible_clouds.end());
 
         m_OctreeRenders.remove(id);
@@ -674,10 +677,11 @@ namespace ct
     {
         cloud->setCloudColor(rgb);
 
-        if (m_OctreeRenders.contains(cloud->id())) {
+        QString qid = QString::fromStdString(cloud->id());
+        if (m_OctreeRenders.contains(qid)) {
             // 颜色变了，必须让 Block 变脏，重新生成 PolyData
-            m_OctreeRenders[cloud->id()]->invalidateCache();
-            m_OctreeRenders[cloud->id()]->update();
+            m_OctreeRenders[qid]->invalidateCache();
+            m_OctreeRenders[qid]->update();
         }
 
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
@@ -685,8 +689,9 @@ namespace ct
 
     void CloudView::setPointCloudColor(const QString &id, const RGB &rgb)
     {
+        std::string sid = id.toStdString();
         for(auto& c : m_visible_clouds) {
-            if (c->id() == id) {
+            if (c->id() == sid) {
                 setPointCloudColor(c, rgb);
                 return;
             }
@@ -695,11 +700,12 @@ namespace ct
 
     void CloudView::setPointCloudColor(const Cloud::Ptr &cloud, const QString& axis)
     {
-        cloud->setCloudColor(axis);
+        cloud->setCloudColor(axis.toStdString());
 
-        if (m_OctreeRenders.contains(cloud->id())) {
-            m_OctreeRenders[cloud->id()]->invalidateCache();
-            m_OctreeRenders[cloud->id()]->update();
+        QString qid = QString::fromStdString(cloud->id());
+        if (m_OctreeRenders.contains(qid)) {
+            m_OctreeRenders[qid]->invalidateCache();
+            m_OctreeRenders[qid]->update();
         }
 
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
@@ -709,9 +715,10 @@ namespace ct
     {
         cloud->restoreColors();
 
-        if (m_OctreeRenders.contains(cloud->id())) {
-            m_OctreeRenders[cloud->id()]->invalidateCache();
-            m_OctreeRenders[cloud->id()]->update();
+        QString qid = QString::fromStdString(cloud->id());
+        if (m_OctreeRenders.contains(qid)) {
+            m_OctreeRenders[qid]->invalidateCache();
+            m_OctreeRenders[qid]->update();
         }
 
         if (m_auto_render) m_viewer->getRenderWindow()->Render();
@@ -719,8 +726,9 @@ namespace ct
 
     void CloudView::setPointCloudSize(const QString &id, float size)
     {
+        std::string sid = id.toStdString();
         for(auto& c : m_visible_clouds) {
-            if (c->id() == id) {
+            if (c->id() == sid) {
                 c->setPointSize(size); // 假设 Cloud 类有这个 setter
 
                 // 强制触发一次 update，应用新属性
@@ -733,8 +741,9 @@ namespace ct
 
     void CloudView::setPointCloudOpacity(const QString &id, float value)
     {
+        std::string sid = id.toStdString();
         for(auto& c : m_visible_clouds) {
-            if (c->id() == id) {
+            if (c->id() == sid) {
                 c->setOpacity(value);
                 if (m_OctreeRenders.contains(id)) m_OctreeRenders[id]->update();
                 break;

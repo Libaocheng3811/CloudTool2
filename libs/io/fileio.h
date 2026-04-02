@@ -10,6 +10,8 @@
 #include <QString>
 #include <QMap>
 #include <vector>
+#include <map>
+#include <string>
 
 namespace ct
 {
@@ -21,7 +23,7 @@ namespace ct
         std::vector<PointXYZ> points;
         std::vector<RGB> colors;
         std::vector<CompressedNormal> normals;
-        QMap<QString, std::vector<float>> scalars;
+        std::map<std::string, std::vector<float>> scalars;
 
         // 预留大小，避免频繁扩容
         void reserve(size_t size) {
@@ -37,7 +39,7 @@ namespace ct
             normals.clear();
             // 清空数据但保留 Key，避免重复构造 Map
             for (auto it = scalars.begin(); it != scalars.end(); ++it) {
-                it.value().clear();
+                it->second.clear();
             }
         }
 
@@ -51,7 +53,7 @@ namespace ct
             cloud->addPoints(points,
                              colors.empty() ? nullptr : &colors,
                              normals.empty() ? nullptr : &normals,
-                             scalars.isEmpty() ? nullptr : &scalars);
+                             scalars.empty() ? nullptr : &scalars);
             clear();
         }
     };

@@ -253,7 +253,7 @@ void Descriptor::reset() {
 }
 
 void Descriptor::featureResult(const QString &id, const ct::FeatureType::Ptr &feature, float time) {
-    m_descriptor_map[id] = feature;
+    m_descriptor_map[id.toStdString()] = feature;
     m_cloudtree->closeProgress();
     switch (ui->cbox_type->currentIndex()) {
         case DESCRIPTOR_TYPE_PFHEstimation:
@@ -352,6 +352,6 @@ void Descriptor::lrfResult(const QString &id, const ct::ReferenceFrame::Ptr& clo
             printI(QString("Estimate cloud[id:%1] SHOTLocalReferenceFrame done, take time %2 ms.").arg(id).arg(time));
             break;
     }
-    m_lrf_map[id] = cloud;
+    m_lrf_map[id.toStdString()] = cloud;
     m_cloudtree->closeProgress();
 }

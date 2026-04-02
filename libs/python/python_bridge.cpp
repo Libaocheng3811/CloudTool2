@@ -12,7 +12,7 @@ void PythonBridge::registerCloud(Cloud::Ptr cloud)
 {
     if (!cloud) return;
     QMutexLocker locker(&m_cloud_mutex);
-    m_cloud_registry[cloud->id()] = cloud;
+    m_cloud_registry[QString::fromStdString(cloud->id())] = cloud;
 }
 
 void PythonBridge::unregisterCloud(const QString& id)
@@ -22,7 +22,7 @@ void PythonBridge::unregisterCloud(const QString& id)
     // 从持有列表中移除该云的引用
     m_held_clouds.erase(
         std::remove_if(m_held_clouds.begin(), m_held_clouds.end(),
-            [&id](const Cloud::Ptr& c) { return c && c->id() == id; }),
+            [&id](const Cloud::Ptr& c) { return c && c->id() == id.toStdString(); }),
         m_held_clouds.end());
 }
 

@@ -321,20 +321,20 @@ void Filters::add()
     {
         if (m_filter_map.find(cloud->id()) == m_filter_map.end())
         {
-            printW(QString("The cloud[id:1%] has no filtered cloud!").arg(cloud->id()));
+            printW(QString("The cloud[id:1%] has no filtered cloud!").arg(QString::fromStdString(cloud->id())));
             continue;
         }
         ct::Cloud::Ptr new_cloud = m_filter_map.find(cloud->id())->second;
         // 从视图器中移除旧的过滤点云
-        m_cloudview->removePointCloud(new_cloud->id());
+        m_cloudview->removePointCloud(QString::fromStdString(new_cloud->id()));
         // 为过滤后的点云设置新的ID
         new_cloud->setId(FILTER_ADD_FLAG + cloud->id());
         // 将点云添加到文件树中
-        QTreeWidgetItem * item = m_cloudtree->getItemById(cloud->id());
+        QTreeWidgetItem * item = m_cloudtree->getItemById(QString::fromStdString(cloud->id()));
         m_cloudtree->insertCloud(new_cloud, item, true);
 
         m_filter_map.erase(cloud->id());
-        printI(QString("Add filtered cloud[id:1%] done.").arg(new_cloud->id()));
+        printI(QString("Add filtered cloud[id:1%] done.").arg(QString::fromStdString(new_cloud->id())));
     }
     m_cloudview->clearInfo();
 }
@@ -351,15 +351,15 @@ void Filters::apply()
     {
         if (m_filter_map.find(cloud->id()) == m_filter_map.end())
         {
-            printI(QString("The cloud[id:1%] has no filtered cloud!").arg(cloud->id()));
+            printI(QString("The cloud[id:1%] has no filtered cloud!").arg(QString::fromStdString(cloud->id())));
             continue;
         }
         ct::Cloud::Ptr new_cloud = m_filter_map.find(cloud->id())->second;
-        m_cloudview->removePointCloud(new_cloud->id());
+        m_cloudview->removePointCloud(QString::fromStdString(new_cloud->id()));
         m_cloudtree->updateCloud(cloud, new_cloud);
         m_filter_map.erase(cloud->id());
         m_cloudtree->setCloudChecked(cloud);
-        printI(QString("Apply filtered cloud[id:1%] done.").arg(new_cloud->id()));
+        printI(QString("Apply filtered cloud[id:1%] done.").arg(QString::fromStdString(new_cloud->id())));
     }
     m_cloudview->clearInfo();
 }
@@ -371,7 +371,7 @@ void Filters::reset()
         m_cloudtree->setCloudChecked(cloud);
     }
     for (auto &cloud : m_filter_map)
-        m_cloudview->removePointCloud(cloud.second->id());
+        m_cloudview->removePointCloud(QString::fromStdString(cloud.second->id()));
     m_filter_map.clear();
     m_cloudview->clearInfo();
 }
@@ -383,13 +383,13 @@ void Filters::filterResult(const ct::Cloud::Ptr &cloud, float time)
     }
 
     // 传入的参数cloud是滤波之后的结果
-    printI(QString("Filter cloud[id:%1] done, take time %2 ms.").arg(cloud->id()).arg(time));
-    QString id = cloud->id();
+    printI(QString("Filter cloud[id:%1] done, take time %2 ms.").arg(QString::fromStdString(cloud->id())).arg(time));
+    std::string id = cloud->id();
     cloud->setId(id + FILTER_PRE_FLAG);
 
     m_cloudview->addPointCloud(cloud);
-    m_cloudview->setPointCloudColor(cloud->id(), ct::Color::Green);
-    m_cloudview->setPointCloudSize(cloud->id(), cloud->pointSize() + 2);
+    m_cloudview->setPointCloudColor(QString::fromStdString(cloud->id()), ct::Color::Green);
+    m_cloudview->setPointCloudSize(QString::fromStdString(cloud->id()), cloud->pointSize() + 2);
     m_filter_map[id] = cloud;
 }
 

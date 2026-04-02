@@ -64,18 +64,18 @@ void Cutting::add()
     {
         if (m_cutting_map.find(cloud->id()) == m_cutting_map.end())
         {
-            printW(QString("The Cloud[id:%1] has no cutted cloud!").arg(cloud->id()));
+            printW(QString("The Cloud[id:%1] has no cutted cloud!").arg(QString::fromStdString(cloud->id())));
             continue;
         }
         ct::Cloud::Ptr new_cloud = m_cutting_map.find(cloud->id())->second;
-        m_cloudview->removePointCloud(new_cloud->id());
-        m_cloudview->removeShape(new_cloud->boxId());
+        m_cloudview->removePointCloud(QString::fromStdString(new_cloud->id()));
+        m_cloudview->removeShape(QString::fromStdString(new_cloud->boxId()));
         new_cloud->setId(CUTTING_ADD_FLAG + cloud->id());
-        QTreeWidgetItem* item = m_cloudtree->getItemById(cloud->id());
+        QTreeWidgetItem* item = m_cloudtree->getItemById(QString::fromStdString(cloud->id()));
         m_cloudtree->insertCloud(new_cloud, item, true);
 
         m_cutting_map.erase(cloud->id());
-        printI(QString("Add cutted cloud[id:%1] done.").arg(new_cloud->id()));
+        printI(QString("Add cutted cloud[id:%1] done.").arg(QString::fromStdString(new_cloud->id())));
     }
     m_pick_points.clear();
 }
@@ -92,16 +92,16 @@ void Cutting::apply()
     {
         if (m_cutting_map.find(cloud->id()) == m_cutting_map.end())
         {
-            printW(QString("The cloud[id:%1] has no cutted cloud !").arg(cloud->id()));
+            printW(QString("The cloud[id:%1] has no cutted cloud !").arg(QString::fromStdString(cloud->id())));
             continue;
         }
         ct::Cloud::Ptr new_cloud = m_cutting_map.find(cloud->id())->second;
-        m_cloudview->removePointCloud(new_cloud->id());
-        m_cloudview->removeShape(new_cloud->boxId());
+        m_cloudview->removePointCloud(QString::fromStdString(new_cloud->id()));
+        m_cloudview->removeShape(QString::fromStdString(new_cloud->boxId()));
         m_cloudtree->updateCloud(cloud, new_cloud);
         m_cutting_map.erase(cloud->id());
         m_cloudtree->setCloudChecked(cloud);
-        printI(QString("Apply cutted cloud[id:%1] done.").arg(new_cloud->id()));
+        printI(QString("Apply cutted cloud[id:%1] done.").arg(QString::fromStdString(new_cloud->id())));
     }
     m_pick_points.clear();
 
@@ -130,13 +130,13 @@ void Cutting::start()
         for (auto& cloud : selected_clouds)
         {
             // 移除所选点云的包围盒
-            m_cloudview->removeShape(cloud->boxId());
+            m_cloudview->removeShape(QString::fromStdString(cloud->boxId()));
         }
         //
         for (auto& cut_cloud : m_cutting_map)
         {
-            m_cloudview->removePointCloud(cut_cloud.second->id());
-            m_cloudview->removeShape(cut_cloud.second->boxId());
+            m_cloudview->removePointCloud(QString::fromStdString(cut_cloud.second->id()));
+            m_cloudview->removeShape(QString::fromStdString(cut_cloud.second->boxId()));
         }
         // 移除法线
         m_cloudview->removeShape(POLYGONAL_ID);
@@ -187,8 +187,8 @@ void Cutting::reset()
     m_cloudview->removeShape(POLYGONAL_ID);
     for (auto& cut_cloud : m_cutting_map)
     {
-        m_cloudview->removePointCloud(cut_cloud.second->id());
-        m_cloudview->removeShape(cut_cloud.second->boxId());
+        m_cloudview->removePointCloud(QString::fromStdString(cut_cloud.second->id()));
+        m_cloudview->removeShape(QString::fromStdString(cut_cloud.second->boxId()));
     }
     m_pick_points.clear();
 }
@@ -246,7 +246,7 @@ void Cutting::cuttingCloud(bool select_in)
         m_cloudview->addPointCloud(cut_cloud);
         m_cloudview->addBox(cut_cloud);
         m_cloudview->setPointCloudColor(cut_cloud, ct::Color::Green); // 新接口
-        m_cloudview->setPointCloudSize(cut_cloud->id(), cloud->pointSize() + 2); // 保持原逻辑
+        m_cloudview->setPointCloudSize(QString::fromStdString(cut_cloud->id()), cloud->pointSize() + 2); // 保持原逻辑
 
         m_cutting_map[cloud->id()] = cut_cloud;
     }

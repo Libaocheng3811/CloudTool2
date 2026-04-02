@@ -13,8 +13,8 @@ namespace ct{
         target->setHasColors(source->hasColors());
 
         // 遍历源点云自定义字段
-        QStringList fields = source->getScalarFieldNames();
-        for (const QString& name : fields){
+        std::vector<std::string> fields = source->getScalarFieldNames();
+        for (const std::string& name : fields){
             const std::vector<float>* src_data = source->getScalarField(name);
             if (!src_data) continue;
 

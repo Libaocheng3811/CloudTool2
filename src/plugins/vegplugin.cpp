@@ -121,7 +121,7 @@ void VegPlugin::onFilterDone(const ct::Cloud::Ptr &veg_cloud, const ct::Cloud::P
     results.push_back(veg_cloud);
     results.push_back(non_veg_cloud);
 
-    QString groupName = m_cloud->id() + "_Vegetation";
+    QString groupName = QString::fromStdString(m_cloud->id()) + "_Vegetation";
     m_cloudtree->addResultGroup(m_cloud, results, groupName);
 
     this->accept();

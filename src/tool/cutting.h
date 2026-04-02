@@ -61,7 +61,7 @@ private:
     // m_pick_points用来存储裁剪时被选择的点的集合
     std::vector<ct::PointXY> m_pick_points;
     // m_cutting_map 存储了当前正在进行切割操作的点云信息。
-    std::map<QString, ct::Cloud::Ptr> m_cutting_map;
+    std::map<std::string, ct::Cloud::Ptr> m_cutting_map;
 };
 
 

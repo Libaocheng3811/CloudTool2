@@ -38,7 +38,7 @@ public slots:
 private:
     Ui::BoundingBox *ui;
     int m_box_type;
-    std::map<QString, ct::Box> m_box_map;
+    std::map<std::string, ct::Box> m_box_map;
 };
 
 
