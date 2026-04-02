@@ -5,9 +5,9 @@
 #ifndef CLOUDTOOL2_RANGEIMAGE_H
 #define CLOUDTOOL2_RANGEIMAGE_H
 
-#include "widgets/customdialog.h"
+#include "ui/base/customdialog.h"
 
-#include "modules/keypoints.h"
+#include "algorithm/keypoints.h"
 
 #include <pcl/range_image/range_image.h>
 #include <vtkImageData.h>

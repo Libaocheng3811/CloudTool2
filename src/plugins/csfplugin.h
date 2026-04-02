@@ -7,8 +7,8 @@
 
 #include <QDialog>
 
-#include "widgets/customdialog.h"
-#include "modules/csffilter.h"
+#include "ui/base/customdialog.h"
+#include "algorithm/csffilter.h"
 
 
 QT_BEGIN_NAMESPACE

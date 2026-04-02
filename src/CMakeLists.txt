@@ -1,45 +1,43 @@
 set(Srcs
-        main.cpp
-        mainwindow.cpp
-        edit/color.cpp
-        edit/boundingbox.cpp
-        tool/cutting.cpp
-        tool/pickpoints.cpp
-        tool/filters.cpp
-        tool/keypoints.cpp
-        tool/rangeimage.cpp
-        tool/registration.cpp
-        tool/descriptor.cpp
-        tool/sampling.cpp
-        tool/python_console.cpp
-        tool/python_editor.cpp
-        plugins/csfplugin.cpp
-        plugins/vegplugin.cpp
-        plugins/changedetectplugin.cpp
-        )
+    app/main.cpp
+    app/mainwindow.cpp
+    edit/color.cpp
+    edit/boundingbox.cpp
+    tool/cutting.cpp
+    tool/pickpoints.cpp
+    tool/filters.cpp
+    tool/keypoints.cpp
+    tool/rangeimage.cpp
+    tool/registration.cpp
+    tool/descriptor.cpp
+    tool/sampling.cpp
+    python/python_console.cpp
+    python/python_editor.cpp
+    plugins/csfplugin.cpp
+    plugins/vegplugin.cpp
+    plugins/changedetectplugin.cpp
+    )
 
 set(Hdrs
-        mainwindow.h
-        edit/color.h
-        edit/boundingbox.h
-        tool/cutting.h
-        tool/pickpoints.h
-        tool/filters.h
-        tool/keypoints.h
-        tool/rangeimage.h
-        tool/registration.h
-        tool/descriptor.h
-        tool/sampling.h
-        tool/python_console.h
-        tool/python_editor.h
-        plugins/csfplugin.h
-        plugins/vegplugin.h
-        plugins/changedetectplugin.h
-        )
+    app/mainwindow.h
+    edit/color.h
+    edit/boundingbox.h
+    tool/cutting.h
+    tool/pickpoints.h
+    tool/filters.h
+    tool/keypoints.h
+    tool/rangeimage.h
+    tool/registration.h
+    tool/descriptor.h
+    tool/sampling.h
+    python/python_console.h
+    python/python_editor.h
+    plugins/csfplugin.h
+    plugins/vegplugin.h
+    plugins/changedetectplugin.h
+    )
 
 set(QRCs resources/res.qrc)
-
-
 set(IRCs resources/logo/logo.rc)
 
 find_package(VTK COMPONENTS
@@ -50,10 +48,19 @@ find_package(VTK COMPONENTS
 
 add_executable(cloudtool WIN32 ${Srcs} ${Hdrs} ${QRCs} ${IRCs})
 
-if (CMAKE_BUILD_TYPE MATCHES "Debug")
-        set(DEBUG_SUFFIX "d")
-endif ()
+target_include_directories(cloudtool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(cloudtool PRIVATE ct_core ct_widget ct_modules ct_python)
-target_link_libraries(cloudtool PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent ${VTK_LIBRARIES} ${PCL_LIBRARIES})
-target_link_libraries(cloudtool PRIVATE pybind11::embed Python3::Python)
+target_link_libraries(cloudtool PRIVATE
+    ct_core
+    ct_viz
+    ct_io
+    ct_algorithm
+    ct_widget
+    ct_python
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Concurrent
+    ${VTK_LIBRARIES}
+    ${PCL_LIBRARIES}
+    pybind11::embed
+    Python3::Python
+)

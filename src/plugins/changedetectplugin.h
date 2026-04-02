@@ -9,8 +9,8 @@
 #include <QMetaType>
 
 #include "core/common.h"
-#include "modules/distancecalculator.h"
-#include "widgets/customdialog.h"
+#include "algorithm/distancecalculator.h"
+#include "ui/base/customdialog.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class ChangeDetectPlugin; }

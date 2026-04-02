@@ -5,9 +5,9 @@
 #ifndef CLOUDTOOL2_DESCRIPTOR_H
 #define CLOUDTOOL2_DESCRIPTOR_H
 
-#include "widgets/customdock.h"
+#include "ui/base/customdock.h"
 
-#include "modules/features.h"
+#include "algorithm/features.h"
 
 #include <pcl/visualization/pcl_plotter.h>
 

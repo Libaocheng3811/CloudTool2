@@ -2,7 +2,7 @@
 // Created by LBC on 2025/1/10.
 //
 
-#include "libs/algorithm/registration.h"
+#include "registration.h"
 
 #include <pcl/registration/correspondence_estimation_backprojection.h>
 #include <pcl/registration/correspondence_estimation_normal_shooting.h>

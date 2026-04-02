@@ -1,8 +1,8 @@
 #ifndef CLOUDTOOL2_CLOUDVIEW_H
 #define CLOUDTOOL2_CLOUDVIEW_H
 
-#include "cloud.h"
-#include "exports.h"
+#include "core/cloud.h"
+#include "core/exports.h"
 #include "octreerenderer.h"
 
 #include "QVTKOpenGLNativeWidget.h"

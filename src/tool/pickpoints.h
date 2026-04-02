@@ -5,7 +5,7 @@
 #ifndef CLOUDTOOL2_PICKPOINTS_H
 #define CLOUDTOOL2_PICKPOINTS_H
 
-#include "widgets/customdialog.h"
+#include "ui/base/customdialog.h"
 #include "core/common.h"
 
 #include <QDateTime>

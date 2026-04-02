@@ -5,7 +5,7 @@
 #ifndef CLOUDTOOL2_BOUNDINGBOX_H
 #define CLOUDTOOL2_BOUNDINGBOX_H
 
-#include "widgets/customdock.h"
+#include "ui/base/customdock.h"
 
 
 QT_BEGIN_NAMESPACE

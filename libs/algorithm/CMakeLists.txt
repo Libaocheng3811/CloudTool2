@@ -1,11 +1,15 @@
-file(GLOB_RECURS CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+file(GLOB AlgoSrcs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+file(GLOB AlgoHdrs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 
-        "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+add_library(ct_algorithm STATIC ${AlgoSrcs} ${AlgoHdrs})
 
-)
-
-target_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(ct_algorithm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(ct_algorithm
-PRIVATE ct_core Qt5::Widgets ${PCL_LIBRARIES} ${VTK_LIBRARIES})
+    PUBLIC
+        ct_core
+    PRIVATE
+        CSF_Lib
+        ${PCL_LIBRARIES}
+        OpenMP::OpenMP_CXX
+)

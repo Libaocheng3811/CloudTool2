@@ -1,7 +1,7 @@
 #ifndef CLOUDTOOL2_COLOR_H
 #define CLOUDTOOL2_COLOR_H
 
-#include "widgets/customdock.h"
+#include "ui/base/customdock.h"
 
 
 QT_BEGIN_NAMESPACE

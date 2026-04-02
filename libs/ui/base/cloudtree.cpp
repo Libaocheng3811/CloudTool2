@@ -1,6 +1,6 @@
 #include "cloudtree.h"
 
-#include "field_types.h"
+#include "core/field_types.h"
 
 #include "dialog/fieldmappingdialog.h"
 #include "dialog/txtimportdialog.h"

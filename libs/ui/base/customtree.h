@@ -2,8 +2,8 @@
 #define CLOUDTOOL2_CUSTORMTREE_H
 
 #include "core/exports.h"
-#include "core/cloudview.h"
-#include "core/console.h"
+#include "viz/cloudview.h"
+#include "viz/console.h"
 
 #include <QTreeWidget>
 #include <QTableWidget>

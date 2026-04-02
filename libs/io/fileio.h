@@ -1,9 +1,9 @@
 #ifndef CLOUDTOOL2_FILEIO_H
 #define CLOUDTOOL2_FILEIO_H
 
-#include "cloud.h"
-#include "field_types.h"
-#include "exports.h"
+#include "core/cloud.h"
+#include "core/field_types.h"
+#include "core/exports.h"
 
 #include <atomic>
 #include <QObject>

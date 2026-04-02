@@ -5,8 +5,8 @@
 #ifndef TOOL_FILTERS_H
 #define TOOL_FILTERS_H
 
-#include "widgets/customdock.h"
-#include "modules/filters.h"
+#include "ui/base/customdock.h"
+#include "algorithm/filters.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {

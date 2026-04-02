@@ -77,7 +77,7 @@ endif ()
 # 如果找到OpenMP，追加 OpenMP 编译器标志
 if (OpenMP_FOUND)
     string(APPEND CMAKE_C_FLAGS " ${OpenMP_C_FLAGS}")
-    string(APPEND CMAKE_CXX_FLAGS " ${OpemMP_CXX_FLAGS}")
+    string(APPEND CMAKE_CXX_FLAGS " ${OpenMP_CXX_FLAGS}")
     string(APPEND CMAKE_EXE_LINKER_FLAGS " ${OpenMP_EXE_LINKER_FLAGS}")
 
     if (${CMAKE_VERSION} VERSION_LESS 3.7)
@@ -122,7 +122,7 @@ find_package(VTK REQUIRED)
 if (VTK_FOUND)
     message(STATUS "Found VTK version: ${VTK_VERSION}.")
 else ()
-    message(STATUS "VTK is not found.") 
+    message(STATUS "VTK is not found.")
 endif ()
 
 # pcl
@@ -138,28 +138,7 @@ endif ()
 
 find_package(OpenMP REQUIRED)
 
-# camera sdk
-# 1. Azure Kinect
-set(AzureKinect_DIR "${PROJECT_SOURCE_DIR}/camera/AzureKinect")
-include_directories("${AzureKinect_DIR}/include")
-if(WIN32)
-    link_directories("${AzureKinect_DIR}/lib/win32")
-elseif(UNIX)
-    link_directories("${AzureKinect_DIR}/lib/linux")
-endif()
-
-# 2. Photoneo SDK
-set(Photoneo_DIR "${PROJECT_SOURCE_DIR}/camera/Photoneo")
-include_directories("${Photoneo_DIR}/include")
-if(WIN32)
-    link_directories("${Photoneo_DIR}/lib/win32")
-elseif(UNIX)
-    link_directories("${Photoneo_DIR}/lib/linux")
-endif()
-
 message(STATUS "Build Type: " ${CMAKE_BUILD_TYPE})
-
-include_directories(${PROJECT_SOURCE_DIR})
 
 # add_definitions 命令用于向编译器添加编译选项或定义宏
 file(TO_CMAKE_PATH "${PROJECT_SOURCE_DIR}" PROJECT_ROOT_PATH)
@@ -175,8 +154,17 @@ set(BUILD_TOOLS OFF CACHE BOOL "Build tools" FORCE)
 add_subdirectory(3rdparty/pybind11)
 add_subdirectory(3rdparty/LASTools)
 add_subdirectory(3rdparty/CSF)
-add_subdirectory(python)
-add_subdirectory(core)
-add_subdirectory(widgets)
-add_subdirectory(modules)
-add_subdirectory(cloudtool)
+
+# libs/ 作为跨库 include 根路径 (e.g. #include "core/cloud.h")
+include_directories(${PROJECT_SOURCE_DIR}/libs)
+
+# Libraries
+add_subdirectory(libs/core)
+add_subdirectory(libs/viz)
+add_subdirectory(libs/io)
+add_subdirectory(libs/algorithm)
+add_subdirectory(libs/ui)
+add_subdirectory(libs/python)
+
+# Application
+add_subdirectory(src)

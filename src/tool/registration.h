@@ -5,10 +5,10 @@
 #ifndef CLOUDTOOL2_REGISTRATION_H
 #define CLOUDTOOL2_REGISTRATION_H
 
-#include "widgets/customdock.h"
+#include "ui/base/customdock.h"
 #include "core/common.h"
-#include "modules/registration.h"
-#include "cloudtool/tool/descriptor.h"
+#include "algorithm/registration.h"
+#include "tool/descriptor.h"
 
 #include <QFutureWatcher>
 #include <QtConcurrent>

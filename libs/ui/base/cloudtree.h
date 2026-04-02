@@ -2,9 +2,9 @@
 #define CLOUDTOOL2_CLOUDTREE_H
 
 #include "customtree.h"
-#include "common_ui/processingdialog.h"
-#include "common_ui/globalshiftdialog.h"
-#include "core/fileio.h"
+#include "dialog/processingdialog.h"
+#include "dialog/globalshiftdialog.h"
+#include "io/fileio.h"
 
 #include <QMenu>
 #include <QMap>

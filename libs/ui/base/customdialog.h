@@ -3,8 +3,8 @@
 
 #include "cloudtree.h"
 
-#include "core/cloudview.h"
-#include "core/console.h"
+#include "viz/cloudview.h"
+#include "viz/console.h"
 #include "core/exports.h"
 
 #include <QDialog>

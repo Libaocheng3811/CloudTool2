@@ -5,8 +5,8 @@
 #ifndef CLOUDTOOL2_OCTREERENDERER_H
 #define CLOUDTOOL2_OCTREERENDERER_H
 
-#include "cloud.h"
-#include "octree.h"
+#include "core/cloud.h"
+#include "core/octree.h"
 
 #include <vtkSmartPointer.h>
 #include <vector>

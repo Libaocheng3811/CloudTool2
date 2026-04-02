@@ -4,8 +4,8 @@
 
 #include "csffilter.h"
 #include "utils.h"
-#include "3rdparty/CSF/src/CSF.h"
-#include "3rdparty/CSF/src/point_cloud.h"
+#include "CSF.h"
+#include "point_cloud.h"
 #include <pcl/filters/extract_indices.h>
 
 namespace ct{

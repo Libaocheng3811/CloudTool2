@@ -5,8 +5,8 @@
 #ifndef CLOUDTOOL2_SAMPLING_H
 #define CLOUDTOOL2_SAMPLING_H
 
-#include "widgets/customdialog.h"
-#include "modules/filters.h"
+#include "ui/base/customdialog.h"
+#include "algorithm/filters.h"
 #include <QThread>
 
 namespace Ui

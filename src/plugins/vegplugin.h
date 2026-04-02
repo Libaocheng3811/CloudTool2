@@ -7,8 +7,8 @@
 
 #include <QDialog>
 
-#include "widgets/customdialog.h"
-#include "modules/vegfilter.h"
+#include "ui/base/customdialog.h"
+#include "algorithm/vegfilter.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class VegPlugin; }

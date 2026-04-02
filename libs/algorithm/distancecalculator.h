@@ -11,7 +11,7 @@
 #include <string>
 #include "core/cloud.h"
 #include "core/exports.h"
-#include "field_types.h"
+#include "core/field_types.h"
 
 namespace ct {
 
