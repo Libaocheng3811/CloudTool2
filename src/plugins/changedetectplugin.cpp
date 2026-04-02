@@ -9,6 +9,9 @@
 
 #include <cmath>
 
+#include <QtConcurrent/QtConcurrent>
+#include <QFutureWatcher>
+
 // 辅助函数，配置点云
 void setupResultCloud(ct::Cloud::Ptr cloud, const QString& idSuffix){
     if (!cloud || cloud->empty()) return;
@@ -22,34 +25,14 @@ void setupResultCloud(ct::Cloud::Ptr cloud, const QString& idSuffix){
 }
 
 ChangeDetectPlugin::ChangeDetectPlugin(QWidget *parent) :
-        ct::CustomDialog(parent), ui(new Ui::ChangeDetectPlugin), m_thread(this) {
+        ct::CustomDialog(parent), ui(new Ui::ChangeDetectPlugin) {
     ui->setupUi(this);
-
-    qRegisterMetaType<ct::Cloud::Ptr>("ct::Cloud::Ptr");
-    qRegisterMetaType<ct::Cloud::Ptr>("Cloud::Ptr");
-    qRegisterMetaType<ct::DistanceParams>("DistanceParams");
-    qRegisterMetaType<std::vector<float>>("std::vector<float>");
-
-    m_calculator = new ct::DistanceCalculator(nullptr);
-    m_calculator->moveToThread(&m_thread);
-
-    connect(&m_thread, &QThread::finished, m_calculator, &QObject::deleteLater);
-
-    connect(this, &ChangeDetectPlugin::requestChangeDetect, m_calculator, &ct::DistanceCalculator::doCalculation);
-    connect(m_calculator, &ct::DistanceCalculator::calculationFinished, this, &ChangeDetectPlugin::onFilterDone);
 
     connect(ui->btn_ok, &QPushButton::clicked, this, &ChangeDetectPlugin::onApply);
     connect(ui->btn_cancel, &QPushButton::clicked, this, &ChangeDetectPlugin::onCancel);
-
-    m_thread.start();
 }
 
 ChangeDetectPlugin::~ChangeDetectPlugin() {
-    m_thread.quit();
-    if (!m_thread.wait(3000)) {
-        m_thread.terminate();
-        m_thread.wait();
-    }
     delete ui;
 }
 
@@ -143,9 +126,192 @@ void ChangeDetectPlugin::onApply() {
 
     this->hide();
     m_cloudtree->showProgress("Calculating Distance...");
-    m_cloudtree->bindWorker(m_calculator);
 
-    emit requestChangeDetect(m_refCloud, m_compCloud, params);
+    // 通过 cancelRequested 信号设置取消标志
+    auto* cancel = new std::atomic<bool>(false);
+    if (m_cloudtree->m_processing_dialog) {
+        connect(m_cloudtree->m_processing_dialog, &ct::ProcessingDialog::cancelRequested,
+                this, [cancel]() { *cancel = true; });
+    }
+
+    // 进度回调：跨线程安全地更新进度条
+    auto on_progress = [this](int pct) {
+        QMetaObject::invokeMethod(m_cloudtree->m_processing_dialog, "setProgress",
+                                  Qt::QueuedConnection, Q_ARG(int, pct));
+    };
+
+    auto refCloud = m_refCloud;
+    auto compCloud = m_compCloud;
+    auto threshold = m_threshold;
+    auto export_unchanged = ui->chk_export->isChecked();
+    auto comp_has_colors = m_compCloud->hasColors();
+    auto comp_has_normals = m_compCloud->hasNormals();
+    auto comp_id = m_compCloud->id();
+
+    auto future = QtConcurrent::run([refCloud, compCloud, params, cancel, on_progress]() {
+        return ct::DistanceCalculator::calculate(refCloud, compCloud, params, cancel, on_progress);
+    });
+
+    auto* watcher = new QFutureWatcher<ct::DistanceResult>(this);
+    connect(watcher, &QFutureWatcher<ct::DistanceResult>::finished, this, [=]() {
+        auto result = watcher->result();
+        m_cloudtree->closeProgress();
+        delete cancel;
+
+        if (!result.success) {
+            printE(QString("Distance calculation failed: %1").arg(QString::fromStdString(result.error_msg)));
+            watcher->deleteLater();
+            return;
+        }
+
+        const auto& distances = result.distances;
+
+        if (distances.size() != compCloud->size()){
+            printW(QString("Calculation error: Result size mismatch."));
+            watcher->deleteLater();
+            return;
+        }
+
+        printI(QString("Distance calculation finished in %1 s").arg(result.time_ms));
+
+        ct::Cloud::Ptr changed(new ct::Cloud);
+        ct::Cloud::Ptr unchanged(new ct::Cloud);
+
+        // 初始化八叉树空间 (使用原始点云的 Box)
+        changed->initOctree(compCloud->box());
+        if (export_unchanged) {
+            unchanged->initOctree(compCloud->box());
+        }
+
+        // 启用属性
+        if (comp_has_colors) { changed->enableColors(); unchanged->enableColors(); }
+        if (comp_has_normals) { changed->enableNormals(); unchanged->enableNormals(); }
+
+        // 准备批量缓冲区
+        struct CloudBuffer {
+            std::vector<ct::PointXYZ> pts;
+            std::vector<ct::RGB> colors;
+            std::vector<ct::CompressedNormal> normals;
+            std::vector<float> dists; // 距离标量值
+
+            void clear() { pts.clear(); colors.clear(); normals.clear(); dists.clear(); }
+        };
+
+        CloudBuffer buf_changed, buf_unchanged;
+        size_t batch_size = 50000;
+
+        buf_changed.pts.reserve(batch_size);
+        buf_unchanged.pts.reserve(batch_size);
+
+        // 全局索引，用于访问 distances
+        size_t global_idx = 0;
+
+        // 遍历 Block
+        const auto& blocks = compCloud->getBlocks();
+
+        for (const auto& block : blocks) {
+            if (block->empty()) continue;
+
+            size_t n = block->size();
+
+            for (size_t i = 0; i < n; ++i) {
+                float d = distances[global_idx++];
+
+                if (std::isnan(d)) continue; // 跳过无效点
+
+                // 决定归属
+                bool is_changed = (d > threshold);
+
+                // 如果是不变点且不需要导出，跳过
+                if (!is_changed && !export_unchanged) continue;
+
+                CloudBuffer& target = is_changed ? buf_changed : buf_unchanged;
+
+                // 收集数据
+                target.pts.push_back(block->m_points[i]);
+
+                if (comp_has_colors && block->m_colors) {
+                    target.colors.push_back((*block->m_colors)[i]);
+                }
+
+                if (comp_has_normals && block->m_normals) {
+                    target.normals.push_back((*block->m_normals)[i]);
+                }
+
+                target.dists.push_back(d);
+
+                // 批满提交
+                if (target.pts.size() >= batch_size) {
+                    ct::Cloud::Ptr targetCloud = is_changed ? changed : unchanged;
+
+                    // 构造标量 map
+                    QMap<QString, std::vector<float>> scalarMap;
+                    scalarMap.insert("C2C_Distance", target.dists);
+
+                    targetCloud->addPoints(target.pts,
+                                           target.colors.empty() ? nullptr : &target.colors,
+                                           target.normals.empty() ? nullptr : &target.normals,
+                                           &scalarMap);
+
+                    target.clear();
+                }
+            }
+        }
+
+        // 提交剩余数据
+        auto flushBuffer = [&](CloudBuffer& buf, ct::Cloud::Ptr cloud) {
+            if (!buf.pts.empty()) {
+                QMap<QString, std::vector<float>> scalarMap;
+                scalarMap.insert("C2C_Distance", buf.dists);
+                cloud->addPoints(buf.pts,
+                                 buf.colors.empty() ? nullptr : &buf.colors,
+                                 buf.normals.empty() ? nullptr : &buf.normals,
+                                 &scalarMap);
+            }
+        };
+
+        flushBuffer(buf_changed, changed);
+        if (export_unchanged) flushBuffer(buf_unchanged, unchanged);
+
+        // 更新统计
+        changed->update();
+        unchanged->update();
+
+        // 1. 处理变化点云
+        if (!changed->empty()) {
+            changed->makeAdaptive();
+        }
+
+        // 2. 处理未变化点云
+        if (!unchanged->empty()) {
+            unchanged->makeAdaptive();
+        }
+
+        // 结果处理
+        std::vector<ct::Cloud::Ptr> results;
+
+        if (!changed->empty()){
+            changed->setId(comp_id);
+            setupResultCloud(changed, "_Changed");
+            results.push_back(changed);
+        } else {
+            printI("No changed points found (all within threshold).");
+        }
+
+        if (!unchanged->empty()) {
+            unchanged->setId(comp_id);
+            setupResultCloud(unchanged, "_Unchanged");
+            results.push_back(unchanged);
+        }
+
+        if (!results.empty()) {
+            QString groupName = QString::fromStdString(comp_id + "_ChangeDetect");
+            m_cloudtree->addResultGroup(compCloud, results, groupName);
+        }
+        this->accept();
+        watcher->deleteLater();
+    });
+    watcher->setFuture(future);
 }
 
 void ChangeDetectPlugin::onCancel() {
@@ -169,151 +335,4 @@ void ChangeDetectPlugin::onMethodChanged(int index) {
             ui->stackInput->setCurrentIndex(1); // 显示 DoubleSpinBox
         }
     }
-}
-
-void ChangeDetectPlugin::onFilterDone(const std::vector<float>& distances, float time) {
-    m_cloudtree->closeProgress();
-
-    if (distances.size() != m_compCloud->size()){
-        printW(QString("Calculation error: Result size mismatch."));
-        return;
-    }
-
-    printI(QString("Distance calculation finished in %1 s").arg(time));
-
-    ct::Cloud::Ptr changed(new ct::Cloud);
-    ct::Cloud::Ptr unchanged(new ct::Cloud);
-
-    // 初始化八叉树空间 (使用原始点云的 Box)
-    changed->initOctree(m_compCloud->box());
-    if (ui->chk_export->isChecked()) {
-        unchanged->initOctree(m_compCloud->box());
-    }
-
-    // 启用属性
-    if (m_compCloud->hasColors()) { changed->enableColors(); unchanged->enableColors(); }
-    if (m_compCloud->hasNormals()) { changed->enableNormals(); unchanged->enableNormals(); }
-
-    // 准备批量缓冲区
-    struct CloudBuffer {
-        std::vector<ct::PointXYZ> pts;
-        std::vector<ct::RGB> colors;
-        std::vector<ct::CompressedNormal> normals;
-        std::vector<float> dists; // 距离标量值
-
-        void clear() { pts.clear(); colors.clear(); normals.clear(); dists.clear(); }
-    };
-
-    CloudBuffer buf_changed, buf_unchanged;
-    size_t batch_size = 50000;
-
-    buf_changed.pts.reserve(batch_size);
-    buf_unchanged.pts.reserve(batch_size);
-
-    // 全局索引，用于访问 distances
-    size_t global_idx = 0;
-
-    // 遍历 Block
-    const auto& blocks = m_compCloud->getBlocks();
-
-    for (const auto& block : blocks) {
-        if (block->empty()) continue;
-
-        size_t n = block->size();
-
-        for (size_t i = 0; i < n; ++i) {
-            float d = distances[global_idx++];
-
-            if (std::isnan(d)) continue; // 跳过无效点
-
-            // 决定归属
-            bool is_changed = (d > m_threshold);
-
-            // 如果是不变点且不需要导出，跳过
-            if (!is_changed && !ui->chk_export->isChecked()) continue;
-
-            CloudBuffer& target = is_changed ? buf_changed : buf_unchanged;
-
-            // 收集数据
-            target.pts.push_back(block->m_points[i]);
-
-            if (m_compCloud->hasColors() && block->m_colors) {
-                target.colors.push_back((*block->m_colors)[i]);
-            }
-
-            if (m_compCloud->hasNormals() && block->m_normals) {
-                target.normals.push_back((*block->m_normals)[i]);
-            }
-
-            target.dists.push_back(d);
-
-            // 批满提交
-            if (target.pts.size() >= batch_size) {
-                ct::Cloud::Ptr targetCloud = is_changed ? changed : unchanged;
-
-                // 构造标量 map
-                QMap<QString, std::vector<float>> scalarMap;
-                scalarMap.insert("C2C_Distance", target.dists);
-
-                targetCloud->addPoints(target.pts,
-                                       target.colors.empty() ? nullptr : &target.colors,
-                                       target.normals.empty() ? nullptr : &target.normals,
-                                       &scalarMap);
-
-                target.clear();
-            }
-        }
-    }
-
-    // 提交剩余数据
-    auto flushBuffer = [&](CloudBuffer& buf, ct::Cloud::Ptr cloud) {
-        if (!buf.pts.empty()) {
-            QMap<QString, std::vector<float>> scalarMap;
-            scalarMap.insert("C2C_Distance", buf.dists);
-            cloud->addPoints(buf.pts,
-                             buf.colors.empty() ? nullptr : &buf.colors,
-                             buf.normals.empty() ? nullptr : &buf.normals,
-                             &scalarMap);
-        }
-    };
-
-    flushBuffer(buf_changed, changed);
-    if (ui->chk_export->isChecked()) flushBuffer(buf_unchanged, unchanged);
-
-    // 更新统计
-    changed->update();
-    unchanged->update();
-
-    // 1. 处理变化点云
-    if (!changed->empty()) {
-        changed->makeAdaptive();
-    }
-
-    // 2. 处理未变化点云
-    if (!unchanged->empty()) {
-        unchanged->makeAdaptive();
-    }
-
-    // 结果处理
-    std::vector<ct::Cloud::Ptr> results;
-
-    if (!changed->empty()){
-        changed->setId(m_compCloud->id());
-        setupResultCloud(changed, "_Changed");
-        results.push_back(changed);
-    } else {
-        printI("No changed points found (all within threshold).");
-    }
-
-    if (!unchanged->empty()) {
-        unchanged->setId(m_compCloud->id());
-        setupResultCloud(unchanged, "_Unchanged");
-        results.push_back(unchanged);
-    }
-
-    if (!results.empty()) {
-        QString groupName = QString::fromStdString(m_compCloud->id() + "_ChangeDetect");
-        m_cloudtree->addResultGroup(m_compCloud, results, groupName);
-    }
-    this->accept();
 }

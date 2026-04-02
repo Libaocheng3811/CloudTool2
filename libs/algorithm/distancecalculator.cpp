@@ -11,50 +11,11 @@
 #include <cmath>
 
 namespace ct{
-    DistanceCalculator::DistanceCalculator(QObject *parent) : QObject(parent) {}
 
-    void DistanceCalculator::doCalculation(ct::Cloud::Ptr ref, ct::Cloud::Ptr comp, ct::DistanceParams params) {
-        m_is_canceled = false;
-
-        if (!ref || !comp || ref->empty() || comp->empty()){
-            emit calculationFailed("Invalid input clouds");
-            return;
-        }
-        pcl::console::TicToc timer;
-        timer.tic();
-
-        std::vector<float>distances(comp->size(), std::numeric_limits<float>::quiet_NaN());
-
-        try{
-            switch (params.method) {
-                case DistanceParams::C2C_NEAREST:
-                    computeNearest(ref, comp, distances);
-                    break;
-                case DistanceParams::C2C_KNN_MEAN:
-                    computeKnnMean(ref, comp, params.k_knn,distances);
-                    break;
-                case DistanceParams::C2C_RADIUS_MEAN:
-                    computeRadiusMean(ref, comp, params.radius, distances);
-                    break;
-                default:
-                    emit calculationFailed("Invalid distance method");
-                    return;
-            }
-        }
-        catch (const std::exception& e){
-            emit calculationFailed(QString("Calculation error: %1").arg(e.what()));
-            return;
-        }
-        if (m_is_canceled){
-            emit calculationFailed("Calculation canceled");
-            return;
-        }
-        float duration = timer.toc() / 1000.0f;
-        emit calculationFinished(distances, duration);
-    }
-
-    void DistanceCalculator::computeNearest(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp,
-                                            std::vector<float> &dists) {
+    static void computeNearest(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp,
+                               std::vector<float> &dists,
+                               std::atomic<bool>* cancel,
+                               const std::function<void(int)>& on_progress) {
         auto refCloud = ref->toPCL_XYZ();
         auto compCloud = comp->toPCL_XYZ();
         pcl::search::KdTree<ct::PointXYZ> tree;
@@ -65,7 +26,7 @@ namespace ct{
 
 #pragma omp parallel for
         for (int i = 0; i < (int)n_points; ++i){
-            if (m_is_canceled) continue;
+            if (cancel && cancel->load()) continue;
 
             std::vector<int> indices(1);
             std::vector<float> sqrt_dists(1);
@@ -81,13 +42,15 @@ namespace ct{
             progress_counter++;
 
             if (omp_get_thread_num() == 0 && progress_counter % (n_points / 50 + 1) == 0){
-                emit progress((progress_counter * 100) / n_points);
+                if (on_progress) on_progress((progress_counter * 100) / n_points);
             }
         }
     }
 
-    void DistanceCalculator::computeKnnMean(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp, int k,
-                                            std::vector<float> &dists) {
+    static void computeKnnMean(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp, int k,
+                               std::vector<float> &dists,
+                               std::atomic<bool>* cancel,
+                               const std::function<void(int)>& on_progress) {
         if (k < 1) k = 1;
         auto refCloud = ref->toPCL_XYZ();
         auto compCloud = comp->toPCL_XYZ();
@@ -101,7 +64,7 @@ namespace ct{
 #pragma omp parallel for
         for (int i = 0; i < (int)n_points; ++i)
         {
-            if (m_is_canceled) continue;
+            if (cancel && cancel->load()) continue;
 
             std::vector<int> indices(k);
             std::vector<float> sqr_dists(k);
@@ -118,13 +81,15 @@ namespace ct{
 #pragma omp atomic
             progress_counter++;
             if (omp_get_thread_num() == 0 && progress_counter % (n_points / 50 + 1) == 0) {
-                emit progress((progress_counter * 100) / n_points);
+                if (on_progress) on_progress((progress_counter * 100) / n_points);
             }
         }
     }
 
-    void DistanceCalculator::computeRadiusMean(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp, double r,
-                                               std::vector<float> &dists) {
+    static void computeRadiusMean(const ct::Cloud::Ptr &ref, const ct::Cloud::Ptr &comp, double r,
+                                  std::vector<float> &dists,
+                                  std::atomic<bool>* cancel,
+                                  const std::function<void(int)>& on_progress) {
         auto refCloud = ref->toPCL_XYZ();
         auto compCloud = comp->toPCL_XYZ();
 
@@ -137,7 +102,7 @@ namespace ct{
 #pragma omp parallel for
         for (int i = 0; i < (int)n_points; ++i)
         {
-            if (m_is_canceled) continue;
+            if (cancel && cancel->load()) continue;
 
             std::vector<int> indices;
             std::vector<float> sqr_dists;
@@ -155,8 +120,51 @@ namespace ct{
 #pragma omp atomic
             progress_counter++;
             if (omp_get_thread_num() == 0 && progress_counter % (n_points / 50 + 1) == 0) {
-                emit progress((progress_counter * 100) / n_points);
+                if (on_progress) on_progress((progress_counter * 100) / n_points);
             }
         }
     }
+
+    DistanceResult DistanceCalculator::calculate(const Cloud::Ptr& ref, const Cloud::Ptr& comp,
+                                                  const DistanceParams& params,
+                                                  std::atomic<bool>* cancel,
+                                                  std::function<void(int)> on_progress) {
+        if (cancel) cancel->store(false);
+
+        if (!ref || !comp || ref->empty() || comp->empty()){
+            return {{}, 0, false, "Invalid input clouds"};
+        }
+
+        pcl::console::TicToc timer;
+        timer.tic();
+
+        std::vector<float> distances(comp->size(), std::numeric_limits<float>::quiet_NaN());
+
+        try{
+            switch (params.method) {
+                case DistanceParams::C2C_NEAREST:
+                    computeNearest(ref, comp, distances, cancel, on_progress);
+                    break;
+                case DistanceParams::C2C_KNN_MEAN:
+                    computeKnnMean(ref, comp, params.k_knn, distances, cancel, on_progress);
+                    break;
+                case DistanceParams::C2C_RADIUS_MEAN:
+                    computeRadiusMean(ref, comp, params.radius, distances, cancel, on_progress);
+                    break;
+                default:
+                    return {{}, 0, false, "Invalid distance method"};
+            }
+        }
+        catch (const std::exception& e){
+            return {{}, 0, false, std::string("Calculation error: ") + e.what()};
+        }
+
+        if (cancel && cancel->load()){
+            return {{}, 0, false, "Calculation canceled"};
+        }
+
+        float duration = timer.toc() / 1000.0f;
+        return {distances, duration, true, ""};
+    }
+
 } // namespace ct

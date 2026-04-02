@@ -34,101 +34,115 @@
 
 namespace ct
 {
-    // 辅助函数，同步属性和自定义字段
+    // helper: early-return if cancel is requested
+    static inline bool isCanceled(std::atomic<bool>* cancel) {
+        return cancel && cancel->load();
+    }
+
+    // helper: report progress (skip if canceled)
+    static inline void reportProgress(std::atomic<bool>* cancel,
+                                      std::function<void(int)> on_progress,
+                                      int pct) {
+        if (!isCanceled(cancel) && on_progress) on_progress(pct);
+    }
+
+    // helper: synchronize properties and custom fields
     void syncCloudProperties(const Cloud::Ptr& source, Cloud::Ptr& target){
         target->setId(source->id());
         target->setHasColors(source->hasColors());
 
-        // TODO: 使用PCL的filter无法返回索引，就无法通过索引提取自定义字段信息，这里暂时丢弃自定义字段信息
+        // TODO: PCL filters cannot return indices, so custom field info cannot be extracted via indices. Discarding custom fields for now.
 
         target->backupColors();
     }
 
-    void Filters::PassThrough(const std::string& field_name, float limit_min, float limit_max)
+    FilterResult Filters::PassThrough(const Cloud::Ptr& cloud, const std::string& field_name,
+                                       float limit_min, float limit_max, bool negative,
+                                       std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        // 转换输入点云
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        // convert input cloud
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::PassThrough<PointXYZRGBN> pfilter;
         pfilter.setInputCloud(pcl_cloud);
         pfilter.setFilterFieldName(field_name);
         pfilter.setFilterLimits(limit_min, limit_max);
-        pfilter.setNegative(negative_);
+        pfilter.setNegative(negative);
         pfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
-        // 从 PCL 结果构造 Cloud
+        // construct Cloud from PCL result
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::VoxelGrid(float lx, float ly, float lz)
+    FilterResult Filters::VoxelGrid(const Cloud::Ptr& cloud, float lx, float ly, float lz,
+                                     bool negative,
+                                     std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
-        // 创建一个 VoxelGrid 滤波器对象
+        // create a VoxelGrid filter object
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::VoxelGrid<PointXYZRGBN> vfilter;
         vfilter.setInputCloud(pcl_cloud);
         vfilter.setLeafSize(lx, ly, lz);
-        vfilter.setFilterLimitsNegative(negative_);
+        vfilter.setFilterLimitsNegative(negative);
 
-        if (m_is_canceled) return;
-        emit progress(20);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 20);
 
         vfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::ApproximateVoxelGrid(float lx, float ly, float lz)
+    FilterResult Filters::ApproximateVoxelGrid(const Cloud::Ptr& cloud, float lx, float ly, float lz,
+                                                bool negative,
+                                                std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::ApproximateVoxelGrid<PointXYZRGBN> avfilter;
@@ -136,10 +150,10 @@ namespace ct
         avfilter.setLeafSize(lx, ly, lz);
         avfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
-        if (negative_)
+        if (negative)
         {
             pcl::PointCloud<PointXYZRGBN>::Ptr pcl_neg_filtered(new pcl::PointCloud<PointXYZRGBN>);
             pcl::ExtractIndices<PointXYZRGBN> extract;
@@ -149,97 +163,97 @@ namespace ct
             pcl_filtered = pcl_neg_filtered;
         }
 
-        if (m_is_canceled) return;
+        if (isCanceled(cancel)) return {nullptr, 0};
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        emit progress(100);
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::StatisticalOutlierRemoval(int nr_k, double stddev_mult)
+    FilterResult Filters::StatisticalOutlierRemoval(const Cloud::Ptr& cloud, int nr_k, double stddev_mult,
+                                                     bool negative,
+                                                     std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::StatisticalOutlierRemoval<PointXYZRGBN> sfilter;
         sfilter.setInputCloud(pcl_cloud);
         sfilter.setMeanK(nr_k);
         sfilter.setStddevMulThresh(stddev_mult);
-        sfilter.setNegative(negative_);
+        sfilter.setNegative(negative);
         sfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::RadiusOutlierRemoval(double radius, int min_pts)
+    FilterResult Filters::RadiusOutlierRemoval(const Cloud::Ptr& cloud, double radius, int min_pts,
+                                               bool negative,
+                                               std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::RadiusOutlierRemoval<PointXYZRGBN> rfilter;
         rfilter.setInputCloud(pcl_cloud);
         rfilter.setRadiusSearch(radius);
         rfilter.setMinNeighborsInRadius(min_pts);
-        rfilter.setNegative(negative_);
+        rfilter.setNegative(negative);
         rfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::ConditionalRemoval(ConditionBase::Ptr con)
+    FilterResult Filters::ConditionalRemoval(const Cloud::Ptr& cloud, ConditionBase::Ptr con,
+                                             bool negative,
+                                             std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::ConditionalRemoval<PointXYZRGBN> bfilter;
@@ -247,10 +261,10 @@ namespace ct
         bfilter.setCondition(con);
         bfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
-        if (negative_)
+        if (negative)
         {
             pcl::PointCloud<PointXYZRGBN>::Ptr pcl_neg_filtered(new pcl::PointCloud<PointXYZRGBN>);
             pcl::ExtractIndices<PointXYZRGBN> extract;
@@ -260,185 +274,185 @@ namespace ct
             pcl_filtered = pcl_neg_filtered;
         }
 
-        if (m_is_canceled) return;
+        if (isCanceled(cancel)) return {nullptr, 0};
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::GridMinimun(const float resolution)
+    FilterResult Filters::GridMinimun(const Cloud::Ptr& cloud, float resolution,
+                                       bool negative,
+                                       std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::GridMinimum<PointXYZRGBN> gfilter(resolution);
         gfilter.setInputCloud(pcl_cloud);
         gfilter.setResolution(resolution);
-        gfilter.setNegative(negative_);
+        gfilter.setNegative(negative);
         gfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::LocalMaximum(float radius)
+    FilterResult Filters::LocalMaximum(const Cloud::Ptr& cloud, float radius,
+                                        bool negative,
+                                        std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::LocalMaximum<PointXYZRGBN> lfilter;
         lfilter.setInputCloud(pcl_cloud);
         lfilter.setRadius(radius);
-        lfilter.setNegative(negative_);
+        lfilter.setNegative(negative);
         lfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::ShadowPoints(float threshold)
+    FilterResult Filters::ShadowPoints(const Cloud::Ptr& cloud, float threshold,
+                                        bool negative,
+                                        std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::ShadowPoints<PointXYZRGBN, PointXYZRGBN> sfilter;
         sfilter.setInputCloud(pcl_cloud);
         sfilter.setNormals(pcl_cloud);
         sfilter.setThreshold(threshold);
-        sfilter.setNegative(negative_);
+        sfilter.setNegative(negative);
         sfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::DownSampling(float radius)
+    FilterResult Filters::DownSampling(const Cloud::Ptr& cloud, float radius,
+                                        bool negative,
+                                        std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (!cloud_) return;
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (!cloud) return {nullptr, 0};
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        // 转换输入点云
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        // convert input cloud
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::VoxelGrid<PointXYZRGBN> vfilter;
         vfilter.setInputCloud(pcl_cloud);
         vfilter.setLeafSize(radius, radius, radius);
-        vfilter.setFilterLimitsNegative(negative_);
+        vfilter.setFilterLimitsNegative(negative);
 
-        if (m_is_canceled) return;
-        emit progress(20);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 20);
 
         vfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
         if (pcl_filtered->empty())
         {
-            emit progress(100);
-            return;
+            reportProgress(cancel, on_progress, 100);
+            return {nullptr, 0};
         }
 
-        // 从 PCL 结果构造 Cloud
+        // construct Cloud from PCL result
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
         if (!cloud_filtered || cloud_filtered->empty())
         {
-            emit progress(100);
-            return;
+            reportProgress(cancel, on_progress, 100);
+            return {nullptr, 0};
         }
 
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->setHasNormals(cloud_->hasNormals());
-        cloud_filtered->backupColors();
+        syncCloudProperties(cloud, cloud_filtered);
+        cloud_filtered->setHasNormals(cloud->hasNormals());
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::UniformSampling(float radius)
+    FilterResult Filters::UniformSampling(const Cloud::Ptr& cloud, float radius,
+                                           bool negative,
+                                           std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (!cloud_) return;
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (!cloud) return {nullptr, 0};
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        // 转换输入点云
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        // convert input cloud
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::UniformSampling<PointXYZRGBN> sfilter;
@@ -446,10 +460,10 @@ namespace ct
         sfilter.setRadiusSearch(radius);
         sfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
-        if (negative_)
+        if (negative)
         {
             pcl::PointCloud<PointXYZRGBN>::Ptr pcl_neg_filtered(new pcl::PointCloud<PointXYZRGBN>);
             pcl::ExtractIndices<PointXYZRGBN> extract;
@@ -459,71 +473,75 @@ namespace ct
             pcl_filtered = pcl_neg_filtered;
         }
 
-        if (m_is_canceled) return;
+        if (isCanceled(cancel)) return {nullptr, 0};
 
-        // 从 PCL 结果构造 Cloud
+        // construct Cloud from PCL result
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->setId(cloud->id());
+        cloud_filtered->setHasColors(cloud->hasColors());
+        cloud_filtered->setHasNormals(cloud->hasNormals());
         cloud_filtered->backupColors();
 
-        emit progress(100);
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::RandomSampling(int sample, int seed)
+    FilterResult Filters::RandomSampling(const Cloud::Ptr& cloud, int sample, int seed,
+                                         bool negative,
+                                         std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (!cloud_) return;
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (!cloud) return {nullptr, 0};
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        // 转换输入点云
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        // convert input cloud
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::RandomSample<PointXYZRGBN> rfilter;
         rfilter.setInputCloud(pcl_cloud);
         rfilter.setSample(sample);
         rfilter.setSeed(seed);
-        rfilter.setNegative(negative_);
+        rfilter.setNegative(negative);
         rfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
-        // 从 PCL 结果构造 Cloud
+        // construct Cloud from PCL result
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->setId(cloud->id());
+        cloud_filtered->setHasColors(cloud->hasColors());
+        cloud_filtered->setHasNormals(cloud->hasNormals());
         cloud_filtered->backupColors();
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::ReSampling(float radius, int polynomial_order)
+    FilterResult Filters::ReSampling(const Cloud::Ptr& cloud, float radius, int polynomial_order,
+                                      bool negative,
+                                      std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (!cloud_) return;
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (!cloud) return {nullptr, 0};
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        // 转换输入点云
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        // convert input cloud
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
@@ -531,45 +549,47 @@ namespace ct
         pcl::MovingLeastSquares<PointXYZRGBN, PointXYZRGBN> mfilter;
         mfilter.setInputCloud(pcl_cloud);
         mfilter.setSearchRadius(radius);
-        if (!cloud_->hasNormals()) mfilter.setComputeNormals(true);
+        if (!cloud->hasNormals()) mfilter.setComputeNormals(true);
         mfilter.setPolynomialOrder(polynomial_order);
         mfilter.setSearchMethod(tree);
         mfilter.setNumberOfThreads(14);
 
-        if (m_is_canceled) return;
-        emit progress(20);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 20);
 
         mfilter.process(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
-        // 从 PCL 结果构造 Cloud
+        // construct Cloud from PCL result
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->setHasNormals(true); // MLS 会计算法线
+        cloud_filtered->setId(cloud->id());
+        cloud_filtered->setHasColors(cloud->hasColors());
+        cloud_filtered->setHasNormals(true); // MLS computes normals
         cloud_filtered->backupColors();
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::SamplingSurfaceNormal(int sample, int seed, float ratio)
+    FilterResult Filters::SamplingSurfaceNormal(const Cloud::Ptr& cloud, int sample, int seed, float ratio,
+                                                bool negative,
+                                                std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (!cloud_) return;
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (!cloud) return {nullptr, 0};
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        // 转换输入点云
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        // convert input cloud
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::SamplingSurfaceNormal<PointXYZRGBN> rfilter;
@@ -579,10 +599,10 @@ namespace ct
         rfilter.setRatio(ratio);
         rfilter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
-        if (negative_)
+        if (negative)
         {
             pcl::PointCloud<PointXYZRGBN>::Ptr pcl_neg_filtered(new pcl::PointCloud<PointXYZRGBN>);
             pcl::ExtractIndices<PointXYZRGBN> extract;
@@ -592,33 +612,35 @@ namespace ct
             pcl_filtered = pcl_neg_filtered;
         }
 
-        if (m_is_canceled) return;
+        if (isCanceled(cancel)) return {nullptr, 0};
 
-        // 从 PCL 结果构造 Cloud
+        // construct Cloud from PCL result
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->setId(cloud->id());
+        cloud_filtered->setHasColors(cloud->hasColors());
+        cloud_filtered->setHasNormals(cloud->hasNormals());
         cloud_filtered->backupColors();
 
-        emit progress(100);
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 
-    void Filters::NormalSpaceSampling(int sample, int seed, int bin)
+    FilterResult Filters::NormalSpaceSampling(const Cloud::Ptr& cloud, int sample, int seed, int bin,
+                                              bool negative,
+                                              std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
 
-        if (!cloud_) return;
-        if (m_is_canceled) return;
-        emit progress(10);
+        if (!cloud) return {nullptr, 0};
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 10);
 
-        // 转换输入点云
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        // convert input cloud
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::PointCloud<PointXYZRGBN>::Ptr pcl_filtered(new pcl::PointCloud<PointXYZRGBN>);
         pcl::NormalSpaceSampling<PointXYZRGBN, PointXYZRGBN> filter;
@@ -627,22 +649,22 @@ namespace ct
         filter.setSample(sample);
         filter.setSeed(seed);
         filter.setBins(bin, bin, bin);
-        filter.setNegative(negative_);
+        filter.setNegative(negative);
         filter.filter(*pcl_filtered);
 
-        if (m_is_canceled) return;
-        emit progress(80);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 80);
 
-        // 从 PCL 结果构造 Cloud
+        // construct Cloud from PCL result
         Cloud::Ptr cloud_filtered = Cloud::fromPCL_XYZRGBN(*pcl_filtered);
-        cloud_filtered->setId(cloud_->id());
-        cloud_filtered->setHasColors(cloud_->hasColors());
-        cloud_filtered->setHasNormals(cloud_->hasNormals());
+        cloud_filtered->setId(cloud->id());
+        cloud_filtered->setHasColors(cloud->hasColors());
+        cloud_filtered->setHasNormals(cloud->hasNormals());
         cloud_filtered->backupColors();
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        if (isCanceled(cancel)) return {nullptr, 0};
+        reportProgress(cancel, on_progress, 100);
 
-        emit filterResult(cloud_filtered, time.toc());
+        return {cloud_filtered, (float)time.toc()};
     }
 }

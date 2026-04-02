@@ -55,5 +55,5 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug")
 endif ()
 
 target_link_libraries(cloudtool PRIVATE ct_core ct_widget ct_modules ct_python)
-target_link_libraries(cloudtool PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${VTK_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(cloudtool PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent ${VTK_LIBRARIES} ${PCL_LIBRARIES})
 target_link_libraries(cloudtool PRIVATE pybind11::embed Python3::Python)

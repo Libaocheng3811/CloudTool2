@@ -6,7 +6,6 @@
 #define CLOUDTOOL2_CHANGEDETECTDIALOG_H
 
 #include <QDialog>
-#include <QThread>
 #include <QMetaType>
 
 #include "core/common.h"
@@ -36,17 +35,9 @@ private slots:
 
     void onMethodChanged(int index);
 
-    void onFilterDone(const std::vector<float>& distances, float time);
-
-signals:
-    void requestChangeDetect(ct::Cloud::Ptr reference, ct::Cloud::Ptr compared, ct::DistanceParams params);
-
 private:
     Ui::ChangeDetectPlugin *ui;
 
-    QThread m_thread;
-
-    ct::DistanceCalculator* m_calculator;
     ct::Cloud::Ptr m_refCloud;
     ct::Cloud::Ptr m_compCloud;
 

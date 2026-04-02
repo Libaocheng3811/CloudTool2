@@ -6,7 +6,6 @@
 #define CLOUDTOOL2_VEGPLUGIN_H
 
 #include <QDialog>
-#include <QThread>
 
 #include "widgets/customdialog.h"
 #include "modules/vegfilter.h"
@@ -28,15 +27,9 @@ public:
 private slots:
     void onIndexChanged(int index);
     void onApply();
-    void onFilterDone(const ct::Cloud::Ptr& veg_cloud, const ct::Cloud::Ptr& non_veg_cloud, float time);
-
-signals:
-    void requestVegFilter(int type, double threshold);
 
 private:
     Ui::VegPlugin *ui;
-    QThread m_thread;
-    ct::VegetationFilter* m_filter;
     ct::Cloud::Ptr m_cloud;
 };
 

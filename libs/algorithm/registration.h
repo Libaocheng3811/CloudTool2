@@ -7,7 +7,7 @@
 
 #include "core/cloud.h"
 #include "core/exports.h"
-#include "modules/features.h"
+#include "features.h"
 
 #include <pcl/registration/correspondence_estimation.h>
 #include <pcl/registration/correspondence_rejection.h>
@@ -16,197 +16,164 @@
 #include <pcl/registration/sample_consensus_prerejective.h>
 #include <pcl/registration/transformation_estimation.h>
 
-#include <QObject>
-
+#include <functional>
 #include <atomic>
+#include <limits>
 
 namespace ct {
-    // pcl::registration::TransformationEstimation是PCL库中用于估计两个点云之间转换
-    typedef pcl::registration::TransformationEstimation<PointXYZRGBN, PointXYZRGBN, float> TransEst; //表示转换估计方法的类
-    // pcl::registration::CorrespondenceEstimationBase是PCL库中用于估计两个点云之间的对应关系的基类,可以估计出一个点云中的点与另一个点云中的哪个点最匹配
-    typedef pcl::registration::CorrespondenceEstimationBase<PointXYZRGBN, PointXYZRGBN, float> CorreEst; //表示对应估计方法的类
-    // pcl::registration::CorrespondenceRejector是PCL库中用于拒绝不合理的对应关系的类,去除那些不符合某种约束或标准的对应点对
-    typedef pcl::registration::CorrespondenceRejector CorreRej; //表示对应拒绝方法的类
-
-    // pcl::Correspondences是一个结构体，用于存储两个点云之间对应的点对信息。
-    // 每个对应关系（correspondence）包括源点云中的一个点和目标点云中的一个点的索引，以及它们之间的距离或其他匹配度信息。
+    typedef pcl::registration::TransformationEstimation<PointXYZRGBN, PointXYZRGBN, float> TransEst;
+    typedef pcl::registration::CorrespondenceEstimationBase<PointXYZRGBN, PointXYZRGBN, float> CorreEst;
+    typedef pcl::registration::CorrespondenceRejector CorreRej;
     typedef pcl::CorrespondencesPtr CorrespondencesPtr;
 
-    class CT_EXPORT Registration : public QObject {
-        Q_OBJECT
+    // --- Result structs ---
+
+    struct RegistrationResult {
+        bool success = false;
+        Cloud::Ptr aligned_cloud;
+        double score = 0;
+        Eigen::Matrix4f matrix;
+        float time_ms = 0;
+    };
+
+    struct CorrespondenceResult {
+        CorrespondencesPtr correspondences;
+        CorreEst::Ptr ce;
+        float time_ms = 0;
+    };
+
+    struct RejectorResult {
+        CorrespondencesPtr correspondences;
+        CorreRej::Ptr cr;
+        float time_ms = 0;
+    };
+
+    struct TransformationResult {
+        Eigen::Matrix4f matrix;
+        TransEst::Ptr te;
+        float time_ms = 0;
+    };
+
+    // --- Configuration ---
+
+    struct RegistrationParams {
+        int max_iterations = 10;
+        int ransac_iterations = 0;
+        double inlier_threshold = 0.05;
+        double distance_threshold = std::sqrt(std::numeric_limits<double>::max());
+        double transformation_epsilon = 0.0;
+        double transformation_rotation_epsilon = 0.0;
+        double euclidean_fitness_epsilon = -std::numeric_limits<double>::max();
+    };
+
+    struct RegistrationContext {
+        Cloud::Ptr source_cloud;
+        Cloud::Ptr target_cloud;
+        CorrespondencesPtr correspondences;
+        TransEst::Ptr transformation_estimation;
+        CorreEst::Ptr correspondence_estimation;
+        std::map<int, CorreRej::Ptr> correspondence_rejectors;
+        RegistrationParams params;
+    };
+
+    class CT_EXPORT Registration {
     public:
-        explicit Registration(QObject *parent = nullptr)
-                : QObject(parent),
-                  target_cloud_(nullptr),
-                  source_cloud_(nullptr),
-                  corr_(nullptr),
-                  te_(nullptr),
-                  ce_(nullptr),
-                  nr_iterations_(10),
-                  ransac_iterations_(0),
-                  inlier_threshold_(0.05),
-                  distance_threshold_(std::sqrt(std::numeric_limits<double>::max())),
-                  transformation_epsilon_(0.0),
-                  transformation_rotation_epsilon_(0.0),
-                  euclidean_fitness_epsilon_(-std::numeric_limits<double>::max()) {}
-        // std::numeric_limits<double>::max() 返回类型为 double 的最大有限值。这个值是 double 类型能够表示的最大正数
+        // --- Correspondence Estimation (non-template) ---
 
-        /**
-         * @brief 设置输入源点云
-         */
-        void setInputSource(const Cloud::Ptr &cloud) { source_cloud_ = cloud; }
+        static CorrespondenceResult CorrespondenceEstimationBackProjection(const RegistrationContext& ctx, int k,
+                                                                           std::atomic<bool>* cancel = nullptr,
+                                                                           std::function<void(int)> on_progress = nullptr);
 
-        /**
-         * @brief 设置输入目标点云
-         */
-        void setInputTarget(const Cloud::Ptr &cloud) { target_cloud_ = cloud; }
+        static CorrespondenceResult CorrespondenceEstimationNormalShooting(const RegistrationContext& ctx, int k,
+                                                                            std::atomic<bool>* cancel = nullptr,
+                                                                            std::function<void(int)> on_progress = nullptr);
 
-        /**
-         * @brief 提供指向变换估计对象的指针
-         */
-        void setTransformationEstimation(const TransEst::Ptr &te) { te_ = te; }
+        static CorrespondenceResult CorrespondenceEstimationOrganizedProjection(
+                const RegistrationContext& ctx, float fx, float fy, float cx, float cy,
+                const Eigen::Matrix4f& src_to_tgt_trans, float depth_threshold,
+                std::atomic<bool>* cancel = nullptr, std::function<void(int)> on_progress = nullptr);
 
-        /**
-         * @brief 提供指向对应估计对象的指针
-         */
-        void setCorrespondenceEstimation(const CorreEst::Ptr &ce) { ce_ = ce; }
+        // --- Correspondence Estimation (template) ---
 
-        /**
-         * @brief 将新的对应拒绝器添加到列表中
-         */
-        void addCorrespondenceRejector(int index, CorreRej::Ptr &cr) {
-            cr_map[index] = cr;
-        }
-
-        /**
-         * @brief 删除列表中的对应拒绝器
-         */
-        void removeCorrespondenceRejector(int index) {
-            if (cr_map.find(index) != cr_map.end())
-                cr_map.erase(index);
-        }
-
-        /**
-         * @brief 设置内部优化应该运行的最大迭代次数
-         */
-        void setMaximumIterations(int nr_iterations) {
-            nr_iterations_ = nr_iterations;
-        }
-
-        /**
-         * @brief 设置RANSAC应该运行的最大迭代次数
-         */
-        void setRANSACIterations(int ransac_iterations) {
-            ransac_iterations_ = ransac_iterations;
-        }
-
-        /**
-         * @brief 设置内部RANSAC离群值拒绝循环的离群距离阈值
-         */
-        void setRANSACOutlierRejectionThreshold(double inlier_threshold) {
-            inlier_threshold_ = inlier_threshold;
-        }
-
-        /**
-         * @brief 设置源 <-> 目标中两个对应点之间的最大距离阈值
-         */
-        void setMaxCorrespondenceDistance(double distance_threshold) {
-            distance_threshold_ = distance_threshold;
-        }
-
-        /**
-         * @brief 设置转换精度（两个连续转换之间的最大允许平移平方差）
-         */
-        void setTransformationEpsilon(double epsilon) {
-            transformation_epsilon_ = epsilon;
-        }
-
-        /**
-         * @brief 设置转换旋转精度（两个连续转换之间的最大允许旋转角度差）
-         */
-        void setTransformationRotationEpsilon(double epsilon) {
-            transformation_rotation_epsilon_ = epsilon;
-        }
-
-        /**
-         * @brief 在认为算法已经收敛之前，设置ICP循环中两个连续步骤之间允许的最大欧几里得误差
-         */
-        void setEuclideanFitnessEpsilon(double epsilon) {
-            euclidean_fitness_epsilon_ = epsilon;
-        }
-
-        /**
-         * @brief 设置输入对应关系
-         */
-        void setInputCorrespondences(const CorrespondencesPtr &corr) {
-            corr_ = corr;
-        }
-
-
-    private:
-        Cloud::Ptr target_cloud_;
-        Cloud::Ptr source_cloud_;
-        pcl::CorrespondencesPtr corr_;
-        TransEst::Ptr te_;
-        CorreEst::Ptr ce_;
-        std::map<int, CorreRej::Ptr> cr_map;
-        int nr_iterations_;
-        int ransac_iterations_;
-        double inlier_threshold_;
-        double distance_threshold_;
-        double transformation_epsilon_;
-        double transformation_rotation_epsilon_;
-        double euclidean_fitness_epsilon_;
-
-        std::atomic<bool> m_is_canceled{false};
-
-    signals:
-        void registrationResult(bool success, const Cloud::Ptr &ail_cloud, double score, const Eigen::Matrix4f &matrix, float time);
-
-        void correspondenceEstimationResult(const CorrespondencesPtr &corr, float time, const CorreEst::Ptr &ce = nullptr);
-
-        void correspondenceRejectorResult(const CorrespondencesPtr &corr, float time, const CorreRej::Ptr &cj = nullptr);
-
-        void transformationEstimationResult(const Eigen::Matrix4f &matrix, float time, const TransEst::Ptr &te = nullptr);
-
-        void progress(int percent);
-
-    public:
-
-        /**
-         * @brief 表示用于确定目标和查询点集/特征之间对应关系的基类。
-         */
-        template<typename Type> // point or feature
-        void CorrespondenceEstimation(const typename pcl::PointCloud<Type>::Ptr &source,
-                                      const typename pcl::PointCloud<Type>::Ptr &target)
+        template<typename Type>
+        static CorrespondenceResult CorrespondenceEstimation(
+                const typename pcl::PointCloud<Type>::Ptr& source,
+                const typename pcl::PointCloud<Type>::Ptr& target)
         {
             TicToc time;
             time.tic();
-            // 创建对应估计对象，用于估计源点云和目标点云之间的对应关系
             pcl::registration::CorrespondenceEstimation<Type, Type, float> ce;
-            // 创建一个CorrespondencesPtr类型的指针，用于存储源点云和目标点云之间的对应关系
             pcl::CorrespondencesPtr corr(new pcl::Correspondences);
             ce.setInputSource(source);
             ce.setInputTarget(target);
             typename pcl::search::KdTree<Type>::Ptr target_tree(new pcl::search::KdTree<Type>);
             typename pcl::search::KdTree<Type>::Ptr source_tree(new pcl::search::KdTree<Type>);
-            // 设置对应估计对象使用的搜索方法，这里使用 KdTree 搜索方法
             ce.setSearchMethodSource(source_tree);
             ce.setSearchMethodTarget(target_tree);
-            // 调用 ce.determineCorrespondences 方法，估计源点云和目标点云之间的对应关系，
-            // 并将结果存储在 corr 智能指针指向的 pcl::Correspondences 对象中。
             ce.determineCorrespondences(*corr);
-            emit correspondenceEstimationResult(corr, time.toc());
+            return {corr, nullptr, (float)time.toc()};
         }
 
-        /**
-         * @brief 基于一组特征描述符的对应拒绝方法。
-         * @param thresh 任何高于这个阈值的特征对应都将被视为不合理的对应关系。并被过滤掉。
-         */
+        // --- Correspondence Rejection (non-template) ---
+
+        static RejectorResult CorrespondenceRejectorDistance(const RegistrationContext& ctx,
+                                                             const CorrespondencesPtr& input_corr, float distance,
+                                                             std::atomic<bool>* cancel = nullptr,
+                                                             std::function<void(int)> on_progress = nullptr);
+
+        static RejectorResult CorrespondenceRejectorMedianDistance(const RegistrationContext& ctx,
+                                                                     const CorrespondencesPtr& input_corr, double factor,
+                                                                     std::atomic<bool>* cancel = nullptr,
+                                                                     std::function<void(int)> on_progress = nullptr);
+
+        static RejectorResult CorrespondenceRejectorOneToOne(const RegistrationContext& ctx,
+                                                               const CorrespondencesPtr& input_corr,
+                                                               std::atomic<bool>* cancel = nullptr,
+                                                               std::function<void(int)> on_progress = nullptr);
+
+        static RejectorResult CorrespondenceRejectionOrganizedBoundary(const RegistrationContext& ctx,
+                                                                        const CorrespondencesPtr& input_corr, int val,
+                                                                        std::atomic<bool>* cancel = nullptr,
+                                                                        std::function<void(int)> on_progress = nullptr);
+
+        static RejectorResult CorrespondenceRejectorPoly(const RegistrationContext& ctx,
+                                                           const CorrespondencesPtr& input_corr,
+                                                           int cardinality, float similarity_threshold, int iterations,
+                                                           std::atomic<bool>* cancel = nullptr,
+                                                           std::function<void(int)> on_progress = nullptr);
+
+        static RejectorResult CorrespondenceRejectorSampleConsensus(const RegistrationContext& ctx,
+                                                                      const CorrespondencesPtr& input_corr,
+                                                                      double threshold, int max_iterations, bool refine,
+                                                                      std::atomic<bool>* cancel = nullptr,
+                                                                      std::function<void(int)> on_progress = nullptr);
+
+        static RejectorResult CorrespondenceRejectorSurfaceNormal(const RegistrationContext& ctx,
+                                                                    const CorrespondencesPtr& input_corr, double threshold,
+                                                                    std::atomic<bool>* cancel = nullptr,
+                                                                    std::function<void(int)> on_progress = nullptr);
+
+        static RejectorResult CorrespondenceRejectorTrimmed(const RegistrationContext& ctx,
+                                                              const CorrespondencesPtr& input_corr,
+                                                              float ratio, int min_corre,
+                                                              std::atomic<bool>* cancel = nullptr,
+                                                              std::function<void(int)> on_progress = nullptr);
+
+        static RejectorResult CorrespondenceRejectorVarTrimmed(const RegistrationContext& ctx,
+                                                                const CorrespondencesPtr& input_corr,
+                                                                double min_ratio, double max_ratio,
+                                                                std::atomic<bool>* cancel = nullptr,
+                                                                std::function<void(int)> on_progress = nullptr);
+
+        // --- Correspondence Rejection (template) ---
+
         template<typename Feature>
-        void CorrespondenceRejectorFeatures(const typename pcl::PointCloud<PointXYZRGBN>::Ptr &source,
-                                            const typename pcl::PointCloud<PointXYZRGBN>::Ptr &target,
-                                            double thresh, const std::string &key)
+        static RejectorResult CorrespondenceRejectorFeatures(
+                const RegistrationContext& ctx,
+                const typename pcl::PointCloud<PointXYZRGBN>::Ptr& source,
+                const typename pcl::PointCloud<PointXYZRGBN>::Ptr& target,
+                double thresh, const std::string& key,
+                const CorrespondencesPtr& input_corr)
         {
             TicToc time;
             time.tic();
@@ -214,28 +181,125 @@ namespace ct {
             pcl::CorrespondencesPtr corr(new pcl::Correspondences);
 
             pcl::registration::CorrespondenceRejectorFeatures::Ptr cj(new pcl::registration::CorrespondenceRejectorFeatures);
-            cj->setSourceFeature<Feature>(source, source_cloud_->id());
-            cj->setTargetFeature<Feature>(target, target_cloud_->id());
+            cj->setSourceFeature<Feature>(source, ctx.source_cloud->id());
+            cj->setTargetFeature<Feature>(target, ctx.target_cloud->id());
             cj->setDistanceThreshold<Feature>(thresh, key);
-            cj->setInputCorrespondences(corr_);
-            cj->getRemainingCorrespondences(*corr_, *corr);
-            emit correspondenceRejectorResult(corr, time.toc(), cj);
+            cj->setInputCorrespondences(input_corr);
+            cj->getRemainingCorrespondences(*input_corr, *corr);
+            return {corr, time.toc(), cj};
         }
 
-        /**
-         *  @brief 实现基于特征描述符的RANSAC初始配准
-         *  @brief 大致过程就是对源和目标点云进行特征提取，计算特征描述符，生成特征点云，即source和target, 然后特征匹配初始化，使用kd树加速搜索，
-         *  然后进行RANSAC迭代，之后再优化对应关系和变换矩阵，最后输出配准后的点云。
-         *  @param feature_type 特征描述符类型 0-PFH, 1-FPFH, 2-VFH, 3-SHOT
-         *  @param min_sample_distance 设置样本之间的最小距离
-         *  @param nr_samples 设置每次迭代期间要使用的样本数
-         *  @param k 设置选择随机特征对应时要使用的邻居数
-         *
-         */
+        // --- Transformation Estimation ---
+
+        static TransformationResult TransformationEstimation2D(const RegistrationContext& ctx,
+                                                                 const CorrespondencesPtr& input_corr,
+                                                                 std::atomic<bool>* cancel = nullptr,
+                                                                 std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimation3Point(const RegistrationContext& ctx,
+                                                                     const CorrespondencesPtr& input_corr,
+                                                                     std::atomic<bool>* cancel = nullptr,
+                                                                     std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimationDualQuaternion(const RegistrationContext& ctx,
+                                                                             const CorrespondencesPtr& input_corr,
+                                                                             std::atomic<bool>* cancel = nullptr,
+                                                                             std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimationLM(const RegistrationContext& ctx,
+                                                                 const CorrespondencesPtr& input_corr,
+                                                                 std::atomic<bool>* cancel = nullptr,
+                                                                 std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimationPointToPlane(const RegistrationContext& ctx,
+                                                                          const CorrespondencesPtr& input_corr,
+                                                                          std::atomic<bool>* cancel = nullptr,
+                                                                          std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimationPointToPlaneLLS(const RegistrationContext& ctx,
+                                                                             const CorrespondencesPtr& input_corr,
+                                                                             std::atomic<bool>* cancel = nullptr,
+                                                                             std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimationPointToPlaneLLSWeighted(const RegistrationContext& ctx,
+                                                                                      const CorrespondencesPtr& input_corr,
+                                                                                      std::atomic<bool>* cancel = nullptr,
+                                                                                      std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimationPointToPlaneWeighted(const RegistrationContext& ctx,
+                                                                                 const CorrespondencesPtr& input_corr,
+                                                                                 std::atomic<bool>* cancel = nullptr,
+                                                                                 std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimationSVD(const RegistrationContext& ctx,
+                                                                  const CorrespondencesPtr& input_corr,
+                                                                  std::atomic<bool>* cancel = nullptr,
+                                                                  std::function<void(int)> on_progress = nullptr);
+
+        static TransformationResult TransformationEstimationSymmetricPointToPlaneLLS(
+                const RegistrationContext& ctx, const CorrespondencesPtr& input_corr,
+                bool enforce_same_direction_normals,
+                std::atomic<bool>* cancel = nullptr, std::function<void(int)> on_progress = nullptr);
+
+        static void TransformationValidationEuclidean(const RegistrationContext& ctx,
+                                                       const pcl::Correspondence& corr, bool from_normals);
+
+        // --- Registration ---
+
+        static RegistrationResult IterativeClosestPoint(const RegistrationContext& ctx,
+                                                         bool use_recip_corre,
+                                                         std::atomic<bool>* cancel = nullptr,
+                                                         std::function<void(int)> on_progress = nullptr);
+
+        static RegistrationResult IterativeClosestPointWithNormals(const RegistrationContext& ctx,
+                                                                     bool use_recip_corre,
+                                                                     bool use_symmetric_objective,
+                                                                     bool enforce_same_direction_normals,
+                                                                     std::atomic<bool>* cancel = nullptr,
+                                                                     std::function<void(int)> on_progress = nullptr);
+
+        static RegistrationResult IterativeClosestPointNonLinear(const RegistrationContext& ctx,
+                                                                  bool use_recip_corre,
+                                                                  std::atomic<bool>* cancel = nullptr,
+                                                                  std::function<void(int)> on_progress = nullptr);
+
+        static RegistrationResult GeneralizedIterativeClosestPoint(const RegistrationContext& ctx,
+                                                                     int k, int max,
+                                                                     double tra_tolerance, double rol_tolerance,
+                                                                     bool use_recip_corre,
+                                                                     std::atomic<bool>* cancel = nullptr,
+                                                                     std::function<void(int)> on_progress = nullptr);
+
+        static RegistrationResult FPCSInitialAlignment(const RegistrationContext& ctx,
+                                                         float delta, bool normalize, float approx_overlap,
+                                                         float score_threshold, int nr_samples,
+                                                         float max_norm_diff, int max_runtime,
+                                                         std::atomic<bool>* cancel = nullptr,
+                                                         std::function<void(int)> on_progress = nullptr);
+
+        static RegistrationResult KFPCSInitialAlignment(const RegistrationContext& ctx,
+                                                          float delta, bool normalize, float approx_overlap,
+                                                          float score_threshold, int nr_samples,
+                                                          float max_norm_diff, int max_runtime,
+                                                          float upper_trl_boundary, float lower_trl_boundary,
+                                                          float lambda,
+                                                          std::atomic<bool>* cancel = nullptr,
+                                                          std::function<void(int)> on_progress = nullptr);
+
+        static RegistrationResult NormalDistributionsTransform(const RegistrationContext& ctx,
+                                                                float resolution, double step_size,
+                                                                double outlier_ratio,
+                                                                std::atomic<bool>* cancel = nullptr,
+                                                                std::function<void(int)> on_progress = nullptr);
+
+        // --- Registration (template) ---
+
         template <typename Feature>
-        void SampleConsensusInitialAlignment(const typename pcl::PointCloud<Feature>::Ptr& source,
-                                             const typename pcl::PointCloud<Feature>::Ptr& target,
-                                             float min_sample_distance, int nr_samples, int k)
+        static RegistrationResult SampleConsensusInitialAlignment(
+                const RegistrationContext& ctx,
+                const typename pcl::PointCloud<Feature>::Ptr& source,
+                const typename pcl::PointCloud<Feature>::Ptr& target,
+                float min_sample_distance, int nr_samples, int k)
         {
             TicToc time;
             time.tic();
@@ -244,51 +308,41 @@ namespace ct {
             pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
             pcl::SampleConsensusInitialAlignment<PointXYZRGBN, PointXYZRGBN, Feature> reg;
 
-            reg.setInputTarget(target_cloud_->toPCL_XYZRGBN());
-            reg.setInputSource(source_cloud_->toPCL_XYZRGBN());
+            reg.setInputTarget(ctx.target_cloud->toPCL_XYZRGBN());
+            reg.setInputSource(ctx.source_cloud->toPCL_XYZRGBN());
             reg.setSourceFeatures(source);
             reg.setTargetFeatures(target);
             reg.setSearchMethodTarget(target_tree);
             reg.setSearchMethodSource(source_tree);
-            if(te_!=nullptr) reg.setTransformationEstimation(te_);
-            if(ce_!=nullptr) reg.setCorrespondenceEstimation(ce_);
-            for (auto& cj : cr_map) reg.addCorrespondenceRejector(cj.second);
-            reg.setMaximumIterations(nr_iterations_);
-            reg.setRANSACIterations(ransac_iterations_);
-            reg.setRANSACOutlierRejectionThreshold(inlier_threshold_);
-            reg.setMaxCorrespondenceDistance(distance_threshold_);
-            reg.setTransformationEpsilon(transformation_epsilon_);
-            reg.setTransformationRotationEpsilon(transformation_rotation_epsilon_);
-            reg.setEuclideanFitnessEpsilon(euclidean_fitness_epsilon_);
+            if(ctx.transformation_estimation!=nullptr) reg.setTransformationEstimation(ctx.transformation_estimation);
+            if(ctx.correspondence_estimation!=nullptr) reg.setCorrespondenceEstimation(ctx.correspondence_estimation);
+            for (auto& cj : ctx.correspondence_rejectors) reg.addCorrespondenceRejector(cj.second);
+            reg.setMaximumIterations(ctx.params.max_iterations);
+            reg.setRANSACIterations(ctx.params.ransac_iterations);
+            reg.setRANSACOutlierRejectionThreshold(ctx.params.inlier_threshold);
+            reg.setMaxCorrespondenceDistance(ctx.params.distance_threshold);
+            reg.setTransformationEpsilon(ctx.params.transformation_epsilon);
+            reg.setTransformationRotationEpsilon(ctx.params.transformation_rotation_epsilon);
+            reg.setEuclideanFitnessEpsilon(ctx.params.euclidean_fitness_epsilon);
 
             reg.setCorrespondenceRandomness(k);
             reg.setMinSampleDistance(min_sample_distance);
             reg.setNumberOfSamples(nr_samples);
 
-            // PCL align需要PCL点云作为输出
             pcl::PointCloud<PointXYZRGBN>::Ptr pcl_aligned(new pcl::PointCloud<PointXYZRGBN>);
             reg.align(*pcl_aligned);
 
-            // 从PCL点云创建Cloud对象
             ail_cloud = Cloud::fromPCL_XYZRGBN(*pcl_aligned);
-            emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
-                                    reg.getFinalTransformation(), time.toc());
+            return {reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
+                    reg.getFinalTransformation(), (float)time.toc()};
         }
 
-        /**
-         *  @brief 使用前排斥 RANSAC 例程的姿势估计和对齐类
-         *  具体使用了PCL库中的Sample Consensus Prerejective (SCPR)算法。SCPR是一种鲁棒的点云配准方法，
-         *  通过随机抽样一致性（RANSAC）来估计两个点云之间的最佳刚性变换（通常是旋转和平移），从而将源点云（source）与目标点云（target）对齐。
-         *  @param feature_type 特征描述符类型 0-PFH, 1-FPFH, 2-VFH, 3-SHOT
-         *  @param nr_samples 设置每次迭代期间要使用的样本数
-         *  @param k 设置选择随机特征对应时要使用的邻居数
-         *  @param similarity_threshold 在 [0,1] 中设置底层多边形对应拒绝器对象的边缘长度之间的相似度阈值，其中 1 是完美匹配。
-         *  @param inlier_fraction 设置所需的内部分数（输入的）
-         */
         template<typename Feature>
-        void SampleConsensusPrerejective(const typename pcl::PointCloud<Feature>::Ptr &source,
-                                         const typename pcl::PointCloud<Feature>::Ptr &target,
-                                         int nr_samples, int k, float similarity_threshold, float inlier_fraction)
+        static RegistrationResult SampleConsensusPrerejective(
+                const RegistrationContext& ctx,
+                const typename pcl::PointCloud<Feature>::Ptr& source,
+                const typename pcl::PointCloud<Feature>::Ptr& target,
+                int nr_samples, int k, float similarity_threshold, float inlier_fraction)
         {
             TicToc time;
             time.tic();
@@ -296,267 +350,40 @@ namespace ct {
             pcl::search::KdTree<PointXYZRGBN>::Ptr source_tree(new pcl::search::KdTree<PointXYZRGBN>);
             pcl::SampleConsensusPrerejective<PointXYZRGBN, PointXYZRGBN, Feature> reg;
 
-            reg.setInputSource(source_cloud_->toPCL_XYZRGBN());
-            reg.setInputTarget(target_cloud_->toPCL_XYZRGBN());
+            reg.setInputSource(ctx.source_cloud->toPCL_XYZRGBN());
+            reg.setInputTarget(ctx.target_cloud->toPCL_XYZRGBN());
             reg.setSourceFeatures(source);
             reg.setTargetFeatures(target);
             reg.setSearchMethodTarget(target_tree);
             reg.setSearchMethodSource(source_tree);
-            if (te_ != nullptr) reg.setTransformationEstimation(te_);
-            if (ce_ != nullptr) reg.setCorrespondenceEstimation(ce_);
-            for (auto &cj : cr_map)
+            if (ctx.transformation_estimation != nullptr) reg.setTransformationEstimation(ctx.transformation_estimation);
+            if (ctx.correspondence_estimation != nullptr) reg.setCorrespondenceEstimation(ctx.correspondence_estimation);
+            for (auto &cj : ctx.correspondence_rejectors)
                 reg.addCorrespondenceRejector(cj.second);
-            reg.setMaximumIterations(nr_iterations_);
-            reg.setRANSACIterations(ransac_iterations_);
-            reg.setRANSACOutlierRejectionThreshold(inlier_threshold_);
-            reg.setMaxCorrespondenceDistance(distance_threshold_);
-            reg.setTransformationEpsilon(transformation_epsilon_);
-            reg.setTransformationRotationEpsilon(transformation_rotation_epsilon_);
-            reg.setEuclideanFitnessEpsilon(euclidean_fitness_epsilon_);
+            reg.setMaximumIterations(ctx.params.max_iterations);
+            reg.setRANSACIterations(ctx.params.ransac_iterations);
+            reg.setRANSACOutlierRejectionThreshold(ctx.params.inlier_threshold);
+            reg.setMaxCorrespondenceDistance(ctx.params.distance_threshold);
+            reg.setTransformationEpsilon(ctx.params.transformation_epsilon);
+            reg.setTransformationRotationEpsilon(ctx.params.transformation_rotation_epsilon);
+            reg.setEuclideanFitnessEpsilon(ctx.params.euclidean_fitness_epsilon);
 
             reg.setCorrespondenceRandomness(k);
             reg.setSimilarityThreshold(similarity_threshold);
             reg.setNumberOfSamples(nr_samples);
             reg.setInlierFraction(inlier_fraction);
 
-            // PCL align需要PCL点云作为输出
             pcl::PointCloud<PointXYZRGBN>::Ptr pcl_aligned(new pcl::PointCloud<PointXYZRGBN>);
             reg.align(*pcl_aligned);
 
-            // 从PCL点云创建Cloud对象
             Cloud::Ptr ail_cloud = Cloud::fromPCL_XYZRGBN(*pcl_aligned);
-            emit registrationResult(reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
-                                    reg.getFinalTransformation(), time.toc());
+            return {reg.hasConverged(), ail_cloud, reg.getFitnessScore(),
+                    reg.getFinalTransformation(), (float)time.toc()};
         }
 
-    public slots:
-        /**
-         * @brief 将对应关系计算为目标点云中具有最小值的点。
-         * @param k 设置目标点云中要考虑的最小近邻的数量。
-         */
-        void CorrespondenceEstimationBackProjection(int k);
-
-        /**
-         * @brief 将对应关系计算为目标云中与在输入云上计算的法线具有最小距离的点。
-         * @param k 设置目标点云中要考虑的最小近邻的数量。
-         */
-        void CorrespondenceEstimationNormalShooting(int k);
-
-        /**
-         * @brief 通过使用相机内部和外部参数将源点云投影到目标点云上，并计算对应关系。
-         * @param fx fy, 设置目标相机的焦距参数。
-         * @param cx cy, 设置目标相机的中心参数。
-         * @param src_to_tgt_trans, 设置源到目标相机的变换矩阵。
-         * @param depth_threshold 设置深度阈值，在将源点投影到目标点的图像空间后，将该阈值应用于相应的dexels的深度，以拒绝彼此相距太远的dexels。
-         */
-        void CorrespondenceEstimationOrganizedProjection(float fx, float fy, float cx, float cy,
-                                                         const Eigen::Matrix4f &src_to_tgt_trans, float depth_threshold);
-
-        /**
-         * @brief 计算输入和目标云对应点之间对应分数的接口
-         */
-        double DataContainer(const pcl::Correspondence &corr, bool from_normals);
-
-        /**
-         * @brief 基于对对应关系之间的距离进行阈值处理的简单对应拒绝方法。
-         * @param distance 设置阈值，大于该阈值的对应关系将被过滤掉。
-         */
-        void CorrespondenceRejectorDistance(float distance);
-
-        /**
-         * @brief 基于对对应关系中值距离的阈值处理的简单对应拒绝方法。
-         * @param factor 设置拒绝对应的因素
-         */
-        void CorrespondenceRejectorMedianDistance(double factor);
-
-        /**
-         * @brief 基于拒绝对应关系中重复匹配索引的对应拒绝方法
-         */
-        void CorrespondenceRejectorOneToOne();
-
-        /**
-         * @brief 简单的对应拒绝方法
-         */
-        void CorrespondenceRejectionOrganizedBoundary(int val);
-
-        /**
-         * @brief 实现了一种对应拒绝方法，该方法利用输入对应关系在每个模型上形成用户可指定
-         *          基数的虚拟多边形，从而利用两个点集之间的低级和姿势不变几何约束。
-         * @param threshold 设置颜色差异的阈值。
-         */
-        void CorrespondenceRejectorPoly(int cardinality, float similarity_threshold, int iterations);
-
-        /**
-         * @brief 使用随机样本共识实现对应拒绝以识别异常值（并拒绝异常值）
-         * @param threshold 设置对应点之间的最大距离。
-         * @param max_iterations 设置最大迭代次数。
-         * @param refine 指定是否应使用内点的方差在内部细化模型。
-         */
-        void CorrespondenceRejectorSampleConsensus(double threshold, int max_iterations, bool refine);
-
-        /**
-         * @brief 基于对应点法线之间夹角的简单对应拒绝方法
-         * @param threshold 设置法线之间的阈值角度以进行拒绝。
-         */
-        void CorrespondenceRejectorSurfaceNormal(double threshold);
-
-        /**
-         * @brief 实现了类 ICP 配准算法的对应拒绝，该算法仅使用最佳的“k”对应关系，
-         *        其中“k”是对两个被注册的点云之间重叠的估计。
-         * @param ratio 设置点云之间的预期重叠比率。
-         * @param min_corre 设置最小的对应点数。
-         */
-        void CorrespondenceRejectorTrimmed(float ratio, int min_corre);
-
-        /**
-         * @brief 通过将一定百分比的距离最短的对应视为内点来实现简单的对应拒绝方法
-         * @param min_ratio 简要设置最小重叠率
-         * @param max_ratio 简要设置最大重叠率。
-         */
-        void CorrespondenceRejectorVarTrimmed(double min_ratio, double max_ratio);
-
-        /**
-         * @brief 广义迭代最近点法
-         * @param k 设置选择点邻域以计算协方差时使用的邻域数
-         * @param max 设置最大迭代次数
-         * @param tra_tolerance 设置早期优化停止的最小平移梯度阈值
-         * @param rol_tolerance 设置早期优化停止的最小旋转角度阈值
-         * @param use_recip_corre 设置是否使用互惠对应关系
-         */
-        void GeneralizedIterativeClosestPoint(int k, int max, double tra_tolerance, double rol_tolerance,
-                                              bool use_recip_corre);
-
-        /**
-         * @brief 用于鲁棒成对表面配准的四点全等集
-         * @param delta 设置对内部计算的参数进行加权的常数因子
-         * @param normalize 是否应根据点云密度对 delta 进行归一化
-         * @param approx_overlap 设置源和目标之间的近似重叠
-         * @param score_threshold 设置用于早期完成方法的评分阈值。
-         * @param nr_samples 设置对齐期间要使用的源样本数
-         * @param max_norm_diff 以度为单位设置有效点对应之间的最大法线差。
-         * @param max_runtime 以秒为单位设置最大计算时间
-         */
-        void FPCSInitialAlignment(float delta, bool normalize, float approx_overlap,
-                                 float score_threshold, int nr_samples,
-                                 float max_norm_diff, int max_runtime);
-
-        /**
-         * @brief 基于关键点的四点全等集的无标记点云配准
-         * @param delta 设置对内部计算的参数进行加权的常数因子
-         * @param normalize 是否应根据点云密度对 delta 进行归一化
-         * @param approx_overlap 设置源和目标之间的近似重叠
-         * @param score_threshold 设置用于早期完成方法的评分阈值。
-         * @param nr_samples 设置对齐期间要使用的源样本数
-         * @param max_norm_diff 以度为单位设置有效点对应之间的最大法线差。
-         * @param max_runtime 以秒为单位设置最大计算时间
-         * @param upper_trl_boundary 设置用于分数评估的较高平移阈值
-         * @param lower_trl_boundary 设置用于分数评估的较低平移阈值
-         * @param lambda 设置平移成本术语的权重系数。
-         */
-        void KFPCSInitialAlignment(float delta, bool normalize, float approx_overlap,
-                                   float score_threshold, int nr_samples,
-                                   float max_norm_diff, int max_runtime,
-                                   float upper_trl_boundary, float lower_trl_boundary,
-                                   float lambda);
-
-        /**
-         * @brief 迭代最近点配准算法
-         * @param use_recip_corre 设置是否使用互惠对应关系
-         */
-        void IterativeClosestPoint(bool use_recip_corre);
-
-        /**
-         * @brief 使用基于点到平面距离估计的变换的迭代最近点算法
-         * @param use_recip_corre 设置是否使用互惠对应
-         * @param use_symmetric_objective 设置是否使用对称目标函数
-         * @param enforce_same_direction_normals
-         * 设置是否逐点否定源法线或目标法线，使它们指向同一方向
-         */
-        void IterativeClosestPointWithNormals(bool use_recip_corre, bool use_symmetric_objective,
-                                              bool enforce_same_direction_normals);
-
-        /**
-         * @brief 使用 Levenberg-Marquardt 优化后端的 ICP 变体
-         * @param use_recip_corre 设置是否使用互惠对应
-         */
-        void IterativeClosestPointNonLinear(bool use_recip_corre);
-
-
-        /**
-         * @brief 点云数据的 3D 正态分布变换配准实现
-         * @param resolution 设置/更改体素网格分辨率
-         * @param step_size 获取牛顿线搜索最大步长
-         * @param outlier_ratio 设置/更改点云异常值比率
-         */
-        void NormalDistributionsTransform(float resolution, double step_size, double outlier_ratio);
-
-        /**
-         * @brief 为给定的数据集对实现简单的 2D 刚性变换估计 (x, y, theta)。
-         */
-        void TransformationEstimation2D();
-
-        /**
-         * @brief 表示用于转换估计的类，基于：
-         *       - 3对的对应向量（平面情况）
-         *       - 大小为 3 的两个点云（源和目标）
-         *       - 具有一组 3 个索引的点云（源）和另一个点云（目标）
-         *       - 具有两组大小为 3 的索引（源和目标）的两个点云
-         */
-        void TransformationEstimation3Point();
-
-        /**
-         * @brief 实现基于对偶四元数的变换估计，对齐给定的对应关系
-         */
-        void TransformationEstimationDualQuaternion();
-
-        /**
-         * @brief 实现了基于 Levenberg Marquardt 的对对齐给定对应关系的变换的估计
-         */
-        void TransformationEstimationLM();
-
-        /**
-         * @brief 使用 Levenberg Marquardt
-         * 优化来找到最小化给定对应关系之间的点到平面距离的变换
-         */
-        void TransformationEstimationPointToPlane();
-
-        /**
-         * @brief 实现线性最小二乘 (LLS)
-         * 近似，以最小化两个具有法线的对应点云之间的点到平面距离
-         */
-        void TransformationEstimationPointToPlaneLLS();
-
-        /**
-         * @brief 实现了一个线性最小二乘 (LLS)
-         * 近似，用于最小化两个具有法线的对应点云之间的点到平面距离，
-         *        并可以为对应关系分配权重
-         */
-        void TransformationEstimationPointToPlaneLLSWeighted();
-
-        /**
-         * @brief 使用 Levenberg Marquardt
-         * 优化来找到最小化给定对应关系之间的点到平面距离的变换
-         */
-        void TransformationEstimationPointToPlaneWeighted();
-
-        /**
-         * @brief 实现对齐给定对应关系的基于 SVD 的变换估计
-         */
-        void TransformationEstimationSVD();
-
-        /**
-         * @brief 实现线性最小二乘 (LLS)
-         * 近似，以最小化两个具有法线的对应点云之间的对称点到平面距离
-         */
-        void TransformationEstimationSymmetricPointToPlaneLLS(bool enforce_same_direction_normals);
-
-        /**
-         * @brief 计算源数据集和目标数据集之间的 L2SQR 范数
-         */
-        void TransformationValidationEuclidean();
-
-        void cancel() { m_is_canceled = true;}
-
+        // Helper: DataContainer
+        static double DataContainer(const RegistrationContext& ctx,
+                                    const pcl::Correspondence& corr, bool from_normals);
     };
 }
 

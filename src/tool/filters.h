@@ -7,8 +7,6 @@
 
 #include "widgets/customdock.h"
 #include "modules/filters.h"
-#include <QThread>
-
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -33,30 +31,16 @@ public:
 
     virtual void reset();
 
-signals:
-    void PassThrough(const std::string &field_name, float limit_min, float limit_max);
-    void VoxelGrid(float lx, float ly, float lz);
-    void ApproximateVoxelGrid(float lx, float ly, float lz);
-    void StatisticalOutlierRemoval(int nr_k, double stddev_mult);
-    void RadiusOutlierRemoval(double radius, int min_pts);
-    void ConditionalRemoval(ct::ConditionBase::Ptr con);
-    void GridMinimum(const float resolution);
-    void LocalMaximum(float radius);
-    void ShadowPoints(float threshold);
-
-public slots:
-    void filterResult(const ct::Cloud::Ptr & cloud, float time);
-
 private:
+    void handleFilterResult(const ct::FilterResult& result);
+    void runFilter(std::function<ct::FilterResult()> filterFn, bool show_progress);
     ct::ConditionBase::Ptr getCondition();
     void getRange(int index);
 
 private:
     Ui::Filters *ui;
-    QThread m_thread;
-    // 滤波器
-    ct::Filters *m_filters;
     std::map<std::string, ct::Cloud::Ptr> m_filter_map;
+    std::atomic<bool> m_cancel{false};
 };
 
 

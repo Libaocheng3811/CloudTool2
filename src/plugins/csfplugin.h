@@ -6,7 +6,6 @@
 #define CLOUDTOOL2_CSFPLUGIN_H
 
 #include <QDialog>
-#include <QThread>
 
 #include "widgets/customdialog.h"
 #include "modules/csffilter.h"
@@ -30,17 +29,8 @@ private slots:
     void onApply();
     void onCancel();
 
-public slots:
-    void onFilterDone(const ct::Cloud::Ptr& ground_cloud, const ct::Cloud::Ptr& off_ground_cloud, float time);
-
-signals:
-    void requestCSF(bool bSloopSmooth, float time_step, double class_threshold,
-                    double cloth_resolution, int rigidness, int iterations);
-
 private:
     Ui::CSFPlugin *ui;
-    QThread m_thread;
-    ct::CSFFilter* m_filter;
     ct::Cloud::Ptr m_cloud;
 };
 

@@ -2,7 +2,7 @@
 // Created by LBC on 2024/11/13.
 //
 
-#include "modules/features.h"
+#include "libs/algorithm/features.h"
 
 #include <pcl/features/boundary.h>
 #include <pcl/features/impl/3dsc.hpp>
@@ -105,20 +105,22 @@ namespace ct
                 Eigen::Quaternionf(transform_inv.block<3, 3>(0, 0)) };
     }
 
-    void Features::PFHEstimation()
+    FeatureResult Features::PFHEstimation(const Cloud::Ptr& cloud, int k, double radius,
+                                           const Cloud::Ptr& surface,
+                                           std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
         FeatureType::Ptr feature(new FeatureType);
         feature->pfh.reset(new PFHFeature);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
+        auto pcl_surface = surface ? surface->toPCL_XYZRGBN() : pcl_cloud;
 
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
         pcl::PFHEstimation<PointXYZRGBN, PointXYZRGBN, pcl::PFHSignature125> pfh;
@@ -126,23 +128,23 @@ namespace ct
         pfh.setSearchSurface(pcl_surface);
         pfh.setInputCloud(pcl_cloud);
         pfh.setInputNormals(pcl_cloud);
-        pfh.setKSearch(k_);
-        pfh.setRadiusSearch(radius_);
+        pfh.setKSearch(k);
+        pfh.setRadiusSearch(radius);
 
-        if (m_is_canceled) return;
-        emit progress(20);
+        _progress(20);
 
         pfh.compute(*feature->pfh);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::FPFHEstimation()
+    FeatureResult Features::FPFHEstimation(const Cloud::Ptr& cloud, int k, double radius,
+                                            const Cloud::Ptr& surface,
+                                            std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -150,35 +152,35 @@ namespace ct
         feature->fpfh.reset(new FPFHFeature);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
+        auto pcl_surface = surface ? surface->toPCL_XYZRGBN() : pcl_cloud;
 
         pcl::FPFHEstimationOMP<PointXYZRGBN, PointXYZRGBN, pcl::FPFHSignature33> fpfh;
         fpfh.setSearchMethod(tree);
         fpfh.setInputCloud(pcl_cloud);
         fpfh.setInputNormals(pcl_cloud);
         fpfh.setSearchSurface(pcl_surface);
-        fpfh.setKSearch(k_);
-        fpfh.setRadiusSearch(radius_);
+        fpfh.setKSearch(k);
+        fpfh.setRadiusSearch(radius);
         fpfh.setNumberOfThreads(12);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         fpfh.compute(*feature->fpfh);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::VFHEstimation(const Eigen::Vector3f &dir)
+    FeatureResult Features::VFHEstimation(const Cloud::Ptr& cloud, const Eigen::Vector3f& dir,
+                                          const Cloud::Ptr& surface,
+                                          std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -186,107 +188,97 @@ namespace ct
         feature->vfh.reset(new VFHFeature);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
+        auto pcl_surface = surface ? surface->toPCL_XYZRGBN() : pcl_cloud;
 
         pcl::VFHEstimation<PointXYZRGBN , PointXYZRGBN , pcl::VFHSignature308> vfh;
         vfh.setSearchMethod(tree);
         vfh.setInputCloud(pcl_cloud);
         vfh.setInputNormals(pcl_cloud);
         vfh.setSearchSurface(pcl_surface);
-        vfh.setKSearch(k_);
-        vfh.setRadiusSearch(radius_);
         vfh.setViewPoint(dir[0], dir[1], dir[2]);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         vfh.compute(*feature->vfh);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::ESFEstimation()
+    FeatureResult Features::ESFEstimation(const Cloud::Ptr& cloud,
+                                          std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
         FeatureType::Ptr feature(new FeatureType);
         feature->esf.reset(new ESFFeature);
-        pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN >);
+        pcl::search::KdTree<PointXYZRGBN >::Ptr tree(new pcl::search::KdTree<PointXYZRGBN >);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::ESFEstimation<PointXYZRGBN, pcl::ESFSignature640> est;
         est.setInputCloud(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         est.compute(*feature->esf);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::GASDEstimation(const Eigen::Vector3f &dir, int shgs, int shs, int interp)
+    FeatureResult Features::GASDEstimation(const Cloud::Ptr& cloud, const Eigen::Vector3f& dir,
+                                           int shgs, int shs, int interp,
+                                           std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
         FeatureType::Ptr feature(new FeatureType);
         feature->gasd.reset(new GASDFeature);
-        pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN >);
+        pcl::search::KdTree<PointXYZRGBN >::Ptr tree(new pcl::search::KdTree<PointXYZRGBN >);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::GASDEstimation<PointXYZRGBN, pcl::GASDSignature512> est;
         est.setSearchMethod(tree);
         est.setInputCloud(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setViewDirection(dir);
         est.setShapeHalfGridSize(shgs);
         est.setShapeHistsSize(shs);
         est.setShapeHistsInterpMethod(pcl::HistogramInterpolationMethod(interp));
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         est.compute(*feature->gasd);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::GASDColorEstimation(const Eigen::Vector3f &dir, int shgs, int shs, int interp, int chgs, int chs,
-                                       int cinterp) {
-        m_is_canceled = false;
+    FeatureResult Features::GASDColorEstimation(const Cloud::Ptr& cloud, const Eigen::Vector3f& dir,
+                                                int shgs, int shs, int interp,
+                                                int chgs, int chs, int cinterp,
+                                                std::atomic<bool>* cancel, std::function<void(int)> on_progress)
+    {
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -294,18 +286,14 @@ namespace ct
         feature->gasdc.reset(new GASDCFeature);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::GASDColorEstimation<PointXYZRGBN , pcl::GASDSignature984> est;
         est.setInputCloud(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setViewDirection(dir);
         est.setShapeHalfGridSize(shgs);
         est.setShapeHistsSize(shs);
@@ -314,20 +302,19 @@ namespace ct
         est.setColorHistsSize(chs);
         est.setColorHistsInterpMethod(pcl::HistogramInterpolationMethod(cinterp));
 
-        if (m_is_canceled) return;
-        emit progress(40);
+        _progress(40);
 
         est.compute(*feature->gasdc);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::RSDEstimation(int nr_subdiv, double plane_radius)
+    FeatureResult Features::RSDEstimation(const Cloud::Ptr& cloud, int nr_subdiv, double plane_radius,
+                                          std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -335,36 +322,31 @@ namespace ct
         feature->rsd.reset(new RSDFeature);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::RSDEstimation<PointXYZRGBN, PointXYZRGBN, pcl::PrincipalRadiiRSD> est;
         est.setSearchMethod(tree);
         est.setInputCloud(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setInputNormals(pcl_cloud);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setNrSubdivisions(nr_subdiv);
         est.setPlaneRadius(plane_radius);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         est.compute(*feature->rsd);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::GRSDEstimation()
+    FeatureResult Features::GRSDEstimation(const Cloud::Ptr& cloud,
+                                           std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -372,34 +354,29 @@ namespace ct
         feature->grsd.reset(new GRSDFeature);
         pcl::search::KdTree<PointXYZRGBN >::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::GRSDEstimation<PointXYZRGBN, PointXYZRGBN, pcl::GRSDSignature21> est;
         est.setInputCloud(pcl_cloud);
         est.setInputNormals(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         est.compute(*feature->grsd);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::CRHEstimation(const Eigen::Vector3f &dir)
+    FeatureResult Features::CRHEstimation(const Cloud::Ptr& cloud, const Eigen::Vector3f& dir,
+                                          std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -407,35 +384,32 @@ namespace ct
         feature->crh.reset(new CRHFeature);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::CRHEstimation<PointXYZRGBN, PointXYZRGBN, pcl::Histogram<90>> est;
         est.setInputCloud(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setInputNormals(pcl_cloud);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setViewPoint(dir[0], dir[1], dir[2]);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         est.compute(*feature->crh);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::CVFHEstimation(const Eigen::Vector3f &dir, float radius_normals, float d1, float d2, float d3,
-                                  int min, bool normalize) {
-        m_is_canceled = false;
+    FeatureResult Features::CVFHEstimation(const Cloud::Ptr& cloud, const Eigen::Vector3f& dir,
+                                           float radius_normals, float d1, float d2, float d3,
+                                           int min, bool normalize,
+                                           std::atomic<bool>* cancel, std::function<void(int)> on_progress)
+    {
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -443,17 +417,15 @@ namespace ct
         feature->vfh.reset(new VFHFeature);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::CVFHEstimation<PointXYZRGBN, PointXYZRGBN, pcl::VFHSignature308> est;
         est.setInputCloud(pcl_cloud);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
         est.setInputNormals(pcl_cloud);
-        est.setRadiusSearch(radius_);
         est.setViewPoint(dir[0], dir[1], dir[2]);
         est.setRadiusNormals(radius_normals);
         est.setClusterTolerance(d1);
@@ -462,20 +434,20 @@ namespace ct
         est.setMinPoints(min);
         est.setNormalizeBins(normalize);
 
-        if (m_is_canceled) return;
-        emit progress(40);
+        _progress(40);
 
         est.compute(*feature->vfh);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::ShapeContext3DEstimation(double min_radius, double radius)
+    FeatureResult Features::ShapeContext3DEstimation(const Cloud::Ptr& cloud,
+                                                     double min_radius, double radius,
+                                                     std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -483,36 +455,33 @@ namespace ct
         feature->sc3d.reset(new SC3DFeature);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::ShapeContext3DEstimation<PointXYZRGBN, PointXYZRGBN, pcl::ShapeContext1980> est;
         est.setInputCloud(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setInputNormals(pcl_cloud);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setMinimalRadius(min_radius);
         est.setPointDensityRadius(radius);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         est.compute(*feature->sc3d);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::SHOTEstimation(const ReferenceFrame::Ptr &lrf, float radius)
+    FeatureResult Features::SHOTEstimation(const Cloud::Ptr& cloud,
+                                           const ReferenceFrame::Ptr& lrf, float radius,
+                                           const Cloud::Ptr& surface,
+                                           std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -520,37 +489,37 @@ namespace ct
         feature->shot.reset(new SHOTFeature );
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
+        auto pcl_surface = surface ? surface->toPCL_XYZRGBN() : pcl_cloud;
 
         pcl::SHOTEstimationOMP<PointXYZRGBN, PointXYZRGBN, pcl::SHOT352> shot;
         shot.setInputCloud(pcl_cloud);
         shot.setInputNormals(pcl_cloud);
         shot.setSearchMethod(tree);
         shot.setSearchSurface(pcl_surface);
-        shot.setKSearch(k_);
-        shot.setRadiusSearch(radius_);
+        shot.setRadiusSearch(radius);
         shot.setNumberOfThreads(12);
         shot.setLRFRadius(radius);
         shot.setInputReferenceFrames(lrf);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         shot.compute(*feature->shot);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::SHOTColorEstimation(const ReferenceFrame::Ptr &lrf, float radius)
+    FeatureResult Features::SHOTColorEstimation(const Cloud::Ptr& cloud,
+                                                const ReferenceFrame::Ptr& lrf, float radius,
+                                                const Cloud::Ptr& surface,
+                                                std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -558,38 +527,37 @@ namespace ct
         feature->shotc.reset(new SHOTCFeature);
         pcl::search::KdTree<PointXYZRGBN >::Ptr tree(new pcl::search::KdTree<PointXYZRGBN >);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
+        auto pcl_surface = surface ? surface->toPCL_XYZRGBN() : pcl_cloud;
 
         pcl::SHOTColorEstimationOMP<PointXYZRGBN, PointXYZRGBN, pcl::SHOT1344> shot;
         shot.setSearchMethod(tree);
         shot.setSearchSurface(pcl_surface);
         shot.setInputCloud(pcl_cloud);
         shot.setInputNormals(pcl_cloud);
-        shot.setKSearch(k_);
-        shot.setRadiusSearch(radius_);
+        shot.setRadiusSearch(radius);
         shot.setNumberOfThreads(12);
         shot.setLRFRadius(radius);
         shot.setInputReferenceFrames(lrf);
 
-        if (m_is_canceled) return;
-        emit progress(40);
+        _progress(40);
 
         shot.compute(*feature->shotc);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::UniqueShapeContext(const ReferenceFrame::Ptr &lrf, double min_radius,
-                                      double pt_radius, double loc_radius)
+    FeatureResult Features::UniqueShapeContext(const Cloud::Ptr& cloud,
+                                               const ReferenceFrame::Ptr& lrf,
+                                               double min_radius, double pt_radius, double loc_radius,
+                                               std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
@@ -597,57 +565,50 @@ namespace ct
         feature->usc.reset(new USCFeature);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::UniqueShapeContext<PointXYZRGBN, pcl::UniqueShapeContext1960, pcl::ReferenceFrame> est;
         est.setSearchMethod(tree);
-        est.setSearchSurface(pcl_surface);
         est.setInputCloud(pcl_cloud);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setInputReferenceFrames(lrf);
         est.setMinimalRadius(min_radius);
         est.setPointDensityRadius(pt_radius);
         est.setLocalRadius(loc_radius);
 
-        if (m_is_canceled) return;
-        emit progress(30);
+        _progress(30);
 
         est.compute(*feature->usc);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit featureResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), feature, (float)time.toc()};
     }
 
-    void Features::BOARDLocalReferenceFrameEstimation(float radius, bool find_holes, float margin_thresh, int size,
-                                                      float prob_thresh, float steep_thresh)
+    LRFResult Features::BOARDLocalReferenceFrameEstimation(const Cloud::Ptr& cloud,
+                                                            float radius, bool find_holes,
+                                                            float margin_thresh, int size,
+                                                            float prob_thresh, float steep_thresh,
+                                                            std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
-        ReferenceFrame::Ptr feature(new ReferenceFrame);
+        ReferenceFrame::Ptr lrf(new ReferenceFrame);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::BOARDLocalReferenceFrameEstimation<PointXYZRGBN, PointXYZRGBN, pcl::ReferenceFrame> est;
         est.setInputCloud(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setInputNormals(pcl_cloud);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setTangentRadius(radius);
         est.setFindHoles(find_holes);
         est.setMarginThresh(margin_thresh);
@@ -655,88 +616,78 @@ namespace ct
         est.setHoleSizeProbThresh(prob_thresh);
         est.setSteepThresh(steep_thresh);
 
-        if (m_is_canceled) return;
-        emit progress(40);
+        _progress(40);
 
-        est.compute(*feature);
+        est.compute(*lrf);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit lrfResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), lrf, (float)time.toc()};
     }
 
-    void Features::FLARELocalReferenceFrameEstimation(float radius, float margin_thresh, int min_neighbors_for_normal_axis,
-                                                      int min_neighbors_for_tangent_axis)
+    LRFResult Features::FLARELocalReferenceFrameEstimation(const Cloud::Ptr& cloud,
+                                                            float radius, float margin_thresh,
+                                                            int min_neighbors_for_normal_axis,
+                                                            int min_neighbors_for_tangent_axis,
+                                                            std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
-        ReferenceFrame::Ptr feature(new ReferenceFrame);
+        ReferenceFrame::Ptr lrf(new ReferenceFrame);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::FLARELocalReferenceFrameEstimation<PointXYZRGBN, PointXYZRGBN, pcl::ReferenceFrame> est;
         est.setInputCloud(pcl_cloud);
         est.setInputNormals(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setTangentRadius(radius);
         est.setMarginThresh(margin_thresh);
         est.setMinNeighboursForNormalAxis(min_neighbors_for_normal_axis);
         est.setMinNeighboursForTangentAxis(min_neighbors_for_tangent_axis);
 
-        if (m_is_canceled) return;
-        emit progress(40);
+        _progress(40);
 
-        est.compute(*feature);
+        est.compute(*lrf);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit lrfResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), lrf, (float)time.toc()};
     }
 
-    void Features::SHOTLocalReferenceFrameEstimation()
+    LRFResult Features::SHOTLocalReferenceFrameEstimation(const Cloud::Ptr& cloud,
+                                                           std::atomic<bool>* cancel, std::function<void(int)> on_progress)
     {
-        m_is_canceled = false;
+        if (cancel) cancel->store(false);
 
         TicToc time;
         time.tic();
-        ReferenceFrame::Ptr feature(new ReferenceFrame);
+        ReferenceFrame::Ptr lrf(new ReferenceFrame);
         pcl::search::KdTree<PointXYZRGBN>::Ptr tree(new pcl::search::KdTree<PointXYZRGBN>);
 
-        if (m_is_canceled) return;
-        emit progress(10);
+        auto _progress = [&](int pct) { if (cancel && cancel->load()) return; if (on_progress) on_progress(pct); };
+        _progress(10);
 
-        auto pcl_cloud = cloud_->toPCL_XYZRGBN();
-        auto pcl_surface = surface_ ? surface_->toPCL_XYZRGBN() : pcl_cloud;
+        auto pcl_cloud = cloud->toPCL_XYZRGBN();
 
         pcl::SHOTLocalReferenceFrameEstimationOMP<PointXYZRGBN, pcl::ReferenceFrame> est;
         est.setInputCloud(pcl_cloud);
-        est.setSearchSurface(pcl_surface);
         est.setSearchMethod(tree);
-        est.setKSearch(k_);
-        est.setRadiusSearch(radius_);
         est.setNumberOfThreads(12);
 
-        if (m_is_canceled) return;
-        emit progress(40);
+        _progress(40);
 
-        est.compute(*feature);
+        est.compute(*lrf);
 
-        if (m_is_canceled) return;
-        emit progress(100);
+        _progress(100);
 
-        emit lrfResult(cloud_->id(), feature, time.toc());
+        return {cloud->id(), lrf, (float)time.toc()};
     }
 
 } // namespace ct

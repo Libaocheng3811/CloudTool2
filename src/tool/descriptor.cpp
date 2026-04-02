@@ -26,49 +26,11 @@
 
 Descriptor::Descriptor(QWidget *parent) :
         CustomDock(parent), ui(new Ui::Descriptor),
-        m_thread(this),
         m_plotter(new pcl::visualization::PCLPlotter) {
     ui->setupUi(this);
 
-    // 注册重载类型，
-    // 第一行代码注册了 ct::FeatureType::Ptr 的左值引用类型 ("FeatureType::Ptr &")，
-    // 第二行代码注册了 ct::FeatureType::Ptr 的类型 ("FeatureType::Ptr")，这意味着可以直接传递指针类型。
-    qRegisterMetaType<ct::FeatureType::Ptr>("FeatureType::Ptr &");
-    qRegisterMetaType<ct::FeatureType::Ptr>("FeatureType::Ptr");
-    qRegisterMetaType<ct::ReferenceFrame::Ptr>("ReferenceFrame::Ptr &");
-    qRegisterMetaType<ct::ReferenceFrame::Ptr>("ReferenceFrame::Ptr");
-
     connect(ui->btn_apply, &QPushButton::clicked, this, &Descriptor::preview);
     connect(ui->btn_reset, &QPushButton::clicked, this, &Descriptor::reset);
-
-    m_features = new ct::Features;
-    m_features->moveToThread(&m_thread);
-    connect(&m_thread, &QThread::finished, m_features, &QObject::deleteLater);
-    connect(this, &Descriptor::PFHEstimation, m_features, &ct::Features::PFHEstimation);
-    connect(this, &Descriptor::FPFHEstimation, m_features, &ct::Features::FPFHEstimation);
-    connect(this, &Descriptor::VFHEstimation, m_features, &ct::Features::VFHEstimation);
-    connect(this, &Descriptor::ESFEstimation, m_features, &ct::Features::ESFEstimation);
-    connect(this, &Descriptor::GASDEstimation, m_features, &ct::Features::GASDEstimation);
-    connect(this, &Descriptor::GASDColorEstimation, m_features, &ct::Features::GASDColorEstimation);
-    connect(this, &Descriptor::RSDEstimation, m_features, &ct::Features::RSDEstimation);
-    connect(this, &Descriptor::GRSDEstimation, m_features, &ct::Features::GRSDEstimation);
-    connect(this, &Descriptor::CRHEstimation, m_features, &ct::Features::CRHEstimation);
-    connect(this, &Descriptor::CVFHEstimation, m_features, &ct::Features::CVFHEstimation);
-    connect(this, &Descriptor::ShapeContext3DEstimation, m_features, &ct::Features::ShapeContext3DEstimation);
-    connect(this, &Descriptor::SHOTEstimation, m_features, &ct::Features::SHOTEstimation);
-    connect(this, &Descriptor::SHOTColorEstimation, m_features, &ct::Features::SHOTColorEstimation);
-    connect(this, &Descriptor::UniqueShapeContext, m_features, &ct::Features::UniqueShapeContext);
-    connect(this, &Descriptor::BOARDLocalReferenceFrameEstimation, m_features,
-            &ct::Features::BOARDLocalReferenceFrameEstimation);
-    connect(this, &Descriptor::FLARELocalReferenceFrameEstimation, m_features,
-            &ct::Features::FLARELocalReferenceFrameEstimation);
-    connect(this, &Descriptor::SHOTLocalReferenceFrameEstimation, m_features,
-            &ct::Features::SHOTLocalReferenceFrameEstimation);
-    connect(m_features, &ct::Features::featureResult, this, &Descriptor::featureResult);
-    connect(m_features, &ct::Features::lrfResult, this, &Descriptor::lrfResult);
-
-    // 线程启动
-    m_thread.start();
 
     connect(ui->cbox_feature, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), [=](int index) {
         // 如果index = 0，意味着选择了特征类型，则显示特征类型下拉框
@@ -97,12 +59,6 @@ Descriptor::Descriptor(QWidget *parent) :
 }
 
 Descriptor::~Descriptor() {
-    // 结束线程的事件循环，但不会立即终止线程，需要等待线程完成任务后再退出。
-    m_thread.quit();
-    if (!m_thread.wait(3000)) {
-        m_thread.terminate();
-        m_thread.wait();
-    }
     delete ui;
 }
 
@@ -123,110 +79,290 @@ void Descriptor::preview() {
             printW("Parameter set error!");
             return;
         }
-        m_features->setInputCloud(cloud);
-        m_features->setKSearch(ui->spin_k->value());
-        m_features->setRadiusSearch(ui->dspin_r->value());
 
+        int k = ui->spin_k->value();
+        double radius = ui->dspin_r->value();
         m_cloudtree->showProgress("Computing Feature Descriptor...");
-        m_cloudtree->bindWorker(m_features);
 
         switch (ui->cbox_type->currentIndex()) {
-            case DESCRIPTOR_TYPE_PFHEstimation:
+            case DESCRIPTOR_TYPE_PFHEstimation: {
                 m_cloudview->showInfo("PFHEstimation", 1);
-                emit PFHEstimation();
+                auto future = QtConcurrent::run([cloud, k, radius]() {
+                    return ct::Features::PFHEstimation(cloud, k, radius);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_FPFHEstimation:
+            }
+            case DESCRIPTOR_TYPE_FPFHEstimation: {
                 m_cloudview->showInfo("FPFHEstimation", 1);
-                emit FPFHEstimation();
+                auto future = QtConcurrent::run([cloud, k, radius]() {
+                    return ct::Features::FPFHEstimation(cloud, k, radius);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_VFHEstimation:
+            }
+            case DESCRIPTOR_TYPE_VFHEstimation: {
                 m_cloudview->showInfo("VFHEstimation", 1);
-                emit VFHEstimation(
-                Eigen::Vector3f(ui->dspin_vpx1->value(), ui->dspin_vpy1->value(), ui->dspin_vpz1->value()));
+                Eigen::Vector3f dir(ui->dspin_vpx1->value(), ui->dspin_vpy1->value(), ui->dspin_vpz1->value());
+                auto future = QtConcurrent::run([cloud, dir]() {
+                    return ct::Features::VFHEstimation(cloud, dir);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_ESFEstimation:
+            }
+            case DESCRIPTOR_TYPE_ESFEstimation: {
                 m_cloudview->showInfo("ESFEstimation", 1);
-                emit ESFEstimation();
+                auto future = QtConcurrent::run([cloud]() {
+                    return ct::Features::ESFEstimation(cloud);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_GASDEstimation:
+            }
+            case DESCRIPTOR_TYPE_GASDEstimation: {
                 m_cloudview->showInfo("GASDEstimation", 1);
-                emit GASDEstimation(
-                Eigen::Vector3f(ui->dspin_vx1->value(), ui->dspin_vy1->value(), ui->dspin_vz1->value()),
-                ui->spin_shgs1->value(), ui->spin_shs1->value(), ui->cbox_interp1->currentIndex());
+                Eigen::Vector3f dir(ui->dspin_vx1->value(), ui->dspin_vy1->value(), ui->dspin_vz1->value());
+                int shgs = ui->spin_shgs1->value();
+                int shs = ui->spin_shs1->value();
+                int interp = ui->cbox_interp1->currentIndex();
+                auto future = QtConcurrent::run([cloud, dir, shgs, shs, interp]() {
+                    return ct::Features::GASDEstimation(cloud, dir, shgs, shs, interp);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_GASDColorEstimation:
+            }
+            case DESCRIPTOR_TYPE_GASDColorEstimation: {
                 m_cloudview->showInfo("GASDColorEstimation", 1);
-                emit GASDColorEstimation(
-                Eigen::Vector3f(ui->dspin_vx2->value(), ui->dspin_vy2->value(), ui->dspin_vz2->value()),
-                ui->spin_shgs2->value(), ui->spin_shs2->value(), ui->cbox_interp2->currentIndex(),
-                ui->spin_chgs->value(), ui->spin_chs->value(), ui->cbox_cinterp->currentIndex());
+                Eigen::Vector3f dir(ui->dspin_vx2->value(), ui->dspin_vy2->value(), ui->dspin_vz2->value());
+                int shgs = ui->spin_shgs2->value();
+                int shs = ui->spin_shs2->value();
+                int interp = ui->cbox_interp2->currentIndex();
+                int chgs = ui->spin_chgs->value();
+                int chs = ui->spin_chs->value();
+                int cinterp = ui->cbox_cinterp->currentIndex();
+                auto future = QtConcurrent::run([cloud, dir, shgs, shs, interp, chgs, chs, cinterp]() {
+                    return ct::Features::GASDColorEstimation(cloud, dir, shgs, shs, interp, chgs, chs, cinterp);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_RSDEstimation:
+            }
+            case DESCRIPTOR_TYPE_RSDEstimation: {
                 m_cloudview->showInfo("RSDEstimation", 1);
-                emit RSDEstimation(ui->spin_nr_subdiv->value(), ui->dspin_plane_radius->value());
+                int nr_subdiv = ui->spin_nr_subdiv->value();
+                double plane_radius = ui->dspin_plane_radius->value();
+                auto future = QtConcurrent::run([cloud, nr_subdiv, plane_radius]() {
+                    return ct::Features::RSDEstimation(cloud, nr_subdiv, plane_radius);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_GRSDEstimation:
+            }
+            case DESCRIPTOR_TYPE_GRSDEstimation: {
                 m_cloudview->showInfo("GRSDEstimation", 1);
-                emit GRSDEstimation();
+                auto future = QtConcurrent::run([cloud]() {
+                    return ct::Features::GRSDEstimation(cloud);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_CRHEstimation:
+            }
+            case DESCRIPTOR_TYPE_CRHEstimation: {
                 m_cloudview->showInfo("CRHEstimation", 1);
-                emit CRHEstimation(
-                Eigen::Vector3f(ui->dspin_vpx2->value(), ui->dspin_vpy2->value(), ui->dspin_vpz2->value()));
+                Eigen::Vector3f dir(ui->dspin_vpx2->value(), ui->dspin_vpy2->value(), ui->dspin_vpz2->value());
+                auto future = QtConcurrent::run([cloud, dir]() {
+                    return ct::Features::CRHEstimation(cloud, dir);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_CVFHEstimation:
+            }
+            case DESCRIPTOR_TYPE_CVFHEstimation: {
                 m_cloudview->showInfo("CVFHEstimation", 1);
-                emit CVFHEstimation(
-                Eigen::Vector3f(ui->dspin_vpx2->value(), ui->dspin_vpy2->value(), ui->dspin_vpz2->value()),
-                ui->dspin_rn->value(), ui->dspin_d1->value(), ui->dspin_d2->value(), ui->dspin_d3->value(),
-                ui->spin_min->value(), ui->check_normalize->isChecked());
+                Eigen::Vector3f dir(ui->dspin_vpx2->value(), ui->dspin_vpy2->value(), ui->dspin_vpz2->value());
+                float radius_normals = ui->dspin_rn->value();
+                float d1 = ui->dspin_d1->value();
+                float d2 = ui->dspin_d2->value();
+                float d3 = ui->dspin_d3->value();
+                int min_neighbors = ui->spin_min->value();
+                bool normalize = ui->check_normalize->isChecked();
+                auto future = QtConcurrent::run([cloud, dir, radius_normals, d1, d2, d3, min_neighbors, normalize]() {
+                    return ct::Features::CVFHEstimation(cloud, dir, radius_normals, d1, d2, d3, min_neighbors, normalize);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_ShapeContext3DEstimation:
+            }
+            case DESCRIPTOR_TYPE_ShapeContext3DEstimation: {
                 m_cloudview->showInfo("ShapeContext3DEstimation", 1);
-                emit ShapeContext3DEstimation(ui->dspin_min_r->value(), ui->dspin_r2->value());
+                double min_radius = ui->dspin_min_r->value();
+                double r2 = ui->dspin_r2->value();
+                auto future = QtConcurrent::run([cloud, min_radius, r2]() {
+                    return ct::Features::ShapeContext3DEstimation(cloud, min_radius, r2);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_SHOTEstimation:
+            }
+            case DESCRIPTOR_TYPE_SHOTEstimation: {
                 if (m_lrf_map.find(cloud->id()) == m_lrf_map.end()) {
                     printW("Please Estimation LocalReferenceFrame First!");
+                    m_cloudtree->closeProgress();
                     return;
                 }
                 m_cloudview->showInfo("SHOTEstimation", 1);
-                emit SHOTEstimation(m_lrf_map.find(cloud->id())->second, ui->dspin_lrf1->value());
+                auto lrf = m_lrf_map.find(cloud->id())->second;
+                float lrf_radius = ui->dspin_lrf1->value();
+                auto future = QtConcurrent::run([cloud, lrf, lrf_radius, k, radius]() {
+                    return ct::Features::SHOTEstimation(cloud, lrf, lrf_radius);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_SHOTColorEstimation:
+            }
+            case DESCRIPTOR_TYPE_SHOTColorEstimation: {
                 if (m_lrf_map.find(cloud->id()) == m_lrf_map.end()) {
                     printW("Please Estimation LocalReferenceFrame First!");
+                    m_cloudtree->closeProgress();
                     return;
                 }
                 m_cloudview->showInfo("SHOTColorEstimation", 1);
-                emit SHOTColorEstimation(m_lrf_map.find(cloud->id())->second, ui->dspin_lrf2->value());
+                auto lrf = m_lrf_map.find(cloud->id())->second;
+                float lrf_radius = ui->dspin_lrf2->value();
+                auto future = QtConcurrent::run([cloud, lrf, lrf_radius, k, radius]() {
+                    return ct::Features::SHOTColorEstimation(cloud, lrf, lrf_radius);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_UniqueShapeContext:
+            }
+            case DESCRIPTOR_TYPE_UniqueShapeContext: {
                 if (m_lrf_map.find(cloud->id()) == m_lrf_map.end()) {
                     printW("Please Estimation LocalReferenceFrame first!");
+                    m_cloudtree->closeProgress();
                     return;
                 }
                 m_cloudview->showInfo("UniqueShapeContext", 1);
-                emit UniqueShapeContext(m_lrf_map.find(cloud->id())->second, ui->dspin_min_r2->value(),
-                                        ui->dspin_p_r->value(),
-                                        ui->dspin_l_r->value());
+                auto lrf = m_lrf_map.find(cloud->id())->second;
+                double min_r2 = ui->dspin_min_r2->value();
+                double pt_r = ui->dspin_p_r->value();
+                double loc_r = ui->dspin_l_r->value();
+                auto future = QtConcurrent::run([cloud, lrf, min_r2, pt_r, loc_r]() {
+                    return ct::Features::UniqueShapeContext(cloud, lrf, min_r2, pt_r, loc_r);
+                });
+                auto* watcher = new QFutureWatcher<ct::FeatureResult>(this);
+                connect(watcher, &QFutureWatcher<ct::FeatureResult>::finished, this, [=]() {
+                    handleFeatureResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_BOARDLocalReferenceFrameEstimation:
+            }
+            case DESCRIPTOR_TYPE_BOARDLocalReferenceFrameEstimation: {
                 m_cloudview->showInfo("BOARDLocalReferenceFrameEstimation", 1);
-                emit BOARDLocalReferenceFrameEstimation(ui->dspin_t_r1->value(), ui->check_find_holes->isChecked(),
-                                                        ui->dspin_m_t1->value(),
-                                                        ui->spin_size->value(), ui->dspin_h_t1->value(),
-                                                        ui->dspin_s_t1->value());
+                float t_r = ui->dspin_t_r1->value();
+                bool find_holes = ui->check_find_holes->isChecked();
+                float margin_thresh = ui->dspin_m_t1->value();
+                int size = ui->spin_size->value();
+                float prob_thresh = ui->dspin_h_t1->value();
+                float steep_thresh = ui->dspin_s_t1->value();
+                auto future = QtConcurrent::run([cloud, t_r, find_holes, margin_thresh, size, prob_thresh, steep_thresh]() {
+                    return ct::Features::BOARDLocalReferenceFrameEstimation(cloud, t_r, find_holes, margin_thresh, size, prob_thresh, steep_thresh);
+                });
+                auto* watcher = new QFutureWatcher<ct::LRFResult>(this);
+                connect(watcher, &QFutureWatcher<ct::LRFResult>::finished, this, [=]() {
+                    handleLrfResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_FLARELocalReferenceFrameEstimation:
+            }
+            case DESCRIPTOR_TYPE_FLARELocalReferenceFrameEstimation: {
                 m_cloudview->showInfo("FLARELocalReferenceFrameEstimation", 1);
-                emit FLARELocalReferenceFrameEstimation(ui->dspin_t_r2->value(), ui->dspin_m_t2->value(),
-                                                        ui->spin_m_n2->value(), ui->spin_m_t2->value());
+                float t_r = ui->dspin_t_r2->value();
+                float margin_thresh = ui->dspin_m_t2->value();
+                int min_n = ui->spin_m_n2->value();
+                int min_t = ui->spin_m_t2->value();
+                auto future = QtConcurrent::run([cloud, t_r, margin_thresh, min_n, min_t]() {
+                    return ct::Features::FLARELocalReferenceFrameEstimation(cloud, t_r, margin_thresh, min_n, min_t);
+                });
+                auto* watcher = new QFutureWatcher<ct::LRFResult>(this);
+                connect(watcher, &QFutureWatcher<ct::LRFResult>::finished, this, [=]() {
+                    handleLrfResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
-            case DESCRIPTOR_TYPE_SHOTLocalReferenceFrameEstimation:
+            }
+            case DESCRIPTOR_TYPE_SHOTLocalReferenceFrameEstimation: {
                 m_cloudview->showInfo("SHOTLocalReferenceFrameEstimation", 1);
-                emit SHOTLocalReferenceFrameEstimation();
+                auto future = QtConcurrent::run([cloud]() {
+                    return ct::Features::SHOTLocalReferenceFrameEstimation(cloud);
+                });
+                auto* watcher = new QFutureWatcher<ct::LRFResult>(this);
+                connect(watcher, &QFutureWatcher<ct::LRFResult>::finished, this, [=]() {
+                    handleLrfResult(watcher->result());
+                    watcher->deleteLater();
+                });
+                watcher->setFuture(future);
                 break;
+            }
         }
     }
 }
@@ -252,80 +388,85 @@ void Descriptor::reset() {
     m_cloudview->clearInfo();
 }
 
-void Descriptor::featureResult(const QString &id, const ct::FeatureType::Ptr &feature, float time) {
-    m_descriptor_map[id.toStdString()] = feature;
+void Descriptor::handleFeatureResult(const ct::FeatureResult &result) {
     m_cloudtree->closeProgress();
+    if (!result.feature) return;
+
+    m_descriptor_map[result.id] = result.feature;
+    QString id = QString::fromStdString(result.id);
+    float time = result.time_ms;
+
     switch (ui->cbox_type->currentIndex()) {
         case DESCRIPTOR_TYPE_PFHEstimation:
             printI(QString("Estimate cloud[id:%1] PFHFeature done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("PFHEstimation");
             // 显示特征直方图
-            m_plotter->addFeatureHistogram(*feature->pfh, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->pfh, 1000);
             break;
         case DESCRIPTOR_TYPE_FPFHEstimation:
             printI(QString("Estimate cloud[id:%1] FPFHFeature done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("FPFHEstimation");
-            m_plotter->addFeatureHistogram(*feature->fpfh, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->fpfh, 1000);
             break;
         case DESCRIPTOR_TYPE_VFHEstimation:
             printI(QString("Estimate cloud[id:%1] VFHFeature done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("VFHEstimation");
-            m_plotter->addFeatureHistogram(*feature->vfh, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->vfh, 1000);
             break;
         case DESCRIPTOR_TYPE_ESFEstimation:
             printI(QString("Estimate cloud[id:%1] ESFFeature done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("ESFEstimation");
-            m_plotter->addFeatureHistogram(*feature->esf, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->esf, 1000);
             break;
         case DESCRIPTOR_TYPE_GASDEstimation:
             printI(QString("Estimate cloud[id:%1] GASDFeature done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("GASDEstimation");
-            m_plotter->addFeatureHistogram(*feature->gasd, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->gasd, 1000);
             break;
         case DESCRIPTOR_TYPE_GASDColorEstimation:
             printI(QString("Estimate cloud[id:%1] GASDColorFeature done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("GASDColorEstimation");
-            m_plotter->addFeatureHistogram(*feature->gasdc, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->gasdc, 1000);
             break;
         case DESCRIPTOR_TYPE_RSDEstimation:
             printI(QString("Estimate cloud[id:%1] RSDEstimation done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("RSDEstimation");
-            // m_plotter->addFeatureHistogram(*feature->rsd, 1000);
+            // m_plotter->addFeatureHistogram(*result.feature->rsd, 1000);
             break;
         case DESCRIPTOR_TYPE_GRSDEstimation:
             printI(QString("Estimate cloud[id:%1] GRSDEstimation done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("GRSDEstimation");
-            m_plotter->addFeatureHistogram(*feature->grsd, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->grsd, 1000);
             break;
         case DESCRIPTOR_TYPE_CRHEstimation:
             printI(QString("Estimate cloud[id:%1] CRHEstimation done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("CRHEstimation");
-            m_plotter->addFeatureHistogram(*feature->crh, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->crh, 1000);
             break;
         case DESCRIPTOR_TYPE_CVFHEstimation:
             printI(QString("Estimate cloud[id:%1] CVFHEstimation done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("CVFHEstimation");
-            m_plotter->addFeatureHistogram(*feature->vfh, 1000);
+            m_plotter->addFeatureHistogram(*result.feature->vfh, 1000);
             break;
         case DESCRIPTOR_TYPE_ShapeContext3DEstimation:
             printI(QString("Estimate cloud[id:%1] ShapeContext3DEstimation done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("ShapeContext3DEstimation");
-            // m_plotter->addFeatureHistogram(*feature->sc3d, 1000);
+            // m_plotter->addFeatureHistogram(*result.feature->sc3d, 1000);
             break;
         case DESCRIPTOR_TYPE_SHOTEstimation:
             printI(QString("Estimate cloud[id:%1] SHOTFeature done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("SHOTEstimation");
-            // m_plotter->addFeatureHistogram(*feature->shot, 1000);
+            // m_plotter->addFeatureHistogram(*result.feature->shot, 1000);
             break;
         case DESCRIPTOR_TYPE_SHOTColorEstimation:
             printI(QString("Estimate cloud[id:%1] SHOTColorFeature done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("SHOTColorEstimation");
-            // m_plotter->addFeatureHistogram(*feature->shotc, 1000);
+            // m_plotter->addFeatureHistogram(*result.feature->shotc, 1000);
             break;
         case DESCRIPTOR_TYPE_UniqueShapeContext:
             printI(QString("Estimate cloud[id:%1] UniqueShapeContext done, take time %2 ms.").arg(id).arg(time));
             m_plotter->setTitle("UniqueShapeContext");
-            // m_plotter->addFeatureHistogram(*feature->usc, 1000);
+            // m_plotter->addFeatureHistogram(*result.feature->usc, 1000);
             break;
     }
     if (ui->check_show_histogram->isChecked())
@@ -338,8 +479,12 @@ void Descriptor::featureResult(const QString &id, const ct::FeatureType::Ptr &fe
     }
 }
 
-void Descriptor::lrfResult(const QString &id, const ct::ReferenceFrame::Ptr& cloud, float time)
+void Descriptor::handleLrfResult(const ct::LRFResult &result)
 {
+    m_cloudtree->closeProgress();
+    QString id = QString::fromStdString(result.id);
+    float time = result.time_ms;
+
     switch(ui->cbox_type->currentIndex())
     {
         case DESCRIPTOR_TYPE_BOARDLocalReferenceFrameEstimation:
@@ -352,6 +497,5 @@ void Descriptor::lrfResult(const QString &id, const ct::ReferenceFrame::Ptr& clo
             printI(QString("Estimate cloud[id:%1] SHOTLocalReferenceFrame done, take time %2 ms.").arg(id).arg(time));
             break;
     }
-    m_lrf_map[id.toStdString()] = cloud;
-    m_cloudtree->closeProgress();
+    m_lrf_map[result.id] = result.lrf;
 }

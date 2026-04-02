@@ -1,11 +1,14 @@
 //
-// Created by LBC on 2024/12/25.
+// Created by LBC on 2026/1/4.
 //
 
 // You may need to build the project (run Qt uic code generator) to get "ui_Filters.h" resolved
 
 #include "filters.h"
 #include "ui_filters.h"
+
+#include <QtConcurrent/QtConcurrent>
+#include <QFutureWatcher>
 
 #define FILTER_TYPE_PassThrough                         (0)
 #define FILTER_TYPE_VoxelGrid                           (1)
@@ -20,36 +23,14 @@
 #define FILTER_ADD_FLAG                     "filtered-"
 
 Filters::Filters(QWidget *parent) :
-        CustomDock(parent), ui(new Ui::Filters),
-        m_thread(this)
+        CustomDock(parent), ui(new Ui::Filters)
 {
     ui->setupUi(this);
-
-    qRegisterMetaType<std::string>("std::string &");
-    qRegisterMetaType<std::string>("std::string");
-    qRegisterMetaType<ct::ConditionBase::Ptr>("ConditionBase::Ptr &");
-    qRegisterMetaType<ct::ConditionBase::Ptr>("ConditionBase::Ptr");
 
     connect(ui->btn_preview, &QPushButton::clicked, this, &Filters::preview);
     connect(ui->btn_add, &QPushButton::clicked, this, &Filters::add);
     connect(ui->btn_apply, &QPushButton::clicked, this, &Filters::apply);
     connect(ui->btn_reset, &QPushButton::clicked, this, &Filters::reset);
-
-    m_filters = new ct::Filters;
-    m_filters->moveToThread(&m_thread);
-
-    connect(&m_thread, &QThread::finished, m_filters, &QObject::deleteLater);
-    connect(this, &Filters::PassThrough, m_filters, &ct::Filters::PassThrough);
-    connect(this, &Filters::VoxelGrid, m_filters, &ct::Filters::VoxelGrid);
-    connect(this, &Filters::ApproximateVoxelGrid, m_filters, &ct::Filters::ApproximateVoxelGrid);
-    connect(this, &Filters::StatisticalOutlierRemoval, m_filters, &ct::Filters::StatisticalOutlierRemoval);
-    connect(this, &Filters::RadiusOutlierRemoval, m_filters, &ct::Filters::RadiusOutlierRemoval);
-    connect(this, &Filters::ConditionalRemoval, m_filters, &ct::Filters::ConditionalRemoval);
-    connect(this, &Filters::GridMinimum, m_filters, &ct::Filters::GridMinimun);
-    connect(this, &Filters::LocalMaximum, m_filters, &ct::Filters::LocalMaximum);
-    connect(this, &Filters::ShadowPoints, m_filters, &ct::Filters::ShadowPoints);
-    connect(m_filters, &ct::Filters::filterResult, this, &Filters::filterResult);
-    m_thread.start();
 
     // ConditionalRemoval
     connect(ui->btn_add_con, &QPushButton::clicked, [=]
@@ -235,16 +216,63 @@ Filters::Filters(QWidget *parent) :
 }
 
 Filters::~Filters() {
-    // 请求线程m_thread停止运行，
-    m_thread.quit();
-    //
-    if (!m_thread.wait(3000))
-    {
-        // 如果m_thread线程没有在3s内退出，强制终止该线程，并再次调用wait方法确保主线程会等待m_thread线程彻底终止
-        m_thread.terminate();
-        m_thread.wait();
-    }
     delete ui;
+}
+
+void Filters::runFilter(std::function<ct::FilterResult()> filterFn, bool show_progress)
+{
+    if (show_progress) {
+        m_cloudtree->showProgress("Filtering PointCloud...");
+
+        // 通过 cancelRequested 信号设置取消标志
+        m_cancel = false;
+        if (m_cloudtree->m_processing_dialog) {
+            connect(m_cloudtree->m_processing_dialog, &ct::ProcessingDialog::cancelRequested,
+                    this, [this]() { m_cancel = true; }, Qt::UniqueConnection);
+        }
+    }
+
+    // 进度回调：跨线程安全地更新进度条
+    auto on_progress = [this](int pct) {
+        if (m_cloudtree->m_processing_dialog) {
+            QMetaObject::invokeMethod(m_cloudtree->m_processing_dialog, "setProgress",
+                                      Qt::QueuedConnection, Q_ARG(int, pct));
+        }
+    };
+
+    // 由于 filterFn 已经捕获了 cancel 和 on_progress，直接运行即可
+    // 对于非实时刷新模式，使用 QtConcurrent::run 异步执行
+    if (show_progress) {
+        auto future = QtConcurrent::run(filterFn);
+        auto* watcher = new QFutureWatcher<ct::FilterResult>(this);
+        connect(watcher, &QFutureWatcher<ct::FilterResult>::finished, this, [=]() {
+            m_cloudtree->closeProgress();
+            auto result = watcher->result();
+            handleFilterResult(result);
+            watcher->deleteLater();
+        });
+        watcher->setFuture(future);
+    } else {
+        // 实时刷新模式：直接同步调用（不显示进度条）
+        auto result = filterFn();
+        handleFilterResult(result);
+    }
+}
+
+void Filters::handleFilterResult(const ct::FilterResult& result)
+{
+    if (!result.result_cloud) return;
+
+    auto cloud = result.result_cloud;
+
+    printI(QString("Filter cloud[id:%1] done, take time %2 ms.").arg(QString::fromStdString(cloud->id())).arg(result.time_ms));
+    std::string id = cloud->id();
+    cloud->setId(id + FILTER_PRE_FLAG);
+
+    m_cloudview->addPointCloud(cloud);
+    m_cloudview->setPointCloudColor(QString::fromStdString(cloud->id()), ct::Color::Green);
+    m_cloudview->setPointCloudSize(QString::fromStdString(cloud->id()), cloud->pointSize() + 2);
+    m_filter_map[id] = cloud;
 }
 
 void Filters::preview()
@@ -255,57 +283,105 @@ void Filters::preview()
         printW("Please select a cloud!");
         return;
     }
+
+    bool show_progress = !ui->check_refresh->isChecked();
+    bool negative = ui->check_reverse->isChecked();
+
     for (auto& cloud : selected_clouds)
     {
-        // 为滤波器设置输入点云
-        m_filters->setInputCloud(cloud);
-        m_filters->setNegative(ui->check_reverse->isChecked());
+        // 进度回调（用于异步模式）
+        auto on_progress = [this](int pct) {
+            if (m_cloudtree->m_processing_dialog) {
+                QMetaObject::invokeMethod(m_cloudtree->m_processing_dialog, "setProgress",
+                                          Qt::QueuedConnection, Q_ARG(int, pct));
+            }
+        };
 
-        if (!ui->check_refresh->isChecked()){
-            //非实时刷新
-            m_cloudtree->showProgress("Filtering PointCloud...");
-            m_cloudtree->bindWorker(m_filters);
-        }
-
-        // 判断滤波类型，并发射对应滤波信号
+        // 判断滤波类型，构建对应的静态方法调用
         switch (ui->cbox_type->currentIndex()) {
             case FILTER_TYPE_PassThrough:
+            {
                 m_cloudview->showInfo("PassThrough", 1);
-                emit PassThrough(ui->cbox_field_name->currentText().toStdString(), (float)ui->slider_min->value() / 1000, (float)ui->slider_max->value() / 1000);
+                std::string field = ui->cbox_field_name->currentText().toStdString();
+                float min_val = (float)ui->slider_min->value() / 1000;
+                float max_val = (float)ui->slider_max->value() / 1000;
+                runFilter([cloud, field, min_val, max_val, negative, this, on_progress]() {
+                    return ct::Filters::PassThrough(cloud, field, min_val, max_val, negative, &m_cancel, on_progress);
+                }, show_progress);
                 break;
+            }
             case FILTER_TYPE_VoxelGrid:
+            {
                 m_cloudview->showInfo("VoxelGrid", 1);
-                emit VoxelGrid(ui->dspin_leafx->value(), ui->dspin_leafy->value(), ui->dspin_leafz->value());
+                float lx = ui->dspin_leafx->value();
+                float ly = ui->dspin_leafy->value();
+                float lz = ui->dspin_leafz->value();
+                runFilter([cloud, lx, ly, lz, negative, this, on_progress]() {
+                    return ct::Filters::VoxelGrid(cloud, lx, ly, lz, negative, &m_cancel, on_progress);
+                }, show_progress);
                 break;
+            }
             case FILTER_TYPE_StatisticalOutlierRemoval:
+            {
                 m_cloudview->showInfo("StatisticalOutlierRemoval", 1);
-                emit StatisticalOutlierRemoval(ui->spin_meank->value(), ui->dspin_stddevmulthresh->value());
+                int nr_k = ui->spin_meank->value();
+                double stddev = ui->dspin_stddevmulthresh->value();
+                runFilter([cloud, nr_k, stddev, negative, this, on_progress]() {
+                    return ct::Filters::StatisticalOutlierRemoval(cloud, nr_k, stddev, negative, &m_cancel, on_progress);
+                }, show_progress);
                 break;
+            }
             case FILTER_TYPE_RadiusOutlierRemoval:
+            {
                 m_cloudview->showInfo("RadiusOutlierRemoval", 1);
-                emit RadiusOutlierRemoval(ui->dspin_radius->value(), ui->spin_minneiborsinradius->value());
+                double radius = ui->dspin_radius->value();
+                int min_pts = ui->spin_minneiborsinradius->value();
+                runFilter([cloud, radius, min_pts, negative, this, on_progress]() {
+                    return ct::Filters::RadiusOutlierRemoval(cloud, radius, min_pts, negative, &m_cancel, on_progress);
+                }, show_progress);
                 break;
+            }
             case FILTER_TYPE_ConditionalRemoval:
+            {
                 m_cloudview->showInfo("ConditionalRemoval", 1);
-                emit ConditionalRemoval(this->getCondition());
+                auto con = this->getCondition();
+                runFilter([cloud, con, negative, this, on_progress]() {
+                    return ct::Filters::ConditionalRemoval(cloud, con, negative, &m_cancel, on_progress);
+                }, show_progress);
                 break;
+            }
             case FILTER_TYPE_GridMinimum:
+            {
                 m_cloudview->showInfo("GridMinimum", 1);
-                emit GridMinimum(ui->dspin_resolution->value());
+                float resolution = ui->dspin_resolution->value();
+                runFilter([cloud, resolution, negative, this, on_progress]() {
+                    return ct::Filters::GridMinimun(cloud, resolution, negative, &m_cancel, on_progress);
+                }, show_progress);
                 break;
+            }
             case FILTER_TYPE_LocalMaximum:
+            {
                 m_cloudview->showInfo("LocalMaximum", 1);
-                emit LocalMaximum(ui->dspin_radius_3->value());
+                float radius = ui->dspin_radius_3->value();
+                runFilter([cloud, radius, negative, this, on_progress]() {
+                    return ct::Filters::LocalMaximum(cloud, radius, negative, &m_cancel, on_progress);
+                }, show_progress);
                 break;
+            }
             case FILTER_TYPE_ShadowPoints:
+            {
                 if (cloud->hasNormals())
                 {
                     printW("Please estimate normals first!");
                     return;
                 }
                 m_cloudview->showInfo("ShadowPoints", 1);
-                emit ShadowPoints(ui->dspin_threshold->value());
+                float threshold = ui->dspin_threshold->value();
+                runFilter([cloud, threshold, negative, this, on_progress]() {
+                    return ct::Filters::ShadowPoints(cloud, threshold, negative, &m_cancel, on_progress);
+                }, show_progress);
                 break;
+            }
         }
     }
 }
@@ -374,23 +450,6 @@ void Filters::reset()
         m_cloudview->removePointCloud(QString::fromStdString(cloud.second->id()));
     m_filter_map.clear();
     m_cloudview->clearInfo();
-}
-
-void Filters::filterResult(const ct::Cloud::Ptr &cloud, float time)
-{
-    if (!ui->check_refresh->isChecked()){
-        m_cloudtree->closeProgress();
-    }
-
-    // 传入的参数cloud是滤波之后的结果
-    printI(QString("Filter cloud[id:%1] done, take time %2 ms.").arg(QString::fromStdString(cloud->id())).arg(time));
-    std::string id = cloud->id();
-    cloud->setId(id + FILTER_PRE_FLAG);
-
-    m_cloudview->addPointCloud(cloud);
-    m_cloudview->setPointCloudColor(QString::fromStdString(cloud->id()), ct::Color::Green);
-    m_cloudview->setPointCloudSize(QString::fromStdString(cloud->id()), cloud->pointSize() + 2);
-    m_filter_map[id] = cloud;
 }
 
 ct::ConditionBase::Ptr Filters::getCondition()

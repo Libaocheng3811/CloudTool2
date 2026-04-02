@@ -7,34 +7,22 @@
 #include "vegplugin.h"
 #include "ui_vegplugin.h"
 
+#include <QtConcurrent/QtConcurrent>
+#include <QFutureWatcher>
+
 
 VegPlugin::VegPlugin(QWidget *parent) :
-        ct::CustomDialog(parent), ui(new Ui::VegPlugin), m_thread(this) {
+        ct::CustomDialog(parent), ui(new Ui::VegPlugin) {
     ui->setupUi(this);
 
-    qRegisterMetaType<ct::Cloud::Ptr>();
-
-    m_filter = new ct::VegetationFilter(nullptr);
-    m_filter->moveToThread(&m_thread);
-    connect(&m_thread, &QThread::finished, m_filter, &QObject::deleteLater);
-
-    // 连接信号
-    connect(this, &VegPlugin::requestVegFilter, m_filter, &ct::VegetationFilter::applyVegFilter);
-    connect(m_filter, &ct::VegetationFilter::filterResult, this, &VegPlugin::onFilterDone);
     connect(ui->m_comboType, SIGNAL(currentIndexChanged(int)), this, SLOT(onIndexChanged(int)));
     connect(ui->m_btnOk, &QPushButton::clicked, this, &VegPlugin::onApply);
     connect(ui->m_btnCancel, &QPushButton::clicked, this, &QDialog::reject);
 
-    m_thread.start();
     onIndexChanged(0);
 }
 
 VegPlugin::~VegPlugin() {
-    m_thread.quit();
-    if (!m_thread.wait(3000)){
-        m_thread.terminate();
-        m_thread.wait();
-    }
     delete ui;
 }
 
@@ -46,9 +34,9 @@ void VegPlugin::init() {
         return;
     }
     m_cloud = selection.front();
-    m_filter->setInputCloud(m_cloud);
     ui->m_btnOk->setEnabled(true);
 }
+
 void VegPlugin::onIndexChanged(int index) {
     QString info;
     switch (index) {
@@ -97,32 +85,57 @@ void VegPlugin::onApply() {
     this->hide();
 
     m_cloudtree->showProgress("Vegetation Filter...");
-    m_cloudtree->bindWorker(m_filter);
 
-    emit requestVegFilter(ui->m_comboType->currentIndex(), ui->m_dsThreshold->value());
-}
-
-void VegPlugin::onFilterDone(const ct::Cloud::Ptr &veg_cloud, const ct::Cloud::Ptr &non_veg_cloud,
-                             float time) {
-    m_cloudtree->closeProgress();
-    printI(QString("Vegetation Filter Finished in %1 s").arg(time));
-
-    if (veg_cloud) {
-        veg_cloud->setId(m_cloud->id() + "_vegetation");
-        if (!veg_cloud->empty()) veg_cloud->makeAdaptive();
+    // 通过 cancelRequested 信号设置取消标志
+    auto* cancel = new std::atomic<bool>(false);
+    if (m_cloudtree->m_processing_dialog) {
+        connect(m_cloudtree->m_processing_dialog, &ct::ProcessingDialog::cancelRequested,
+                this, [cancel]() { *cancel = true; });
     }
 
-    if (non_veg_cloud) {
-        non_veg_cloud->setId(m_cloud->id() + "_non_vegetation");
-        if (!non_veg_cloud->empty()) non_veg_cloud->makeAdaptive();
-    }
+    // 进度回调：跨线程安全地更新进度条
+    auto on_progress = [this](int pct) {
+        QMetaObject::invokeMethod(m_cloudtree->m_processing_dialog, "setProgress",
+                                  Qt::QueuedConnection, Q_ARG(int, pct));
+    };
 
-    std::vector<ct::Cloud::Ptr> results;
-    results.push_back(veg_cloud);
-    results.push_back(non_veg_cloud);
+    int type = ui->m_comboType->currentIndex();
+    double threshold = ui->m_dsThreshold->value();
+    auto cloud = m_cloud;
 
-    QString groupName = QString::fromStdString(m_cloud->id()) + "_Vegetation";
-    m_cloudtree->addResultGroup(m_cloud, results, groupName);
+    auto future = QtConcurrent::run([cloud, type, threshold, cancel, on_progress]() {
+        return ct::VegetationFilter::apply(cloud, type, threshold, cancel, on_progress);
+    });
 
-    this->accept();
+    auto* watcher = new QFutureWatcher<ct::VegResult>(this);
+    connect(watcher, &QFutureWatcher<ct::VegResult>::finished, this, [=]() {
+        auto result = watcher->result();
+        m_cloudtree->closeProgress();
+        delete cancel;
+        printI(QString("Vegetation Filter Finished in %1 s").arg(result.time_ms));
+
+        auto veg_cloud = result.veg_cloud;
+        auto non_veg_cloud = result.non_veg_cloud;
+
+        if (veg_cloud) {
+            veg_cloud->setId(m_cloud->id() + "_vegetation");
+            if (!veg_cloud->empty()) veg_cloud->makeAdaptive();
+        }
+
+        if (non_veg_cloud) {
+            non_veg_cloud->setId(m_cloud->id() + "_non_vegetation");
+            if (!non_veg_cloud->empty()) non_veg_cloud->makeAdaptive();
+        }
+
+        std::vector<ct::Cloud::Ptr> results;
+        results.push_back(veg_cloud);
+        results.push_back(non_veg_cloud);
+
+        QString groupName = QString::fromStdString(m_cloud->id()) + "_Vegetation";
+        m_cloudtree->addResultGroup(m_cloud, results, groupName);
+
+        this->accept();
+        watcher->deleteLater();
+    });
+    watcher->setFuture(future);
 }
