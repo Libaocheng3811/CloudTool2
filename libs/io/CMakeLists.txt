@@ -12,3 +12,5 @@ target_link_libraries(ct_io
     PRIVATE
         LASlib
 )
+
+target_compile_definitions(ct_io PRIVATE CT_BUILDING_CT_IO)

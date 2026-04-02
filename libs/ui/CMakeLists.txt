@@ -1,37 +1,37 @@
-# Dialog library (common UI components)
+# Dialog components
 file(GLOB Dialog_SOURCES CONFIGURE_DEPENDS "dialog/*.cpp")
 file(GLOB Dialog_HEADERS CONFIGURE_DEPENDS "dialog/*.h")
 file(GLOB Dialog_FORMS CONFIGURE_DEPENDS "dialog/*.ui")
 
-add_library(ct_common_ui STATIC ${Dialog_SOURCES} ${Dialog_HEADERS} ${Dialog_FORMS})
+add_library(ct_ui_dialog STATIC ${Dialog_SOURCES} ${Dialog_HEADERS} ${Dialog_FORMS})
 
-target_include_directories(ct_common_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(ct_ui_dialog PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(ct_common_ui PUBLIC
+target_link_libraries(ct_ui_dialog PUBLIC
     ct_core
     Qt${QT_VERSION_MAJOR}::Widgets
 )
 
-# Widget library (base classes + cloudtree)
-set(Widget_Srcs
+# Base widget classes + cloudtree
+set(Base_Srcs
     base/customtree.cpp
     base/cloudtree.cpp
 )
 
-set(Widget_Hdrs
+set(Base_Hdrs
     base/customtree.h
     base/cloudtree.h
     base/customdock.h
     base/customdialog.h
 )
 
-add_library(ct_widget STATIC ${Widget_Srcs} ${Widget_Hdrs})
+add_library(ct_ui_base STATIC ${Base_Srcs} ${Base_Hdrs})
 
-target_include_directories(ct_widget PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(ct_ui_base PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(ct_widget
+target_link_libraries(ct_ui_base
     PUBLIC
-        ct_common_ui
+        ct_ui_dialog
         ct_core
         ct_viz
         ct_io

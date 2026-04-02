@@ -28,7 +28,7 @@ namespace ct
         float time_ms = 0;
     };
 
-    class CT_EXPORT Filters
+    class Filters
     {
     public:
         /* filter */

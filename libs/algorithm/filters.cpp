@@ -668,3 +668,19 @@ namespace ct
         return {cloud_filtered, (float)time.toc()};
     }
 }
+
+// 强制实例化 PCL 模板，解决 Windows 下 LNK2001
+#include <pcl/sample_consensus/model_types.h>
+
+// 基础几何模型
+#include <pcl/sample_consensus/impl/sac_model_plane.hpp>
+#include <pcl/sample_consensus/impl/sac_model_line.hpp>
+#include <pcl/sample_consensus/impl/sac_model_sphere.hpp>
+#include <pcl/sample_consensus/impl/sac_model_cylinder.hpp>
+#include <pcl/sample_consensus/impl/sac_model_cone.hpp>
+
+// 带有法线约束的几何模型
+#include <pcl/sample_consensus/impl/sac_model_normal_plane.hpp>
+#include <pcl/sample_consensus/impl/sac_model_normal_sphere.hpp>
+#include <pcl/sample_consensus/impl/sac_model_normal_parallel_plane.hpp>
+#include <pcl/sample_consensus/impl/sac_model_parallel_line.hpp>

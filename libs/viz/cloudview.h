@@ -42,7 +42,7 @@ namespace ct {
         QMap<QString, float> scalars;
     };
 
-    class CT_EXPORT CloudView : public QVTKOpenGLNativeWidget{
+    class CT_VIZ_EXPORT CloudView : public QVTKOpenGLNativeWidget{
         Q_OBJECT
     public:
         explicit CloudView(QWidget* parent = nullptr);

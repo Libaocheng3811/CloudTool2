@@ -205,7 +205,7 @@ namespace ct
          */
          void itemSelectionChangedEvent();
 
-         void onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result);
+         void onFieldMappingRequested(const QList<ct::FieldInfo>& fields, std::map<std::string, std::string>& result);
 
          void onTxtImportRequested(const QStringList& preview_lines, ct::TxtImportParams& params);
 
@@ -226,6 +226,8 @@ namespace ct
         QThread m_thread;
         FileIO* m_fileio;
         QMenu* m_tree_menu;
+
+    public:
         ProcessingDialog* m_processing_dialog = nullptr;
 
         Eigen::Vector3d m_last_shift = Eigen::Vector3d::Zero();
@@ -238,5 +240,13 @@ namespace ct
         QSet<QString> m_clouds_in_use;
     };
 }
+
+// Qt meta-type 声明 (跨线程信号/槽需要)
+Q_DECLARE_METATYPE(ct::Cloud::Ptr)
+using ct_StringFieldMap = std::map<std::string, std::string>;
+Q_DECLARE_METATYPE(ct_StringFieldMap)
+Q_DECLARE_METATYPE(ct::TxtImportParams)
+Q_DECLARE_METATYPE(ct::TxtExportParams)
+Q_DECLARE_METATYPE(Eigen::Vector3d)
 
 #endif //CLOUDTOOL2_CLOUDTREE_H

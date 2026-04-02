@@ -19,7 +19,7 @@ namespace ct{
         float time_ms = 0;
     };
 
-    class CT_EXPORT CSFFilter {
+    class CSFFilter {
     public:
         static CSFResult apply(const Cloud::Ptr& cloud,
                                 bool bSloopSmooth, float time_step, double class_threshold,

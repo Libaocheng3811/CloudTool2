@@ -120,10 +120,8 @@ void BoundingBox::preview()
         ui->dspin_rz->setValue(yaw);
         m_box_map[cloud->id()] = box;
     }
-}
-    }
-    this->adjustEnable(true);
 
+    this->adjustEnable(true);
 }
 
 void BoundingBox::apply()
@@ -181,17 +179,14 @@ void BoundingBox::adjustEnable(bool state)
     }
 }
 
-void BoundingBox::adjustBox(float r, float p, float y)
-{
-    for (auto& cloud : m_cloudtree->getSelectedClouds())
-    {
+void BoundingBox::adjustBox(float r, float p, float y) {
+    for (auto &cloud: m_cloudtree->getSelectedClouds()) {
         Eigen::Affine3f affine = ct::getTransformation(cloud->center()[0], cloud->center()[1], cloud->center()[2], r, p, y);
         ct::Box box = ct::Features::boundingBoxAdjust(cloud, affine.inverse());
         m_cloudview->addCube(box, QString::fromStdString(cloud->boxId()));
         m_cloudview->setShapeColor(QString::fromStdString(cloud->boxId()), ct::Color::Blue);
         m_cloudview->setShapeRepersentation(QString::fromStdString(cloud->boxId()), m_box_type);
-        switch (m_box_type)
-        {
+        switch (m_box_type) {
             case BOX_TYPE_POINTS:
                 m_cloudview->setShapeSize(QString::fromStdString(cloud->boxId()), 5);
                 break;
@@ -203,3 +198,7 @@ void BoundingBox::adjustBox(float r, float p, float y)
                 break;
         }
         m_box_map[cloud->id()] = box;
+
+        }
+
+    }

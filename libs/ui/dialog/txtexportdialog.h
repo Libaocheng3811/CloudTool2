@@ -45,7 +45,7 @@ namespace ct{
             for (int i = 0; i < m_listFields->count(); i++){
                 QListWidgetItem* item = m_listFields->item(i);
                 if (item->checkState() == Qt::Checked){
-                    params.selected_fields.append(item->text());
+                    params.selected_fields.push_back(item->text().toStdString());
                 }
             }
             return params;

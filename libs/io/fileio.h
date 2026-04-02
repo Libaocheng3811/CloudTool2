@@ -58,7 +58,7 @@ namespace ct
         }
     };
 
-    class CT_EXPORT FileIO : public QObject
+    class CT_IO_EXPORT FileIO : public QObject
     {
         Q_OBJECT
     public:
@@ -81,7 +81,7 @@ namespace ct
         * @param fields 文件中探测到的字段列表
         * @param result 用户选择的映射结果 (引用传出)
         */
-        void requestFieldMapping(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result);
+        void requestFieldMapping(const QList<ct::FieldInfo>& fields, std::map<std::string, std::string>& result);
 
         /**
          * @brief 显示映射对话框 (阻塞式)

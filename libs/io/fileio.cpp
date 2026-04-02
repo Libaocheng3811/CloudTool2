@@ -16,6 +16,9 @@
 #include <cstdlib>
 #include <algorithm> // std::find
 
+#include <QFileInfo>
+#include <QDir>
+
 namespace ct
 {
     class FastLineParser {
@@ -205,13 +208,16 @@ namespace ct
         // 准备字段信息
         QList<ct::FieldInfo> fields_info;
         for (const auto &f: blob.fields) {
-            fields_info.append({QString::fromStdString(f.name), getPCLFieldType(f.datatype)});
+            ct::FieldInfo fi;
+            fi.name = f.name;
+            fi.type = getPCLFieldType(f.datatype).toStdString();
+            fields_info.append(fi);
         }
 
         // 请求 UI, mapping_result是用户选择的映射结果，Key是原字段名，Value是映射后的字段名
-        QMap<QString, QString> mapping_result;
+        std::map<std::string, std::string> mapping_result;
         emit requestFieldMapping(fields_info, mapping_result);
-        if (mapping_result.isEmpty()) return false; // 用户取消
+        if (mapping_result.empty()) return false; // 用户取消
 
         size_t total_points = blob.width * blob.height;
         if (total_points == 0) return false;
@@ -310,9 +316,9 @@ namespace ct
         bool use_packed_color = false;  // 标记是否使用打包颜色
         for (const auto& f : blob.fields) {
             QString fname = QString::fromStdString(f.name);
-            if (!mapping_result.contains(fname)) continue;
+            if (mapping_result.find(f.name) == mapping_result.end()) continue;
 
-            QString action = mapping_result[fname];
+            QString action = QString::fromStdString(mapping_result.at(f.name));
             if (action == "Scalar Field" || action == "Intensity") {
                 QString saveName = (action == "Intensity") ? "Intensity" : fname;
                 tasks.push_back({ExtractInfo::Scalar, saveName, (int)f.offset, f.datatype});
@@ -485,7 +491,7 @@ namespace ct
         // 阻塞调用 UI 获取列映射
         emit requestTxtImportSetup(preview_lines, params);
 
-        if (params.col_map.isEmpty()) return false; // 用户取消
+        if (params.col_map.empty()) return false; // 用户取消
 
         // 验证必要字段 X, Y, Z
         int idx_x = -1, idx_y = -1, idx_z = -1;
@@ -496,11 +502,11 @@ namespace ct
         std::vector<std::pair<int, QString>> scalar_indices;
 
         for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it) {
-            int col = it.key() - 1; // 转换为 0-based 索引 (通常 UI 可能是 1-based，请根据实际 TxtImportParams 调整)
+            int col = it->first - 1; // 转换为 0-based 索引 (通常 UI 可能是 1-based，请根据实际 TxtImportParams 调整)
             // 假设 params.col_map 的 key 是 0-based 的列索引：
-            col = it.key();
+            col = it->first;
 
-            QString type = it.value();
+            std::string type = it->second;
             if (type == "x") idx_x = col;
             else if (type == "y") idx_y = col;
             else if (type == "z") idx_z = col;
@@ -511,7 +517,7 @@ namespace ct
             else if (type == "ny") idx_ny = col;
             else if (type == "nz") idx_nz = col;
             else if (type != "ignore") {
-                scalar_indices.push_back({col, type});
+                scalar_indices.push_back({col, QString::fromStdString(type)});
             }
         }
 
@@ -742,7 +748,7 @@ namespace ct
 
         ct::TxtImportParams params;
         emit requestTxtImportSetup(preview_lines, params);
-        if (params.col_map.isEmpty()) return false; // 用户取消
+        if (params.col_map.empty()) return false; // 用户取消
 
         bool has_x = false, has_y = false, has_z = false;
         for(auto val : params.col_map) {
@@ -750,7 +756,7 @@ namespace ct
             if(val == "y") has_y = true;
             if(val == "z") has_z = true;
         }
-        if (params.col_map.isEmpty() || !has_x || !has_y || !has_z) return false;
+        if (params.col_map.empty() || !has_x || !has_y || !has_z) return false;
 
         // 跳过 header lines
         for(int i=0; i<params.skip_lines; ++i) std::getline(file, line);
@@ -772,9 +778,9 @@ namespace ct
         // 优化：使用局部变量减少 map 查找
         int idx_x = -1, idx_y = -1, idx_z = -1;
         for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it) {
-            if (it.value() == "x") idx_x = it.key();
-            if (it.value() == "y") idx_y = it.key();
-            if (it.value() == "z") idx_z = it.key();
+            if (it->second == "x") idx_x = it->first;
+            if (it->second == "y") idx_y = it->first;
+            if (it->second == "z") idx_z = it->first;
         }
 
         while (std::getline(file, line)) {
@@ -861,18 +867,18 @@ namespace ct
         // 预解析列映射
         int idx_r = -1, idx_g = -1, idx_b = -1;
         int idx_nx = -1, idx_ny = -1, idx_nz = -1;
-        QMap<int, QString> scalar_map; // col_index -> name
+        std::map<int, std::string> scalar_map; // col_index -> name
 
         for (auto it = params.col_map.begin(); it != params.col_map.end(); ++it) {
-            QString type = it.value();
-            if (type == "r") idx_r = it.key();
-            else if (type == "g") idx_g = it.key();
-            else if (type == "b") idx_b = it.key();
-            else if (type == "nx") idx_nx = it.key();
-            else if (type == "ny") idx_ny = it.key();
-            else if (type == "nz") idx_nz = it.key();
+            const std::string& type = it->second;
+            if (type == "r") idx_r = it->first;
+            else if (type == "g") idx_g = it->first;
+            else if (type == "b") idx_b = it->first;
+            else if (type == "nx") idx_nx = it->first;
+            else if (type == "ny") idx_ny = it->first;
+            else if (type == "nz") idx_nz = it->first;
             else if (type != "x" && type != "y" && type != "z" && type != "ignore") {
-                scalar_map.insert(it.key(), type);
+                scalar_map[it->first] = type;
             }
         }
 
@@ -927,8 +933,8 @@ namespace ct
 
                 // 解析 Scalar Fields
                 for (auto it = scalar_map.begin(); it != scalar_map.end(); ++it) {
-                    int col_idx = it.key();
-                    const std::string sname = it.value().toStdString();
+                    int col_idx = it->first;
+                    const std::string& sname = it->second;
                     if (col_idx < parts.size()) {
                         batch.scalars[sname].push_back(parts[col_idx].toFloat());
                     } else {
@@ -1334,7 +1340,7 @@ namespace ct
         // 请求 UI 配置 (阻塞式)
         ct::TxtExportParams params;
         emit requestTxtExportSetup(available_fields, params);
-        if (params.selected_fields.isEmpty()) return false; // 用户取消
+        if (params.selected_fields.empty()) return false; // 用户取消
 
         // 打开文件
         std::ofstream file(filename.toLocal8Bit().constData());
@@ -1351,7 +1357,7 @@ namespace ct
         // 写入 Header (可选)
         if (params.has_header) {
             for (int i = 0; i < params.selected_fields.size(); i++){
-                file << params.selected_fields[i].toStdString();
+                file << params.selected_fields[i];
                 if (i < params.selected_fields.size() - 1) file << params.separator;
             }
             file << "\n";
@@ -1368,7 +1374,7 @@ namespace ct
         std::vector<FieldDesc> field_descs;
         field_descs.reserve(params.selected_fields.size());
 
-        for (const QString& f : params.selected_fields){
+        for (const std::string& f : params.selected_fields){
             if (f == "x") field_descs.push_back({FieldDesc::XYZ, 0, ""});
             else if (f == "y") field_descs.push_back({FieldDesc::XYZ, 1, ""});
             else if (f == "z") field_descs.push_back({FieldDesc::XYZ, 2, ""});
@@ -1379,7 +1385,7 @@ namespace ct
             else if (f == "ny") field_descs.push_back({FieldDesc::Normal, 1, ""});
             else if (f == "nz") field_descs.push_back({FieldDesc::Normal, 2, ""});
             else {
-                field_descs.push_back({FieldDesc::Scalar, 0, f});
+                field_descs.push_back({FieldDesc::Scalar, 0, QString::fromStdString(f)});
             }
         }
 

@@ -606,7 +606,7 @@ namespace ct
                                                 batch_scalars.empty() ? nullptr : &batch_scalars);
 
                         batch_pts.clear(); batch_colors.clear(); batch_normals.clear();
-                        for(auto& v : batch_scalars) v.clear();
+                        for(auto& v : batch_scalars) v.second.clear();
                     }
                 }
             }

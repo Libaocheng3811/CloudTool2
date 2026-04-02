@@ -43,7 +43,7 @@
 namespace ct
 {
     // 通过反向投影（Back Projection）方法来计算源点云和目标点云之间的对应关系
-    Registration::CorrespondenceResult Registration::CorrespondenceEstimationBackProjection(const RegistrationContext& ctx, int k,
+    CorrespondenceResult Registration::CorrespondenceEstimationBackProjection(const RegistrationContext& ctx, int k,
                                                                                             std::atomic<bool>* cancel,
                                                                                             std::function<void(int)> on_progress)
     {
@@ -81,7 +81,7 @@ namespace ct
     }
 
     // 通过法线射线（Normal Shooting）的方法来计算源点云和目标点云之间的对应关系
-    Registration::CorrespondenceResult Registration::CorrespondenceEstimationNormalShooting(const RegistrationContext& ctx, int k,
+    CorrespondenceResult Registration::CorrespondenceEstimationNormalShooting(const RegistrationContext& ctx, int k,
                                                                                            std::atomic<bool>* cancel,
                                                                                            std::function<void(int)> on_progress)
     {
@@ -118,7 +118,7 @@ namespace ct
     }
 
     // 通过有序投影（Organized Projection）的方法来计算源点云和目标点云之间的对应关系
-    Registration::CorrespondenceResult Registration::CorrespondenceEstimationOrganizedProjection(
+    CorrespondenceResult Registration::CorrespondenceEstimationOrganizedProjection(
             const RegistrationContext& ctx, float fx, float fy, float cx, float cy,
             const Eigen::Matrix4f& src_to_tgt_trans, float depth_threshold,
             std::atomic<bool>* cancel, std::function<void(int)> on_progress)
@@ -179,7 +179,7 @@ namespace ct
     }
 
     // 基于给定的最大距离阈值来过滤源点云和目标点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectorDistance(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectorDistance(const RegistrationContext& ctx,
                                                                              const CorrespondencesPtr& input_corr, float distance,
                                                                              std::atomic<bool>* cancel,
                                                                              std::function<void(int)> on_progress)
@@ -214,7 +214,7 @@ namespace ct
     }
 
     // 通过中位数距离过滤方法来过滤源点云和目标点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectorMedianDistance(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectorMedianDistance(const RegistrationContext& ctx,
                                                                                    const CorrespondencesPtr& input_corr, double factor,
                                                                                    std::atomic<bool>* cancel,
                                                                                    std::function<void(int)> on_progress)
@@ -249,7 +249,7 @@ namespace ct
     }
 
     // 通过一对一对应关系拒绝器来过滤源点云和目标点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectorOneToOne(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectorOneToOne(const RegistrationContext& ctx,
                                                                              const CorrespondencesPtr& input_corr,
                                                                              std::atomic<bool>* cancel,
                                                                              std::function<void(int)> on_progress)
@@ -276,7 +276,7 @@ namespace ct
     }
 
     // 通过有序边界对应关系拒绝器来过滤源点云和目标点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectionOrganizedBoundary(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectionOrganizedBoundary(const RegistrationContext& ctx,
                                                                                         const CorrespondencesPtr& input_corr, int val,
                                                                                         std::atomic<bool>* cancel,
                                                                                         std::function<void(int)> on_progress)
@@ -310,7 +310,7 @@ namespace ct
     }
 
     // 通过多边形点对过滤方法来过滤源点云和目标点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectorPoly(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectorPoly(const RegistrationContext& ctx,
                                                                           const CorrespondencesPtr& input_corr,
                                                                           int cardinality, float similarity_threshold, int iterations,
                                                                           std::atomic<bool>* cancel,
@@ -348,7 +348,7 @@ namespace ct
     }
 
     // 通过样本一致性拒绝器来过滤源点云和目标点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectorSampleConsensus(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectorSampleConsensus(const RegistrationContext& ctx,
                                                                                      const CorrespondencesPtr& input_corr,
                                                                                      double threshold, int max_iterations, bool refine,
                                                                                      std::atomic<bool>* cancel,
@@ -386,7 +386,7 @@ namespace ct
     }
 
     // 通过表面法线一致性来过滤点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectorSurfaceNormal(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectorSurfaceNormal(const RegistrationContext& ctx,
                                                                                    const CorrespondencesPtr& input_corr, double threshold,
                                                                                    std::atomic<bool>* cancel,
                                                                                    std::function<void(int)> on_progress)
@@ -422,7 +422,7 @@ namespace ct
     }
 
     // 通过修剪对应关系的方式来过滤点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectorTrimmed(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectorTrimmed(const RegistrationContext& ctx,
                                                                              const CorrespondencesPtr& input_corr,
                                                                              float ratio, int min_corre,
                                                                              std::atomic<bool>* cancel,
@@ -448,7 +448,7 @@ namespace ct
     }
 
     // 通过可变修剪（Variable Trimmed）方法过滤点云之间的对应关系
-    Registration::RejectorResult Registration::CorrespondenceRejectorVarTrimmed(const RegistrationContext& ctx,
+    RejectorResult Registration::CorrespondenceRejectorVarTrimmed(const RegistrationContext& ctx,
                                                                                const CorrespondencesPtr& input_corr,
                                                                                double min_ratio, double max_ratio,
                                                                                std::atomic<bool>* cancel,
@@ -485,7 +485,7 @@ namespace ct
     }
 
     // 用GICP（广义迭代最近点）算法将源点云对齐到目标点云
-    Registration::RegistrationResult Registration::GeneralizedIterativeClosestPoint(const RegistrationContext& ctx,
+    RegistrationResult Registration::GeneralizedIterativeClosestPoint(const RegistrationContext& ctx,
                                                                                    int k, int max, double tra_tolerance,
                                                                                    double rol_tolerance, bool use_recip_corre,
                                                                                    std::atomic<bool>* cancel,
@@ -542,7 +542,7 @@ namespace ct
     }
 
     // 通过FPCS算法将源点云对齐到目标点云
-    Registration::RegistrationResult Registration::FPCSInitialAlignment(const RegistrationContext& ctx,
+    RegistrationResult Registration::FPCSInitialAlignment(const RegistrationContext& ctx,
                                                                          float delta, bool normalize, float approx_overlap,
                                                                          float score_threshold, int nr_samples,
                                                                          float max_norm_diff, int max_runtime,
@@ -604,7 +604,7 @@ namespace ct
                 reg.getFinalTransformation(), (float)time.toc()};
     }
 
-    Registration::RegistrationResult Registration::KFPCSInitialAlignment(const RegistrationContext& ctx,
+    RegistrationResult Registration::KFPCSInitialAlignment(const RegistrationContext& ctx,
                                                                           float delta, bool normalize, float approx_overlap, float score_threshold,
                                                                           int nr_samples, float max_norm_diff, int max_runtime,
                                                                           float upper_trl_boundary, float lower_trl_boundary, float lambda,
@@ -669,7 +669,7 @@ namespace ct
                 reg.getFinalTransformation(), (float)time.toc()};
     }
 
-    Registration::RegistrationResult Registration::IterativeClosestPoint(const RegistrationContext& ctx,
+    RegistrationResult Registration::IterativeClosestPoint(const RegistrationContext& ctx,
                                                                          bool use_recip_corre,
                                                                          std::atomic<bool>* cancel,
                                                                          std::function<void(int)> on_progress)
@@ -721,7 +721,7 @@ namespace ct
                 reg.getFinalTransformation(), (float)time.toc()};
     }
 
-    Registration::RegistrationResult Registration::IterativeClosestPointWithNormals(const RegistrationContext& ctx,
+    RegistrationResult Registration::IterativeClosestPointWithNormals(const RegistrationContext& ctx,
                                                                                     bool use_recip_corre, bool use_symmetric_objective,
                                                                                     bool enforce_same_direction_normals,
                                                                                     std::atomic<bool>* cancel,
@@ -776,7 +776,7 @@ namespace ct
                 reg.getFinalTransformation(), (float)time.toc()};
     }
 
-    Registration::RegistrationResult Registration::IterativeClosestPointNonLinear(const RegistrationContext& ctx,
+    RegistrationResult Registration::IterativeClosestPointNonLinear(const RegistrationContext& ctx,
                                                                                   bool use_recip_corre,
                                                                                   std::atomic<bool>* cancel,
                                                                                   std::function<void(int)> on_progress)
@@ -828,7 +828,7 @@ namespace ct
                 reg.getFinalTransformation(), (float)time.toc()};
     }
 
-    Registration::RegistrationResult Registration::NormalDistributionsTransform(const RegistrationContext& ctx,
+    RegistrationResult Registration::NormalDistributionsTransform(const RegistrationContext& ctx,
                                                                                  float resolution,
                                                                                  double step_size,
                                                                                  double outlier_ratio,
@@ -884,7 +884,7 @@ namespace ct
                 reg.getFinalTransformation(), (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimation2D(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimation2D(const RegistrationContext& ctx,
                                                                                  const CorrespondencesPtr& input_corr,
                                                                                  std::atomic<bool>* cancel,
                                                                                  std::function<void(int)> on_progress)
@@ -908,7 +908,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimation3Point(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimation3Point(const RegistrationContext& ctx,
                                                                                      const CorrespondencesPtr& input_corr,
                                                                                      std::atomic<bool>* cancel,
                                                                                      std::function<void(int)> on_progress)
@@ -932,7 +932,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimationDualQuaternion(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimationDualQuaternion(const RegistrationContext& ctx,
                                                                                              const CorrespondencesPtr& input_corr,
                                                                                              std::atomic<bool>* cancel,
                                                                                              std::function<void(int)> on_progress)
@@ -956,7 +956,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimationLM(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimationLM(const RegistrationContext& ctx,
                                                                                  const CorrespondencesPtr& input_corr,
                                                                                  std::atomic<bool>* cancel,
                                                                                  std::function<void(int)> on_progress)
@@ -980,7 +980,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimationPointToPlane(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimationPointToPlane(const RegistrationContext& ctx,
                                                                                             const CorrespondencesPtr& input_corr,
                                                                                             std::atomic<bool>* cancel,
                                                                                             std::function<void(int)> on_progress)
@@ -1004,7 +1004,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimationPointToPlaneLLS(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimationPointToPlaneLLS(const RegistrationContext& ctx,
                                                                                               const CorrespondencesPtr& input_corr,
                                                                                               std::atomic<bool>* cancel,
                                                                                               std::function<void(int)> on_progress)
@@ -1028,7 +1028,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimationPointToPlaneLLSWeighted(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimationPointToPlaneLLSWeighted(const RegistrationContext& ctx,
                                                                                                      const CorrespondencesPtr& input_corr,
                                                                                                      std::atomic<bool>* cancel,
                                                                                                      std::function<void(int)> on_progress)
@@ -1052,7 +1052,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimationPointToPlaneWeighted(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimationPointToPlaneWeighted(const RegistrationContext& ctx,
                                                                                                  const CorrespondencesPtr& input_corr,
                                                                                                  std::atomic<bool>* cancel,
                                                                                                  std::function<void(int)> on_progress)
@@ -1076,7 +1076,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimationSVD(const RegistrationContext& ctx,
+    TransformationResult Registration::TransformationEstimationSVD(const RegistrationContext& ctx,
                                                                                  const CorrespondencesPtr& input_corr,
                                                                                  std::atomic<bool>* cancel,
                                                                                  std::function<void(int)> on_progress)
@@ -1100,7 +1100,7 @@ namespace ct
         return {matrix, nullptr, (float)time.toc()};
     }
 
-    Registration::TransformationResult Registration::TransformationEstimationSymmetricPointToPlaneLLS(
+    TransformationResult Registration::TransformationEstimationSymmetricPointToPlaneLLS(
             const RegistrationContext& ctx, const CorrespondencesPtr& input_corr,
             bool enforce_same_direction_normals,
             std::atomic<bool>* cancel, std::function<void(int)> on_progress)
@@ -1128,11 +1128,10 @@ namespace ct
     void Registration::TransformationValidationEuclidean(const RegistrationContext& ctx,
                                                           const pcl::Correspondence& corr, bool from_normals)
     {
-        pcl::registration::TransformationValidationEuclidean<PointXYZRGBN, PointXYZRGBN> te;
-
-        auto source_pcl = ctx.source_cloud->toPCL_XYZRGBN();
-        auto target_pcl = ctx.target_cloud->toPCL_XYZRGBN();
-
-        te.validateTransformation(source_pcl, target_pcl, DataContainer(ctx, corr, from_normals));
+        // TODO: 需要在 RegistrationParams 或 RegistrationContext 中添加 matrix 字段
+        // pcl::registration::TransformationValidationEuclidean<PointXYZRGBN, PointXYZRGBN> te;
+        // auto source_pcl = ctx.source_cloud->toPCL_XYZRGBN();
+        // auto target_pcl = ctx.target_cloud->toPCL_XYZRGBN();
+        // te.validateTransformation(source_pcl, target_pcl, Eigen::Matrix4f::Identity());
     }
 } // namespace ct

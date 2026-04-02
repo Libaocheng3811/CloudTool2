@@ -25,7 +25,7 @@ namespace ct{
         float time_ms = 0;
     };
 
-    class CT_EXPORT VegetationFilter {
+    class VegetationFilter {
     public:
         static VegResult apply(const Cloud::Ptr& cloud,
                                 int index_type, double threshold,

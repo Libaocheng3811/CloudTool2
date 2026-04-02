@@ -63,7 +63,7 @@ namespace ct
         float time_ms = 0;
     };
 
-    class CT_EXPORT Features
+    class Features
     {
     public:
         static Box boundingBoxAABB(const Cloud::Ptr& cloud);

@@ -7,7 +7,6 @@
 
 #include "ui/base/customdialog.h"
 #include "algorithm/filters.h"
-#include <QThread>
 
 namespace Ui
 {
@@ -31,23 +30,14 @@ private slots:
     void onOkClicked();
     void onCancelClicked();
 
-    void samplingResult(const ct::Cloud::Ptr& cloud, float time);
-
-signals:
-    void DownSampling(float radius);
-    void UniformSampling(float radius);
-    void RandomSampling(int sample, int seed);
-    void ReSampling(float radius, int order);
-    void SamplingSurfaceNormal(int sample, int seed, float ratio);
-    void NormalSpaceSampling(int sample, int seed, int bin);
+    void handleSamplingResult(const ct::FilterResult& result);
 
 private:
     Ui::Sampling* ui;
-    QThread m_thread;
-    ct::Filters* m_filters;
 
     // 当前正在处理的点云
     ct::Cloud::Ptr m_current_cloud;
+    bool m_cancel = false;
 
     enum SamplingMethod {
         METHOD_DOWNSAMPLING = 0,

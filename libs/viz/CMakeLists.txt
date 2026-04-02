@@ -18,3 +18,5 @@ target_link_libraries(ct_viz
         ${VTK_LIBRARIES}
         ${PCL_LIBRARIES}
 )
+
+target_compile_definitions(ct_viz PRIVATE CT_BUILDING_CT_VIZ)

@@ -66,14 +66,14 @@ namespace ct{
         auto pcl_cloud_xyzrgbn = cloud->toPCL_XYZRGBN();
 
 #pragma omp parallel for
-        for (size_t i = 0; i < groundIndexes.size(); ++i) {
+        for (int i = 0; i < (int)groundIndexes.size(); ++i) {
             if (groundIndexes[i] >= 0 && groundIndexes[i] < pcl_cloud_xyzrgbn->size()) {
                 pcl_ground->points[i] = pcl_cloud_xyzrgbn->points[groundIndexes[i]];
             }
         }
 
 #pragma omp parallel for
-        for (size_t i = 0; i < offGroundIndexes.size(); ++i) {
+        for (int i = 0; i < (int)offGroundIndexes.size(); ++i) {
             if (offGroundIndexes[i] >= 0 && offGroundIndexes[i] < pcl_cloud_xyzrgbn->size()) {
                 pcl_off_ground->points[i] = pcl_cloud_xyzrgbn->points[offGroundIndexes[i]];
             }

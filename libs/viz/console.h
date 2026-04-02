@@ -15,7 +15,7 @@ namespace ct
     };
 
     // QTextBrowser继承自QTextEdit,
-    class CT_EXPORT Console : public QTextBrowser
+    class CT_VIZ_EXPORT Console : public QTextBrowser
     {
         Q_OBJECT
     public:

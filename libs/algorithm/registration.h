@@ -76,7 +76,7 @@ namespace ct {
         RegistrationParams params;
     };
 
-    class CT_EXPORT Registration {
+    class Registration {
     public:
         // --- Correspondence Estimation (non-template) ---
 

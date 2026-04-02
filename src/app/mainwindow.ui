@@ -1633,18 +1633,18 @@ QScrollBar::sub-line:horizontal {
   <customwidget>
    <class>ct::CloudView</class>
    <extends>QWidget</extends>
-   <header location="global">core/cloudview.h</header>
+   <header location="global">viz/cloudview.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>ct::CloudTree</class>
    <extends>QTreeWidget</extends>
-   <header>widgets/cloudtree.h</header>
+   <header>ui/base/cloudtree.h</header>
   </customwidget>
   <customwidget>
    <class>ct::Console</class>
    <extends>QTextBrowser</extends>
-   <header>core/console.h</header>
+   <header>viz/console.h</header>
   </customwidget>
  </customwidgets>
  <resources>

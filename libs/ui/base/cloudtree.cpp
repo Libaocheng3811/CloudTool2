@@ -7,6 +7,7 @@
 #include "dialog/txtexportdialog.h"
 
 #include <cfloat>
+#include <QMetaType>
 
 #include <QCheckBox>
 #include <QFileDialog>
@@ -486,7 +487,7 @@ namespace ct
 
                 const std::vector<ct::RGB>* colors = (has_color && block->m_colors) ? block->m_colors.get() : nullptr;
                 const std::vector<ct::CompressedNormal>* normals = (has_normal && block->m_normals) ? block->m_normals.get() : nullptr;
-                const QMap<QString, std::vector<float>>* scalars = (!block->m_scalar_fields.isEmpty()) ? &block->m_scalar_fields : nullptr;
+                const std::map<std::string, std::vector<float>>* scalars = (!block->m_scalar_fields.empty()) ? &block->m_scalar_fields : nullptr;
 
                 merge_cloud->addPoints(pts, colors, normals, scalars);
             }
@@ -983,14 +984,14 @@ namespace ct
         m_clouds_in_use.clear();
     }
 
-    void CloudTree::onFieldMappingRequested(const QList<ct::FieldInfo>& fields, QMap<QString, QString>& result)
+    void CloudTree::onFieldMappingRequested(const QList<ct::FieldInfo>& fields, std::map<std::string, std::string>& result)
     {
         // 这个函数运行在主线程 (UI线程)
         FieldMappingDialog dlg(fields, this);
         if (dlg.exec() == QDialog::Accepted) {
             // 用户点击 OK，获取结果
             ct::MappingResult res = dlg.getMapping();
-            result = res.field_map;
+            result = std::move(res.field_map);
         } else {
             // 用户取消，返回空结果
             result.clear();

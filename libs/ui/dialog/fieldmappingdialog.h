@@ -33,8 +33,8 @@ namespace ct {
             QList<ct::FieldInfo> fields = input_fields; // 创建副本进行排序
 
             // 定义优先级计算函数 (越小越靠前)
-            auto getFieldRank = [](const QString& rawName) -> int {
-                QString n = rawName.toLower();
+            auto getFieldRank = [](const std::string& rawName) -> int {
+                QString n = QString::fromStdString(rawName).toLower();
                 // Rank 0: 坐标
                 if (n == "x") return 0;
                 if (n == "y") return 1;
@@ -64,7 +64,7 @@ namespace ct {
                 int rankA = getFieldRank(a.name);
                 int rankB = getFieldRank(b.name);
                 if (rankA != rankB) return rankA < rankB;
-                return a.name < b.name; // 同级按字母序
+                return a.name < b.name; // std::string operator< 可直接比较
             });
 
             m_table = new QTableWidget(fields.size(), 3);
@@ -72,18 +72,18 @@ namespace ct {
             m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
             for (int i = 0; i < fields.size(); ++i) {
-                m_table->setItem(i, 0, new QTableWidgetItem(fields[i].name));
-                m_table->setItem(i, 1, new QTableWidgetItem(fields[i].type));
+                m_table->setItem(i, 0, new QTableWidgetItem(QString::fromStdString(fields[i].name)));
+                m_table->setItem(i, 1, new QTableWidgetItem(QString::fromStdString(fields[i].type)));
 
                 QComboBox *combo = new QComboBox();
                 combo->addItem("Ignore");
 
                 // 智能预选
-                QString lowerName = fields[i].name.toLower();
+                QString lowerName = QString::fromStdString(fields[i].name).toLower();
                 if (lowerName == "x" || lowerName == "y" || lowerName == "z") {
-                    combo->addItem("Axis " + fields[i].name.toUpper());
+                    combo->addItem("Axis " + QString::fromStdString(fields[i].name).toUpper());
                     combo->setCurrentIndex(1);
-                    combo->setCurrentText("Axis " + fields[i].name.toUpper());
+                    combo->setCurrentText("Axis " + QString::fromStdString(fields[i].name).toUpper());
                     combo->setEnabled(false); // 坐标强制映射
                 } else if (lowerName == "rgba" || lowerName == "rgb") {
                     combo->addItem("Color(Packed)");
@@ -134,7 +134,7 @@ namespace ct {
             for (int i = 0; i < m_table->rowCount(); ++i) {
                 QString name = m_table->item(i, 0)->text();
                 QComboBox *cb = qobject_cast<QComboBox *>(m_table->cellWidget(i, 2));
-                res.field_map[name] = cb->currentText();
+                res.field_map[name.toStdString()] = cb->currentText().toStdString();
             }
             return res;
         }

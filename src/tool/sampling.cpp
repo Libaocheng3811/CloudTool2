@@ -5,32 +5,17 @@
 #include "sampling.h"
 #include "ui_sampling.h"
 
+#include <QtConcurrent/QtConcurrent>
+#include <QFutureWatcher>
+
 Sampling::Sampling(QWidget* parent)
-        : CustomDialog(parent), ui(new Ui::Sampling), m_thread(this)
+        : CustomDialog(parent), ui(new Ui::Sampling)
 {
     ui->setupUi(this);
 
     // 连接按钮
     connect(ui->btn_ok, &QPushButton::clicked, this, &Sampling::onOkClicked);
     connect(ui->btn_cancel, &QPushButton::clicked, this, &Sampling::onCancelClicked);
-
-    // 初始化工作线程和滤波器
-    m_filters = new ct::Filters();
-    m_filters->moveToThread(&m_thread);
-    connect(&m_thread, &QThread::finished, m_filters, &QObject::deleteLater);
-
-    // 连接采样信号
-    connect(this, &Sampling::DownSampling, m_filters, &ct::Filters::DownSampling, Qt::QueuedConnection);
-    connect(this, &Sampling::UniformSampling, m_filters, &ct::Filters::UniformSampling, Qt::QueuedConnection);
-    connect(this, &Sampling::RandomSampling, m_filters, &ct::Filters::RandomSampling, Qt::QueuedConnection);
-    connect(this, &Sampling::ReSampling, m_filters, &ct::Filters::ReSampling, Qt::QueuedConnection);
-    connect(this, &Sampling::SamplingSurfaceNormal, m_filters, &ct::Filters::SamplingSurfaceNormal, Qt::QueuedConnection);
-    connect(this, &Sampling::NormalSpaceSampling, m_filters, &ct::Filters::NormalSpaceSampling, Qt::QueuedConnection);
-
-    // 连接结果信号
-    connect(m_filters, &ct::Filters::filterResult, this, &Sampling::samplingResult, Qt::QueuedConnection);
-
-    m_thread.start();
 
     // 设置默认选择
     ui->cbox_method->setCurrentIndex(0);
@@ -39,12 +24,6 @@ Sampling::Sampling(QWidget* parent)
 
 Sampling::~Sampling()
 {
-    m_thread.quit();
-    if (!m_thread.wait(3000))
-    {
-        m_thread.terminate();
-        m_thread.wait();
-    }
     delete ui;
 }
 
@@ -78,40 +57,76 @@ void Sampling::onOkClicked()
         return;
     }
 
-    // 显示进度条
     m_cloudtree->showProgress("Sampling PointCloud...");
-    m_cloudtree->bindWorker(m_filters);
 
-    // 设置输入点云
-    m_filters->setInputCloud(m_current_cloud);
+    // 取消标志
+    auto* cancel = new std::atomic<bool>(false);
+    m_cancel = false;
+    if (m_cloudtree->m_processing_dialog) {
+        connect(m_cloudtree->m_processing_dialog, &ct::ProcessingDialog::cancelRequested,
+                this, [cancel]() { *cancel = true; }, Qt::UniqueConnection);
+    }
+
+    // 进度回调
+    auto on_progress = [this](int pct) {
+        if (m_cloudtree->m_processing_dialog) {
+            QMetaObject::invokeMethod(m_cloudtree->m_processing_dialog, "setProgress",
+                                      Qt::QueuedConnection, Q_ARG(int, pct));
+        }
+    };
+
+    auto cloud = m_current_cloud;
 
     // 根据选择的方法执行采样
+    QFuture<ct::FilterResult> future;
     switch (ui->cbox_method->currentIndex())
     {
         case METHOD_DOWNSAMPLING:
-            emit DownSampling(ui->dspin_radius1->value());
+            future = QtConcurrent::run([cloud, cancel, on_progress, radius = ui->dspin_radius1->value()]() {
+                return ct::Filters::DownSampling(cloud, radius, false, cancel, on_progress);
+            });
             break;
 
         case METHOD_UNIFORMSAMPLING:
-            emit UniformSampling(ui->dspin_radius2->value());
+            future = QtConcurrent::run([cloud, cancel, on_progress, radius = ui->dspin_radius2->value()]() {
+                return ct::Filters::UniformSampling(cloud, radius, false, cancel, on_progress);
+            });
             break;
 
         case METHOD_RANDOMSAMPLING:
-            emit RandomSampling(ui->spin_sample1->value(), ui->spin_seed1->value());
+            future = QtConcurrent::run([cloud, cancel, on_progress, sample = ui->spin_sample1->value(), seed = ui->spin_seed1->value()]() {
+                return ct::Filters::RandomSampling(cloud, sample, seed, false, cancel, on_progress);
+            });
             break;
 
         case METHOD_RESAMPLING:
-            emit ReSampling(ui->dspin_radius3->value(), ui->spin_order->value());
+            future = QtConcurrent::run([cloud, cancel, on_progress, radius = ui->dspin_radius3->value(), order = ui->spin_order->value()]() {
+                return ct::Filters::ReSampling(cloud, radius, order, false, cancel, on_progress);
+            });
             break;
 
         case METHOD_SAMPLINGSURFACENORMAL:
-            emit SamplingSurfaceNormal(ui->spin_sample2->value(), ui->spin_seed2->value(), ui->dspin_ratio->value());
+            future = QtConcurrent::run([cloud, cancel, on_progress, sample = ui->spin_sample2->value(), seed = ui->spin_seed2->value(), ratio = ui->dspin_ratio->value()]() {
+                return ct::Filters::SamplingSurfaceNormal(cloud, sample, seed, ratio, false, cancel, on_progress);
+            });
             break;
 
         case METHOD_NORMALSPACESAMPLING:
-            emit NormalSpaceSampling(ui->spin_sample3->value(), ui->spin_seed3->value(), ui->spin_bin->value());
+            future = QtConcurrent::run([cloud, cancel, on_progress, sample = ui->spin_sample3->value(), seed = ui->spin_seed3->value(), bin = ui->spin_bin->value()]() {
+                return ct::Filters::NormalSpaceSampling(cloud, sample, seed, bin, false, cancel, on_progress);
+            });
             break;
     }
+
+    auto* watcher = new QFutureWatcher<ct::FilterResult>(this);
+    connect(watcher, &QFutureWatcher<ct::FilterResult>::finished, this, [=]() {
+        auto result = watcher->result();
+        m_cloudtree->closeProgress();
+        delete cancel;
+        handleSamplingResult(result);
+        watcher->deleteLater();
+    });
+    watcher->setFuture(future);
 }
 
 void Sampling::onCancelClicked()
@@ -119,8 +134,10 @@ void Sampling::onCancelClicked()
     reject();
 }
 
-void Sampling::samplingResult(const ct::Cloud::Ptr& cloud, float time)
+void Sampling::handleSamplingResult(const ct::FilterResult& result)
 {
+    auto cloud = result.result_cloud;
+
     if (!cloud || !m_current_cloud || !m_cloudtree || !m_cloudview)
     {
         m_cloudtree->closeProgress();
@@ -130,7 +147,7 @@ void Sampling::samplingResult(const ct::Cloud::Ptr& cloud, float time)
 
     // 打印完成信息
     printI(QString("Sampling completed in %1 ms. Original: %2 points -> Sampled: %3 points")
-          .arg(time)
+          .arg(result.time_ms)
           .arg(m_current_cloud->size())
           .arg(cloud->size()));
 
@@ -152,18 +169,15 @@ void Sampling::samplingResult(const ct::Cloud::Ptr& cloud, float time)
     QTreeWidgetItem* parent_item = source_item->parent();
     if (!parent_item)
     {
-        // 如果没有父节点，说明源点云是根节点，将新点云作为根节点添加
         m_cloudtree->insertCloud(cloud, nullptr, true);
     }
     else
     {
-        // 将新点云添加到父节点下，与源点云同级
         m_cloudtree->insertCloud(cloud, parent_item, true);
     }
 
     // 在视图中显示新点云（保留原始颜色）
     m_cloudview->addPointCloud(cloud);
-    // 不设置颜色，保留采样后的原始颜色
     m_cloudview->setPointCloudSize(QString::fromStdString(cloud->id()), cloud->pointSize() + 2);
 
     // 取消选中源点云，选中新生成的采样点云

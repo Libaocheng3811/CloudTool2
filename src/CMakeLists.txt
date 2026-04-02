@@ -55,7 +55,7 @@ target_link_libraries(cloudtool PRIVATE
     ct_viz
     ct_io
     ct_algorithm
-    ct_widget
+    ct_ui_base
     ct_python
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Concurrent

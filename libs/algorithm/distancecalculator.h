@@ -22,7 +22,7 @@ namespace ct {
         std::string error_msg;
     };
 
-    class CT_EXPORT DistanceCalculator {
+    class DistanceCalculator {
     public:
         static DistanceResult calculate(const Cloud::Ptr& ref, const Cloud::Ptr& comp,
                                          const DistanceParams& params,

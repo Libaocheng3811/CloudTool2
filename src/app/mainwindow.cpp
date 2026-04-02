@@ -21,8 +21,8 @@
 #include "python/python_manager.h"
 #include "python/python_bridge.h"
 
-#include "tool/python_console.h"
-#include "tool/python_editor.h"
+#include "python/python_console.h"
+#include "python/python_editor.h"
 
 #include <algorithm>
 

@@ -18,7 +18,7 @@ namespace ct
     typedef pcl::PointWithScale     PointWithScale;
     typedef pcl::RangeImage         RangeImage;
 
-    class CT_EXPORT Keypoints
+    class Keypoints
     {
     };
 } // namespace ct

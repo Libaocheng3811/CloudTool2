@@ -45,7 +45,7 @@ namespace ct{
                 for (int c = 0; c < m_table->columnCount(); ++c){
                     QComboBox* combo = qobject_cast<QComboBox*>(m_table->cellWidget(0, c));
                     if (combo && combo->currentIndex() > 0){
-                        params.col_map[c] = combo->currentData().toString();
+                        params.col_map[c] = combo->currentData().toString().toStdString();
                     }
                 }
                 return params;
