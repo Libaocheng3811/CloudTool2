@@ -432,8 +432,22 @@ void PythonEditor::onRun()
     auto* worker = ct::PythonManager::instance().worker();
     if (!worker || worker->isBusy()) return;
 
-    worker->execScript(code,
-        tab.filepath.isEmpty() ? "<editor>" : tab.filepath);
+    // 如果有文件路径，先自动保存再用 eval_file 执行（避免编码/不可见字符问题）
+    if (!tab.filepath.isEmpty()) {
+        QFile file(tab.filepath);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&file);
+            out.setCodec("UTF-8");
+            out << code;
+            file.close();
+            tab.modified = false;
+            tab.editor->document()->setModified(false);
+            updateTabTitle(idx);
+        }
+        worker->execFile(tab.filepath);
+    } else {
+        worker->execScript(code, "<editor>");
+    }
 }
 
 void PythonEditor::onStop()
@@ -463,15 +477,19 @@ void PythonEditor::onOpen()
     }
 
     QTextStream in(&file);
+    in.setCodec("UTF-8");
     QString content = in.readAll();
     file.close();
 
-    auto tab = createTab(QFileInfo(path).fileName());
+    createTab(QFileInfo(path).fileName());
+
+    int idx = m_tab_list.size() - 1;
+    auto& tab = m_tab_list[idx];
     tab.editor->setPlainText(content);
     tab.filepath = path;
     tab.modified = false;
+    tab.editor->document()->setModified(false);
 
-    int idx = m_tab_list.size() - 1;
     updateTabTitle(idx);
 }
 
@@ -493,6 +511,7 @@ void PythonEditor::onSave()
     }
 
     QTextStream out(&file);
+    out.setCodec("UTF-8");
     out << tab.editor->toPlainText();
     file.close();
 

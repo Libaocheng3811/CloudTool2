@@ -97,12 +97,54 @@ public:
     void removeShape(const QString& id)               { emit signalRemoveShape(id); }
     void removeAllShapes()                           { emit signalRemoveAllShapes(); }
 
+    // —— Phase 3: 高级叠加物 ——
+    void addArrow(float x1, float y1, float z1, float x2, float y2, float z2,
+                  const QString& id, float r, float g, float b)
+                                                      { emit signalAddArrow(x1,y1,z1,x2,y2,z2,id,r,g,b); }
+    void addPolygonCloud(const QString& cloud_id, const QString& id,
+                         float r, float g, float b)
+                                                      { emit signalAddPolygon(cloud_id, id, r, g, b); }
+    void setShapeColor(const QString& id, float r, float g, float b)
+                                                      { emit signalSetShapeColor(id, r, g, b); }
+    void setShapeSize(const QString& id, float size) { emit signalSetShapeSize(id, size); }
+    void setShapeOpacity(const QString& id, float value){ emit signalSetShapeOpacity(id, value); }
+    void setShapeLineWidth(const QString& id, float value){ emit signalSetShapeLineWidth(id, value); }
+    void setShapeFontSize(const QString& id, float value){ emit signalSetShapeFontSize(id, value); }
+    void setShapeRepresentation(const QString& id, int type)
+                                                      { emit signalSetShapeRepresentation(id, type); }
+    void zoomToBoundsXYZ(float min_x, float min_y, float min_z,
+                         float max_x, float max_y, float max_z)
+                                                      { emit signalZoomToBoundsXYZ(min_x,min_y,min_z,max_x,max_y,max_z); }
+    void invalidateCloudRender(const QString& id)    { emit signalInvalidateCloudRender(id); }
+    void setInteractorEnable(bool enable)            { emit signalSetInteractorEnable(enable); }
+
     // ================================================================
     // 点云管理
     // ================================================================
 
     void insertCloud(Cloud::Ptr cloud)               { emit signalInsertCloud(cloud); }
     void removeSelectedClouds()                       { emit signalRemoveSelectedClouds(); }
+
+    // —— Phase 1: 按名称操作 ——
+    void removeCloud(const QString& id)               { emit signalRemoveCloud(id); }
+    void removeAllClouds()                            { emit signalRemoveAllClouds(); }
+    void cloneCloud(const QString& id)                { emit signalCloneCloud(id); }
+    void mergeClouds(const QStringList& ids)          { emit signalMergeClouds(ids); }
+    void selectCloud(const QString& id)               { emit signalSelectCloud(id); }
+    void loadCloud(const QString& filepath)           { emit signalLoadCloud(filepath); }
+    void saveCloud(const QString& id, const QString& filepath, bool binary = true)
+                                                      { emit signalSaveCloud(id, filepath, binary); }
+
+    // —— Phase 2: 算法结果组 ——
+    void addResultGroup(const QString& origin_id, const std::vector<Cloud::Ptr>& results, const QString& group_name)
+                                                      { emit signalAddResultGroup(origin_id, results, group_name); }
+
+    // —— Phase 3: 就地更新点云 ——
+    void updateCloud(const QString& id, const Cloud::Ptr& new_cloud)
+                                                      { emit signalUpdateCloud(id, new_cloud); }
+
+    // —— 脚本模式：跳过弹窗 ——
+    void setScriptMode(bool enabled)                  { emit signalSetScriptMode(enabled); }
 
     // ================================================================
     // 云注册表（线程安全）
@@ -111,6 +153,7 @@ public:
     void registerCloud(Cloud::Ptr cloud);
     void unregisterCloud(const QString& id);
     Cloud::Ptr getCloud(const QString& name) const;
+    QStringList getCloudNames() const;
 
     // ================================================================
     // 引用持有 + In-use 标记
@@ -176,9 +219,40 @@ signals:
     void signalRemoveShape(QString id);
     void signalRemoveAllShapes();
 
+    // Phase 3: 高级叠加物 + 视图控制
+    void signalAddArrow(float x1, float y1, float z1, float x2, float y2, float z2,
+                        QString id, float r, float g, float b);
+    void signalAddPolygon(QString cloud_id, QString id, float r, float g, float b);
+    void signalSetShapeColor(QString id, float r, float g, float b);
+    void signalSetShapeSize(QString id, float size);
+    void signalSetShapeOpacity(QString id, float value);
+    void signalSetShapeLineWidth(QString id, float value);
+    void signalSetShapeFontSize(QString id, float value);
+    void signalSetShapeRepresentation(QString id, int type);
+    void signalZoomToBoundsXYZ(float min_x, float min_y, float min_z,
+                               float max_x, float max_y, float max_z);
+    void signalInvalidateCloudRender(QString id);
+    void signalSetInteractorEnable(bool enable);
+
     // 点云管理
     void signalInsertCloud(ct::Cloud::Ptr cloud);
     void signalRemoveSelectedClouds();
+    void signalRemoveCloud(QString id);
+    void signalRemoveAllClouds();
+    void signalCloneCloud(QString id);
+    void signalMergeClouds(QStringList ids);
+    void signalSelectCloud(QString id);
+    void signalLoadCloud(QString filepath);
+    void signalSaveCloud(QString id, QString filepath, bool binary);
+
+    // Phase 2: 算法结果组
+    void signalAddResultGroup(QString origin_id, std::vector<ct::Cloud::Ptr> results, QString group_name);
+
+    // Phase 3: 就地更新
+    void signalUpdateCloud(QString id, ct::Cloud::Ptr new_cloud);
+
+    // 脚本模式
+    void signalSetScriptMode(bool enabled);
 
     // 注册表
     void signalCloudRegistered(QString name);

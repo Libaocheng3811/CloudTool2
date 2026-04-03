@@ -34,6 +34,12 @@ Cloud::Ptr PythonBridge::getCloud(const QString& name) const
     return it.value();
 }
 
+QStringList PythonBridge::getCloudNames() const
+{
+    QMutexLocker locker(&m_cloud_mutex);
+    return m_cloud_registry.keys();
+}
+
 // ====================================================================
 // Reference Holding — Worker 线程调用（线程安全）
 // ====================================================================

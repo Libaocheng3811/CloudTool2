@@ -26,9 +26,23 @@ namespace ct
         ~CloudTree() override;
 
         /**
-         * @brief 添加点云
+         * @brief 添加点云 (弹出文件对话框)
          */
         void addCloud();
+
+        /**
+         * @brief 加载点云文件 (程序化调用，无对话框)
+         * @param filepath 文件路径
+         */
+        void loadCloudFile(const QString& filepath);
+
+        /**
+         * @brief 保存点云文件 (程序化调用，无对话框)
+         * @param cloud 点云对象
+         * @param filepath 文件路径
+         * @param isBinary 是否二进制格式
+         */
+        void saveCloudFile(const Cloud::Ptr& cloud, const QString& filepath, bool isBinary = true);
 
         /**
         * @brief 更新点云数据
@@ -238,6 +252,10 @@ namespace ct
 
         // 被脚本使用中的点云 ID 集合（删除保护）
         QSet<QString> m_clouds_in_use;
+
+        /// 脚本模式：跳过弹窗，自动使用默认值
+        bool m_script_mode = false;
+        void setScriptMode(bool enabled) { m_script_mode = enabled; }
     };
 }
 

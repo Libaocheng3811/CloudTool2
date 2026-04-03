@@ -106,6 +106,21 @@ namespace ct
             emit loadPointCloud(i);
     }
 
+    void CloudTree::loadCloudFile(const QString& filepath)
+    {
+        showProgress("Loading Point Cloud...");
+        bindWorker(m_fileio);
+        m_loading_queue_count = 1;
+        emit loadPointCloud(filepath);
+    }
+
+    void CloudTree::saveCloudFile(const Cloud::Ptr& cloud, const QString& filepath, bool isBinary)
+    {
+        showProgress("Saving Point Cloud...");
+        bindWorker(m_fileio);
+        emit savePointCloud(cloud, filepath, isBinary);
+    }
+
     QTreeWidgetItem* CloudTree::getItemById(const QString &id) {
         std::string sid = id.toStdString();
         for (auto it = m_cloud_map.begin(); it != m_cloud_map.end(); ++it){
@@ -839,6 +854,7 @@ namespace ct
     }
 
     void CloudTree::showProgress(const QString &message) {
+        if (m_script_mode) return;  // 脚本模式：跳过进度条弹窗
         if (!m_processing_dialog){
             // 寻找最顶层的窗口作为父窗口，确保模态对话框居中显示
             QWidget* topLevel = this->window();
@@ -986,6 +1002,36 @@ namespace ct
 
     void CloudTree::onFieldMappingRequested(const QList<ct::FieldInfo>& fields, std::map<std::string, std::string>& result)
     {
+        if (m_script_mode) {
+            // 脚本模式：智能默认映射（与 FieldMappingDialog 预选逻辑一致）
+            for (const auto& f : fields) {
+                QString name = QString::fromStdString(f.name).toLower();
+                if (name == "x" || name == "y" || name == "z") {
+                    result[f.name] = "Axis " + QString::fromStdString(f.name).toUpper().toStdString();
+                } else if (name == "rgba" || name == "rgb") {
+                    result[f.name] = "Color(Packed)";
+                } else if (name.contains("red") || name == "r") {
+                    result[f.name] = "Red";
+                } else if (name.contains("green") || name == "g") {
+                    result[f.name] = "Green";
+                } else if (name.contains("blue") || name == "b") {
+                    result[f.name] = "Blue";
+                } else if (name == "normal_x" || name == "nx") {
+                    result[f.name] = "Normal X";
+                } else if (name == "normal_y" || name == "ny") {
+                    result[f.name] = "Normal Y";
+                } else if (name == "normal_z" || name == "nz") {
+                    result[f.name] = "Normal Z";
+                } else if (name == "curvature") {
+                    result[f.name] = "Curvature";
+                } else if (name == "intensity") {
+                    result[f.name] = "Intensity";
+                } else {
+                    result[f.name] = "Scalar Field";
+                }
+            }
+            return;
+        }
         // 这个函数运行在主线程 (UI线程)
         FieldMappingDialog dlg(fields, this);
         if (dlg.exec() == QDialog::Accepted) {
@@ -999,6 +1045,10 @@ namespace ct
     }
 
     void CloudTree::onTxtImportRequested(const QStringList& preview_lines, ct::TxtImportParams& params){
+        if (m_script_mode) {
+            // 脚本模式：使用默认 TXT 导入参数
+            return;
+        }
         TxtImportDialog dlg(preview_lines, this);
         if (dlg.exec() == QDialog::Accepted) {
             params = dlg.getParams();
@@ -1008,6 +1058,9 @@ namespace ct
     }
 
     void CloudTree::onTxtExportRequested(const QStringList &available_fields, ct::TxtExportParams &params) {
+        if (m_script_mode) {
+            return;
+        }
         TxtExportDialog dlg(available_fields, this);
         if (dlg.exec() == QDialog::Accepted){
             params = dlg.getParams();
@@ -1019,6 +1072,13 @@ namespace ct
 
     void CloudTree::onGlobalFilterRequested(const Eigen::Vector3d &min_pt, Eigen::Vector3d &suggested_shift,
                                             bool &skipped) {
+        if (m_script_mode) {
+            // 脚本模式：直接使用建议的偏移值
+            m_last_shift = suggested_shift;
+            m_hasLastShift = true;
+            skipped = false;
+            return;
+        }
         GlobalShiftDialog dlg(min_pt, suggested_shift, m_last_shift, m_hasLastShift, this->window());
 
         if (dlg.exec() == QDialog::Accepted){

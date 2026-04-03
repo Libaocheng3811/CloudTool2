@@ -12,4 +12,5 @@ target_link_libraries(ct_python
     Python3::Python
     PRIVATE
     ct_core
+    ct_algorithm
 )

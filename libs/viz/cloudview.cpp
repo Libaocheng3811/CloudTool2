@@ -212,6 +212,7 @@ namespace ct
         auto renderer = std::make_shared<OctreeRenderer>(cloud, m_viewer->getRendererCollection()->GetFirstRenderer());
         m_OctreeRenders.insert(qid, renderer);
 
+        renderer->invalidateCache();
         renderer->update();
 
         if (m_auto_render) m_viewer->getRenderWindow()->Render();

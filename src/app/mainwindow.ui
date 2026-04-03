@@ -173,7 +173,7 @@
       <string>Theme</string>
      </property>
      <property name="icon">
-      <iconset resource="resources/res.qrc">
+      <iconset resource="../resources/res.qrc">
        <normaloff>:/res/icon/theme.svg</normaloff>:/res/icon/theme.svg</iconset>
      </property>
      <addaction name="actionOrigin"/>
@@ -190,7 +190,7 @@
       <string>Language</string>
      </property>
      <property name="icon">
-      <iconset resource="resources/res.qrc">
+      <iconset resource="../resources/res.qrc">
        <normaloff>:/res/icon/translate.svg</normaloff>:/res/icon/translate.svg</iconset>
      </property>
      <addaction name="actionEnglish"/>
@@ -476,7 +476,7 @@ QScrollBar::sub-line:horizontal {
          </font>
         </property>
         <property name="icon">
-         <iconset resource="resources/res.qrc">
+         <iconset resource="../resources/res.qrc">
           <normaloff>:/res/icon/akonadiconsole.svg</normaloff>:/res/icon/akonadiconsole.svg</iconset>
         </property>
        </item>
@@ -490,7 +490,7 @@ QScrollBar::sub-line:horizontal {
          </font>
         </property>
         <property name="icon">
-         <iconset resource="resources/res.qrc">
+         <iconset resource="../resources/res.qrc">
           <normaloff>:/res/icon/view-calendar-week.svg</normaloff>:/res/icon/view-calendar-week.svg</iconset>
         </property>
        </item>
@@ -504,7 +504,7 @@ QScrollBar::sub-line:horizontal {
          </font>
         </property>
         <property name="icon">
-         <iconset resource="resources/res.qrc">
+         <iconset resource="../resources/res.qrc">
           <normaloff>:/res/icon/view-group.svg</normaloff>:/res/icon/view-group.svg</iconset>
         </property>
        </item>
@@ -518,7 +518,7 @@ QScrollBar::sub-line:horizontal {
          </font>
         </property>
         <property name="icon">
-         <iconset resource="resources/res.qrc">
+         <iconset resource="../resources/res.qrc">
           <normaloff>:/res/icon/zoom.svg</normaloff>:/res/icon/zoom.svg</iconset>
         </property>
        </item>
@@ -532,7 +532,7 @@ QScrollBar::sub-line:horizontal {
          </font>
         </property>
         <property name="icon">
-         <iconset resource="resources/res.qrc">
+         <iconset resource="../resources/res.qrc">
           <normaloff>:/res/icon/view-app-grid-symbolic.svg</normaloff>:/res/icon/view-app-grid-symbolic.svg</iconset>
         </property>
        </item>
@@ -546,7 +546,7 @@ QScrollBar::sub-line:horizontal {
          </font>
         </property>
         <property name="icon">
-         <iconset resource="resources/res.qrc">
+         <iconset resource="../resources/res.qrc">
           <normaloff>:/res/icon/view-reveal-symbolic.svg</normaloff>:/res/icon/view-reveal-symbolic.svg</iconset>
         </property>
        </item>
@@ -560,7 +560,7 @@ QScrollBar::sub-line:horizontal {
          </font>
         </property>
         <property name="icon">
-         <iconset resource="resources/res.qrc">
+         <iconset resource="../resources/res.qrc">
           <normaloff>:/res/icon/normal.svg</normaloff>:/res/icon/normal.svg</iconset>
         </property>
        </item>
@@ -574,7 +574,7 @@ QScrollBar::sub-line:horizontal {
          </font>
         </property>
         <property name="icon">
-         <iconset resource="resources/res.qrc">
+         <iconset resource="../resources/res.qrc">
           <normaloff>:/res/icon/color-management.svg</normaloff>:/res/icon/color-management.svg</iconset>
         </property>
        </item>
@@ -586,8 +586,8 @@ QScrollBar::sub-line:horizontal {
   <widget class="QDockWidget" name="ConsoleDock">
    <property name="minimumSize">
     <size>
-     <width>134</width>
-     <height>149</height>
+     <width>135</width>
+     <height>157</height>
     </size>
    </property>
    <property name="font">
@@ -606,11 +606,11 @@ QScrollBar::sub-line:horizontal {
     <property name="tabPosition">
      <enum>QTabWidget::North</enum>
     </property>
-    <property name="tabsClosable">
-     <bool>true</bool>
-    </property>
     <property name="currentIndex">
      <number>0</number>
+    </property>
+    <property name="tabsClosable">
+     <bool>true</bool>
     </property>
     <widget class="ct::Console" name="console">
      <attribute name="title">
@@ -718,9 +718,29 @@ QScrollBar::sub-line:horizontal {
    <addaction name="actionResetcamera"/>
    <addaction name="actionScreenShot"/>
   </widget>
+  <widget class="QToolBar" name="PythonBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Horizontal</enum>
+   </property>
+   <property name="iconSize">
+    <size>
+     <width>35</width>
+     <height>35</height>
+    </size>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>RightToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+  </widget>
   <action name="actionOpen">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/document-new.svg</normaloff>:/res/icon/document-new.svg</iconset>
    </property>
    <property name="text">
@@ -738,7 +758,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionSave">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/document-save.svg</normaloff>:/res/icon/document-save.svg</iconset>
    </property>
    <property name="text">
@@ -756,7 +776,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionClose">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/document-close.svg</normaloff>:/res/icon/document-close.svg</iconset>
    </property>
    <property name="text">
@@ -768,13 +788,10 @@ QScrollBar::sub-line:horizontal {
      <pointsize>10</pointsize>
     </font>
    </property>
-   <property name="shortcut">
-    <string>Ctrl+C</string>
-   </property>
   </action>
   <action name="actionClose_All">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/edit-clear-history.svg</normaloff>:/res/icon/edit-clear-history.svg</iconset>
    </property>
    <property name="text">
@@ -789,7 +806,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionMerge">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/kr_combine.svg</normaloff>:/res/icon/kr_combine.svg</iconset>
    </property>
    <property name="text">
@@ -804,7 +821,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionClone">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/split.svg</normaloff>:/res/icon/split.svg</iconset>
    </property>
    <property name="text">
@@ -819,7 +836,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionQuit">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/application-exit.svg</normaloff>:/res/icon/application-exit.svg</iconset>
    </property>
    <property name="text">
@@ -834,7 +851,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionColors">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/color-management.svg</normaloff>:/res/icon/color-management.svg</iconset>
    </property>
    <property name="text">
@@ -849,7 +866,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionCoords">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/coordinate.svg</normaloff>:/res/icon/coordinate.svg</iconset>
    </property>
    <property name="text">
@@ -864,7 +881,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionNormals">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/normal.svg</normaloff>:/res/icon/normal.svg</iconset>
    </property>
    <property name="text">
@@ -879,7 +896,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionBoundingBox">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/node.svg</normaloff>:/res/icon/node.svg</iconset>
    </property>
    <property name="text">
@@ -894,7 +911,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionScale">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/transform-scale.svg</normaloff>:/res/icon/transform-scale.svg</iconset>
    </property>
    <property name="text">
@@ -909,7 +926,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionTransformation">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/exchange-positions.svg</normaloff>:/res/icon/exchange-positions.svg</iconset>
    </property>
    <property name="text">
@@ -924,7 +941,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionTopView">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/view_top.svg</normaloff>:/res/icon/view_top.svg</iconset>
    </property>
    <property name="text">
@@ -939,7 +956,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionFrontView">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/view_front.svg</normaloff>:/res/icon/view_front.svg</iconset>
    </property>
    <property name="text">
@@ -954,7 +971,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionLeftSideView">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/view_leftside.svg</normaloff>:/res/icon/view_leftside.svg</iconset>
    </property>
    <property name="text">
@@ -969,7 +986,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionBackView">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/view_back.svg</normaloff>:/res/icon/view_back.svg</iconset>
    </property>
    <property name="text">
@@ -984,7 +1001,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionRightSideView">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/view_rightside.svg</normaloff>:/res/icon/view_rightside.svg</iconset>
    </property>
    <property name="text">
@@ -999,7 +1016,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionBottomView">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/view_bottom.svg</normaloff>:/res/icon/view_bottom.svg</iconset>
    </property>
    <property name="text">
@@ -1014,7 +1031,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionResetcamera">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/view-refresh.svg</normaloff>:/res/icon/view-refresh.svg</iconset>
    </property>
    <property name="text">
@@ -1071,7 +1088,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionTreeSearch">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/distribute-graph-directed.svg</normaloff>:/res/icon/distribute-graph-directed.svg</iconset>
    </property>
    <property name="text">
@@ -1086,7 +1103,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionFilters">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/filter.svg</normaloff>:/res/icon/filter.svg</iconset>
    </property>
    <property name="text">
@@ -1101,7 +1118,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionKeyPoint">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/snap-bounding-box-center.svg</normaloff>:/res/icon/snap-bounding-box-center.svg</iconset>
    </property>
    <property name="text">
@@ -1116,7 +1133,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionSegmentation">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/view-grid-symbolic.svg</normaloff>:/res/icon/view-grid-symbolic.svg</iconset>
    </property>
    <property name="text">
@@ -1131,7 +1148,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionRegistration">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/exchange-positions-clockwise.svg</normaloff>:/res/icon/exchange-positions-clockwise.svg</iconset>
    </property>
    <property name="text">
@@ -1146,7 +1163,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionDescriptor">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/feature.svg</normaloff>:/res/icon/feature.svg</iconset>
    </property>
    <property name="text">
@@ -1161,7 +1178,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionRecognition">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/recognition.svg</normaloff>:/res/icon/recognition.svg</iconset>
    </property>
    <property name="text">
@@ -1176,7 +1193,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionPickPoints">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/edit-node.svg</normaloff>:/res/icon/edit-node.svg</iconset>
    </property>
    <property name="text">
@@ -1191,7 +1208,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionSurface">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/draw-cuboid.svg</normaloff>:/res/icon/draw-cuboid.svg</iconset>
    </property>
    <property name="text">
@@ -1206,7 +1223,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionCutting">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/edit-cut.svg</normaloff>:/res/icon/edit-cut.svg</iconset>
    </property>
    <property name="text">
@@ -1221,7 +1238,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionSampling">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/sampling.svg</normaloff>:/res/icon/sampling.svg</iconset>
    </property>
    <property name="text">
@@ -1236,7 +1253,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionCorrespondence">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/draw-connector.svg</normaloff>:/res/icon/draw-connector.svg</iconset>
    </property>
    <property name="text">
@@ -1251,7 +1268,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionMeasure">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/measure.svg</normaloff>:/res/icon/measure.svg</iconset>
    </property>
    <property name="text">
@@ -1266,7 +1283,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionSelection">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/node-transform.svg</normaloff>:/res/icon/node-transform.svg</iconset>
    </property>
    <property name="text">
@@ -1281,7 +1298,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionConnection">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/kdenlive-select-all.svg</normaloff>:/res/icon/kdenlive-select-all.svg</iconset>
    </property>
    <property name="text">
@@ -1296,7 +1313,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionPathPlan">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/curve-connector.svg</normaloff>:/res/icon/curve-connector.svg</iconset>
    </property>
    <property name="text">
@@ -1311,7 +1328,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionRangeImage">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/adjusthsl.svg</normaloff>:/res/icon/adjusthsl.svg</iconset>
    </property>
    <property name="text">
@@ -1326,7 +1343,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionScreenShot">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/screenshoot.svg</normaloff>:/res/icon/screenshoot.svg</iconset>
    </property>
    <property name="text">
@@ -1341,7 +1358,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionTest">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/run-build.svg</normaloff>:/res/icon/run-build.svg</iconset>
    </property>
    <property name="text">
@@ -1356,7 +1373,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionBoundary">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/tool_elliptical_selection.svg</normaloff>:/res/icon/tool_elliptical_selection.svg</iconset>
    </property>
    <property name="text">
@@ -1371,7 +1388,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionPhotoNeo">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/device.svg</normaloff>:/res/icon/device.svg</iconset>
    </property>
    <property name="text">
@@ -1386,7 +1403,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionAzureKinect">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/device.svg</normaloff>:/res/icon/device.svg</iconset>
    </property>
    <property name="text">
@@ -1456,7 +1473,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionShortCutKey">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/fcitx-vk-active-symbolic.svg</normaloff>:/res/icon/fcitx-vk-active-symbolic.svg</iconset>
    </property>
    <property name="text">
@@ -1471,7 +1488,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionAbout">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/help-info-symbolic.svg</normaloff>:/res/icon/help-info-symbolic.svg</iconset>
    </property>
    <property name="text">
@@ -1486,7 +1503,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="action_Help">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/help-contents-symbolic.svg</normaloff>:/res/icon/help-contents-symbolic.svg</iconset>
    </property>
    <property name="text">
@@ -1501,7 +1518,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionCSF">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/images/terrain.png</normaloff>:/res/images/terrain.png</iconset>
    </property>
    <property name="text">
@@ -1516,7 +1533,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionVegetation_Filters">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/images/vegetation.png</normaloff>:/res/images/vegetation.png</iconset>
    </property>
    <property name="text">
@@ -1531,7 +1548,7 @@ QScrollBar::sub-line:horizontal {
   </action>
   <action name="actionChange_Detection">
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/images/changeDetection.png</normaloff>:/res/images/changeDetection.png</iconset>
    </property>
    <property name="text">
@@ -1594,7 +1611,7 @@ QScrollBar::sub-line:horizontal {
     <bool>false</bool>
    </property>
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/dialog-scripts.svg</normaloff>:/res/icon/dialog-scripts.svg</iconset>
    </property>
    <property name="text">
@@ -1615,7 +1632,7 @@ QScrollBar::sub-line:horizontal {
     <bool>false</bool>
    </property>
    <property name="icon">
-    <iconset resource="resources/res.qrc">
+    <iconset resource="../resources/res.qrc">
      <normaloff>:/res/icon/dialog-scripts.svg</normaloff>:/res/icon/dialog-scripts.svg</iconset>
    </property>
    <property name="text">
@@ -1648,7 +1665,7 @@ QScrollBar::sub-line:horizontal {
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="resources/res.qrc"/>
+  <include location="../resources/res.qrc"/>
  </resources>
  <connections/>
 </ui>
